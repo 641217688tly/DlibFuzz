@@ -1,10 +1,9 @@
 import httpx
-import openai
 from openai import OpenAI
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, joinedload
 import yaml
-from orm import OutputEquivalenceCluster, Tensorflow
+from orm import OutputEquivalenceCluster, Tensorflow, Pytorch
 
 with open('config.yml', 'r', encoding='utf-8') as file:  # 读取config.yml文件
     config = yaml.safe_load(file)
@@ -69,8 +68,12 @@ def output_equivalence_cluster(openai_client, pytorch_api):
         session.rollback()  # 回滚在异常中的任何数据库更改
         print(f"An error occurred: {e}")
 
-    finally:
-        session.close()  # 关闭数据库会话
 
+pytorch_apis = session.query(Pytorch).options(joinedload(Pytorch.output_clusters)).all()
+unclustered_apis = [api for api in pytorch_apis if not api.output_clusters]
+count = 0
+for pytorch_api in unclustered_apis[:50]: # 对前50个未聚类的 Pytorch API 进行聚类
+    count += 1
+    output_equivalence_cluster(openai_client, pytorch_api)
+    print(f"Processing API {count}/{len(unclustered_apis)}: {pytorch_api.name}")
 
-output_equivalence_cluster(openai_client, session.query(Tensorflow).first())
