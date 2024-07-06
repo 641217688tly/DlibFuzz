@@ -55,19 +55,19 @@ if __name__ == "__main__":
     # 增加递归限制
     sys.setrecursionlimit(2000)
 
-    # # 获取torch模块的所有API签名
-    # torch_signatures = get_api_signatures(torch, "torch")
-    # # 打印PyTorch签名总数
-    # print(f"Total PyTorch API signatures: {len(torch_signatures)}")  # 5105
-    # # 保存PyTorch签名到文件
-    # save_signatures_to_file(torch_signatures, "api_signatures/pytorch/torch_apis")
-    #
-    # # 获取tensorflow模块的所有API签名
-    # tf_signatures = get_api_signatures(tf, "tensorflow")
-    # # 打印TensorFlow签名总数
-    # print(f"Total TensorFlow API signatures: {len(tf_signatures)}")  # 30562
-    # # 保存TensorFlow签名到文件
-    # save_signatures_to_file(tf_signatures, "api_signatures/tensorflow/tf_apis")
+    # 获取torch模块的所有API签名
+    torch_signatures = get_api_signatures(torch, "torch")
+    # 打印PyTorch签名总数
+    print(f"Total PyTorch API signatures: {len(torch_signatures)}")  # 5105
+    # 保存PyTorch签名到文件
+    save_signatures_to_file(torch_signatures, "api_signatures/pytorch/torch_apis")
+
+    # 获取tensorflow模块的所有API签名
+    tf_signatures = get_api_signatures(tf, "tensorflow")
+    # 打印TensorFlow签名总数
+    print(f"Total TensorFlow API signatures: {len(tf_signatures)}")  # 30562
+    # 保存TensorFlow签名到文件
+    save_signatures_to_file(tf_signatures, "api_signatures/tensorflow/tf_apis")
 
     # 获取jax模块的所有API签名
     jax_signatures = get_api_signatures(jax, "jax")
