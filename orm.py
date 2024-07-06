@@ -139,44 +139,62 @@ class FunctionEquivalenceCluster(Base):
 # 创建表
 Base.metadata.create_all(engine)
 
-
 def add_data():
     Session = sessionmaker(bind=engine)
     session = Session()
-    # 从文件读取Pytorch APIs并添加到数据库
-    try:
-        with open('cluster/api_signatures/pytorch/torch_valid_apis.txt', 'r', encoding='utf-8') as file:
-            for line in file:
-                # 移除空格和换行符
-                api_name = line.strip()
-                # 创建Pytorch实例并添加到session
-                if api_name:  # 确保不是空行
-                    pytorch_api = Pytorch(name=api_name)
-                    session.add(pytorch_api)
-    except Exception as e:
-        print(f"Error reading Pytorch APIs file: {e}")
+    if not session.query(Pytorch).first() and not session.query(Tensorflow).first() and not session.query(JAX).first():
+        # 从文件读取Pytorch APIs并添加到数据库
+        try:
+            with open('cluster/api_signatures/pytorch/torch_valid_apis.txt', 'r', encoding='utf-8') as file:
+                for line in file:
+                    # 移除空格和换行符
+                    api_name = line.strip()
+                    # 创建Pytorch实例并添加到session
+                    if api_name:  # 确保不是空行
+                        pytorch_api = Pytorch(name=api_name)
+                        session.add(pytorch_api)
+        except Exception as e:
+            print(f"Error reading Pytorch APIs file: {e}")
 
-    # 从文件读取Tensorflow APIs并添加到数据库
-    try:
-        with open('cluster/api_signatures/tensorflow/tf_valid_apis.txt', 'r', encoding='utf-8') as file:
-            for line in file:
-                # 移除空格和换行符
-                api_name = line.strip()
-                # 创建Tensorflow实例并添加到session
-                if api_name:  # 确保不是空行
-                    tensorflow_api = Tensorflow(name=api_name)
-                    session.add(tensorflow_api)
-    except Exception as e:
-        print(f"Error reading Tensorflow APIs file: {e}")
+        # 从文件读取Tensorflow APIs并添加到数据库
+        try:
+            with open('cluster/api_signatures/tensorflow/tf_valid_apis.txt', 'r', encoding='utf-8') as file:
+                for line in file:
+                    # 移除空格和换行符
+                    api_name = line.strip()
+                    # 创建Tensorflow实例并添加到session
+                    if api_name:  # 确保不是空行
+                        tensorflow_api = Tensorflow(name=api_name)
+                        session.add(tensorflow_api)
+        except Exception as e:
+            print(f"Error reading Tensorflow APIs file: {e}")
 
-    # 提交到数据库
-    try:
-        session.commit()
-    except Exception as e:
-        session.rollback()
-        print(f"Error committing to database: {e}")
-    finally:
-        session.close()
-        print("Data loaded successfully!")
+        # JAX APIs并添加到数据库
+        try:
+            with open('cluster/api_signatures/jax/jax_valid_apis.txt', 'r', encoding='utf-8') as file:
+                for line in file:
+                    # 移除空格和换行符
+                    api_name = line.strip()
+                    # 创建Tensorflow实例并添加到session
+                    if api_name:  # 确保不是空行
+                        jax_api = JAX(name=api_name)
+                        session.add(jax_api)
+        except Exception as e:
+            print(f"Error reading Tensorflow APIs file: {e}")
 
-# add_data()
+        # 提交到数据库
+        try:
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            print(f"Error committing to database: {e}")
+        finally:
+            session.close()
+            print("Data loaded successfully!")
+
+
+if __name__ == '__main__':
+    # 如果JAX/Tensorflow/Pytorch数据库为空，添加数据
+    add_data()
+
+
