@@ -1,5 +1,5 @@
 import yaml
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Text, Enum, Table
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Text, Enum, Table, Boolean
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.orm import sessionmaker
 
@@ -67,7 +67,8 @@ class Pytorch(Base):
     name = Column(String(255), nullable=False)
     signature = Column(String(255), nullable=True)
     description = Column(Text, nullable=True)
-    energy = Column(Integer, default=10)
+    energy = Column(Integer, default=5)
+    is_clustered = Column(Boolean, default=False)
     code_snippets = relationship('CodeSnippet', back_populates='pytorch')
     output_clusters = relationship('OutputEquivalenceCluster', secondary=output_equivalence_association_pytorch,
                                    back_populates='pytorches')
@@ -81,7 +82,8 @@ class Tensorflow(Base):
     name = Column(String(255), nullable=False)
     signature = Column(String(255), nullable=True)
     description = Column(Text, nullable=True)
-    energy = Column(Integer, default=10)
+    energy = Column(Integer, default=5)
+    is_clustered = Column(Boolean, default=False)
     code_snippets = relationship('CodeSnippet', back_populates='tensorflow')
     output_clusters = relationship('OutputEquivalenceCluster', secondary=output_equivalence_association_tensorflow,
                                    back_populates='tensorflows')
@@ -96,7 +98,8 @@ class JAX(Base):
     name = Column(String(255), nullable=False)
     signature = Column(String(255), nullable=True)
     description = Column(Text, nullable=True)
-    energy = Column(Integer, default=10)
+    energy = Column(Integer, default=5)
+    is_clustered = Column(Boolean, default=False)
     code_snippets = relationship('CodeSnippet', back_populates='jax')
     output_clusters = relationship('OutputEquivalenceCluster', secondary=output_equivalence_association_jax,
                                    back_populates='jaxes')
