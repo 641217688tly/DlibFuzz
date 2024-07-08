@@ -111,6 +111,7 @@ class CodeSnippet(Base):
     __tablename__ = 'code_snippet'
     id = Column(Integer, primary_key=True)
     code = Column(Text, nullable=False)
+    # description = Column(Text, nullable=True) # 可以选择新增一列来描述该代码片段是怎么触发bug的
     pytorch_id = Column(Integer, ForeignKey('pytorch.id'))
     tensorflow_id = Column(Integer, ForeignKey('tensorflow.id'))
     jax_id = Column(Integer, ForeignKey('jax.id'))
@@ -127,6 +128,7 @@ class OutputEquivalenceCluster(Base):
     tensorflows = relationship('Tensorflow', secondary=output_equivalence_association_tensorflow,
                                back_populates='output_clusters')
     jaxes = relationship('JAX', secondary=output_equivalence_association_jax, back_populates='output_clusters')
+    seeds = relationship('OutputEquivalenceTestSeed', back_populates='cluster')
 
 
 class FunctionEquivalenceCluster(Base):
@@ -137,6 +139,15 @@ class FunctionEquivalenceCluster(Base):
     tensorflows = relationship('Tensorflow', secondary=function_equivalence_association_tensorflow,
                                back_populates='function_clusters')
     jaxes = relationship('JAX', secondary=function_equivalence_association_jax, back_populates='function_clusters')
+
+
+class OutputEquivalenceTestSeed(Base): # 同一个聚类可以有多个测试种子, 每个测试种子中都同时包含了Pytorch, Tensorflow和JAX的API的测试代码
+    __tablename__ = 'seed'
+    id = Column(Integer, primary_key=True)
+    # OutputEquivalenceTestSeed与OutputEquivalenceCluster存在多对一关系
+    cluster_id = Column(Integer, ForeignKey('output_equivalence_cluster.id'))
+    cluster = relationship('OutputEquivalenceCluster', back_populates='seeds')
+    # 关联三个CodeSnippet对象, 分别对应Pytorch, Tensorflow和JAX的API的测试代码
 
 
 # 创建表
@@ -196,6 +207,9 @@ def add_data():
             session.close()
             print("Data loaded successfully!")
 
+def attach_code_snippet():
+    print("Attach code snippets")
+    # TODO
 
 if __name__ == '__main__':
     # 如果JAX/Tensorflow/Pytorch数据库为空，添加数据
