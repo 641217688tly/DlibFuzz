@@ -92,12 +92,12 @@ def tensorflow_apis_output_equivalence_cluster(session, openai_client, tensorflo
             # 如果该tensorflow_apis已经在一个输出等价集群中,则检测pytorch_api和jax_apis是否已经在该集群中
             cluster = tensorflow_api.output_clusters[0]
             for torch_api in pytorch_apis.values():
-                if torch_api not in cluster.tensorflows:
-                    cluster.tensorflows.append(torch_api)
+                if torch_api not in cluster.pytorches:
+                    cluster.pytorches.append(torch_api)
             for jax_api in jax_apis.values():
                 if jax_api not in cluster.jaxes:
                     cluster.jaxes.append(jax_api)
-        else:  # 如果该pytorch_api还没有出现在一个聚类中,则创建一个新的输出等价集群
+        else:  # 如果该tensorflow_apis还没有出现在一个聚类中,则创建一个新的输出等价集群
             cluster = OutputEquivalenceCluster()
             cluster.tensorflows.append(tensorflow_api)
             cluster.pytorches.extend(pytorch_apis.values())
