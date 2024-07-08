@@ -128,7 +128,7 @@ class OutputEquivalenceCluster(Base):
     tensorflows = relationship('Tensorflow', secondary=output_equivalence_association_tensorflow,
                                back_populates='output_clusters')
     jaxes = relationship('JAX', secondary=output_equivalence_association_jax, back_populates='output_clusters')
-    seeds = relationship('OutputEquivalenceTestSeed', back_populates='cluster')
+    # seeds = relationship('OutputEquivalenceTestSeed', back_populates='cluster')
 
 
 class FunctionEquivalenceCluster(Base):
@@ -141,13 +141,13 @@ class FunctionEquivalenceCluster(Base):
     jaxes = relationship('JAX', secondary=function_equivalence_association_jax, back_populates='function_clusters')
 
 
-class OutputEquivalenceTestSeed(Base): # 同一个聚类可以有多个测试种子, 每个测试种子中都同时包含了Pytorch, Tensorflow和JAX的API的测试代码
-    __tablename__ = 'seed'
-    id = Column(Integer, primary_key=True)
-    # OutputEquivalenceTestSeed与OutputEquivalenceCluster存在多对一关系
-    cluster_id = Column(Integer, ForeignKey('output_equivalence_cluster.id'))
-    cluster = relationship('OutputEquivalenceCluster', back_populates='seeds')
-    # 关联三个CodeSnippet对象, 分别对应Pytorch, Tensorflow和JAX的API的测试代码
+# class OutputEquivalenceTestSeed(Base): # 同一个聚类可以有多个测试种子, 每个测试种子中都同时包含了Pytorch, Tensorflow和JAX的API的测试代码
+#     __tablename__ = 'seed'
+#     id = Column(Integer, primary_key=True)
+#     # OutputEquivalenceTestSeed与OutputEquivalenceCluster存在多对一关系
+#     cluster_id = Column(Integer, ForeignKey('output_equivalence_cluster.id'))
+#     cluster = relationship('OutputEquivalenceCluster', back_populates='seeds')
+#     # 关联三个CodeSnippet对象, 分别对应Pytorch, Tensorflow和JAX的API的测试代码
 
 
 # 创建表
