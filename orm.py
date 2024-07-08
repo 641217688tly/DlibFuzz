@@ -142,6 +142,7 @@ class FunctionEquivalenceCluster(Base):
 # 创建表
 Base.metadata.create_all(engine)
 
+
 def add_data():
     Session = sessionmaker(bind=engine)
     session = Session()
@@ -199,5 +200,3 @@ def add_data():
 if __name__ == '__main__':
     # 如果JAX/Tensorflow/Pytorch数据库为空，添加数据
     add_data()
-
-
