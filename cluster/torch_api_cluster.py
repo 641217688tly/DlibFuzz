@@ -7,29 +7,8 @@ from sqlalchemy.orm import sessionmaker, joinedload
 import yaml
 from orm import OutputEquivalenceCluster, Tensorflow, Pytorch, JAX
 
-with open('config.yml', 'r', encoding='utf-8') as file:  # 读取config.yml文件
-    config = yaml.safe_load(file)
-# 从配置中提取数据库连接信息
-db_config = config['db']['mysql']
-host = db_config['host']
-user = db_config['user']
-password = db_config['password']
-database = db_config['database']
-db_url = f"mysql+pymysql://{user}:{password}@{host}/{database}"  # 创建数据库连接字符串
-# 创建数据库连接
-engine = create_engine(db_url)
-Session = sessionmaker(bind=engine)
-session = Session()
 
-# 设置代理
-proxy = httpx.Client(proxies={
-    "http://": "http://127.0.0.1:7890",
-    "https://": "http://127.0.0.1:7890"
-})
-openai_client = OpenAI(api_key=config['openai']['api_key'], http_client=proxy)
-
-
-def pytorch_apis_output_equivalence_cluster(openai_client, pytorch_api):
+def pytorch_apis_output_equivalence_cluster(session, openai_client, pytorch_api):
     # 构造Prompt
     example_1 = """
     {
@@ -93,9 +72,7 @@ def pytorch_apis_output_equivalence_cluster(openai_client, pytorch_api):
                 tensorflow_api = Tensorflow(name=tf_name)
                 session.add(tensorflow_api)
                 session.commit()
-                print(f"Added Tensorflow API: {tf_name}")
             tensorflow_apis.append(tensorflow_api)
-        print(f"tensorflow_apis: {tensorflow_apis}")
 
         jax_apis = []
         for jax_id, jax_name in json_data['JAX'].items():
@@ -104,11 +81,10 @@ def pytorch_apis_output_equivalence_cluster(openai_client, pytorch_api):
                 jax_api = JAX(name=jax_name)
                 session.add(jax_api)
                 session.commit()
-                print(f"Added JAX API: {jax_name}")
             jax_apis.append(jax_api)
-        print(f"jax_apis: {jax_apis}")
 
         # 2. 创建OutputEquivalenceCluster对象, 并将其与Pytorch对象,Tensorflow对象和JAX对象关联
+        pytorch_api.is_clustered = True
         if pytorch_api.output_clusters:  # 先检查pytorch_api是否已经出现在一个聚类中
             # 如果该pytorch_api已经在一个输出等价集群中,则检测tensorflow_apis和jax_apis是否已经在该集群中
             cluster = pytorch_api.output_clusters[0]
@@ -118,26 +94,49 @@ def pytorch_apis_output_equivalence_cluster(openai_client, pytorch_api):
             for jax_api in jax_apis:
                 if jax_api not in cluster.jaxes:
                     cluster.jaxes.append(jax_api)
-            session.commit()
         else:  # 如果该pytorch_api还没有出现在一个聚类中,则创建一个新的输出等价集群
             cluster = OutputEquivalenceCluster()
             cluster.pytorches.append(pytorch_api)
             cluster.tensorflows.extend(tensorflow_apis)
             cluster.jaxes.extend(jax_apis)
             session.add(cluster)
-            session.commit()
-
-        # for pytorch in cluster.pytorches: # 访问输出等价集群中的 Pytorch 对象
-        #     print(f"Pytorch API: {pytorch.name}")
-        # for tensorflow in cluster.tensorflows: # 访问输出等价集群中的 Tensorflow 对象
-        #     print(f"Tensorflow API: {tensorflow.name}")
-        # for jax in cluster.jaxes: # 访问输出等价集群中的 JAX 对象
-        #     print(f"JAX API: {jax.name}")
-
+        session.commit()
     except Exception as e:
         session.rollback()  # 回滚在异常中的任何数据库更改
         print(f"An error occurred: {e}")
 
 
-torch_api = session.query(Pytorch).first()
-pytorch_apis_output_equivalence_cluster(openai_client, torch_api)
+def run():
+    with open('config.yml', 'r', encoding='utf-8') as file:  # 读取config.yml文件
+        config = yaml.safe_load(file)
+    # 从配置中提取数据库连接信息
+    db_config = config['db']['mysql']
+    host = db_config['host']
+    user = db_config['user']
+    password = db_config['password']
+    database = db_config['database']
+    db_url = f"mysql+pymysql://{user}:{password}@{host}/{database}"  # 创建数据库连接字符串
+    # 创建数据库连接
+    engine = create_engine(db_url)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    # 设置代理
+    proxy = httpx.Client(proxies={
+        "http://": "http://127.0.0.1:7890",
+        "https://": "http://127.0.0.1:7890"
+    })
+    openai_client = OpenAI(api_key=config['openai']['api_key'], http_client=proxy)
+
+    uncluttered_torch_apis = session.query(Pytorch).filter_by(is_clustered=False).all()
+    while uncluttered_torch_apis:
+        print("----------------------------------------------------------------------------------")
+        pytorch_apis_output_equivalence_cluster(session, openai_client, uncluttered_torch_apis[0])
+        uncluttered_torch_apis = session.query(Pytorch).filter_by(is_clustered=False).all()
+        total_apis_num = session.query(Pytorch).count()
+        unclustered_torch_apis_num = len(uncluttered_torch_apis)
+        print(f"Unclustered / Total: {unclustered_torch_apis_num} / {total_apis_num}")
+
+
+if __name__ == '__main__':
+    run()
