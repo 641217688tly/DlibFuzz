@@ -19,135 +19,150 @@ db_url = f"mysql+pymysql://{user}:{password}@{host}/{database}"  # 创建数据�
 engine = create_engine(db_url)
 Base = declarative_base()
 
-output_equivalence_association_pytorch = Table('output_equivalence_association_pytorch', Base.metadata,
-                                               Column('pytorch_id', Integer, ForeignKey('pytorch.id'),
-                                                      primary_key=True),
-                                               Column('cluster_id', Integer,
-                                                      ForeignKey('output_equivalence_cluster.id'), primary_key=True)
-                                               )
+pytorch_api_combination_association = Table('pytorch_api_combination_association', Base.metadata,
+                                            Column('api_combination_id', Integer,
+                                                   ForeignKey('pytorch_api_combination.id')),
+                                            Column('api_id', Integer, ForeignKey('pytorch_api.id')))
 
-output_equivalence_association_tensorflow = Table('output_equivalence_association_tensorflow', Base.metadata,
-                                                  Column('tensorflow_id', Integer, ForeignKey('tensorflow.id'),
-                                                         primary_key=True),
-                                                  Column('cluster_id', Integer,
-                                                         ForeignKey('output_equivalence_cluster.id'), primary_key=True)
-                                                  )
+tensorflow_api_combination_association = Table('tensorflow_api_combination_association', Base.metadata,
+                                               Column('api_combination_id', Integer,
+                                                      ForeignKey('tensorflow_api_combination.id')),
+                                               Column('api_id', Integer, ForeignKey('tensorflow_api.id')))
 
-output_equivalence_association_jax = Table('output_equivalence_association_jax', Base.metadata,
-                                           Column('jax_id', Integer, ForeignKey('jax.id'), primary_key=True),
-                                           Column('cluster_id', Integer, ForeignKey('output_equivalence_cluster.id'),
-                                                  primary_key=True)
-                                           )
+jax_api_combination_association = Table('jax_api_combination_association', Base.metadata,
+                                        Column('api_combination_id', Integer, ForeignKey('jax_api_combination.id')),
+                                        Column('api_id', Integer, ForeignKey('jax_api.id')))
 
-function_equivalence_association_pytorch = Table('function_equivalence_association_pytorch', Base.metadata,
-                                                 Column('pytorch_id', Integer, ForeignKey('pytorch.id'),
-                                                        primary_key=True),
-                                                 Column('cluster_id', Integer,
-                                                        ForeignKey('function_equivalence_cluster.id'), primary_key=True)
-                                                 )
+cluster_pytorch_combination_association = Table(
+    'cluster_pytorch_combination_association', Base.metadata,
+    Column('cluster_id', Integer, ForeignKey('cluster.id'), primary_key=True),
+    Column('pytorch_combination_id', Integer, ForeignKey('pytorch_api_combination.id'), primary_key=True)
+)
 
-function_equivalence_association_tensorflow = Table('function_equivalence_association_tensorflow', Base.metadata,
-                                                    Column('tensorflow_id', Integer, ForeignKey('tensorflow.id'),
-                                                           primary_key=True),
-                                                    Column('cluster_id', Integer,
-                                                           ForeignKey('function_equivalence_cluster.id'),
-                                                           primary_key=True)
-                                                    )
+cluster_tensorflow_combination_association = Table(
+    'cluster_tensorflow_combination_association', Base.metadata,
+    Column('cluster_id', Integer, ForeignKey('cluster.id'), primary_key=True),
+    Column('tensorflow_combination_id', Integer, ForeignKey('tensorflow_api_combination.id'), primary_key=True)
+)
 
-function_equivalence_association_jax = Table('function_equivalence_association_jax', Base.metadata,
-                                             Column('jax_id', Integer, ForeignKey('jax.id'), primary_key=True),
-                                             Column('cluster_id', Integer,
-                                                    ForeignKey('function_equivalence_cluster.id'), primary_key=True)
-                                             )
+cluster_jax_combination_association = Table(
+    'cluster_jax_combination_association', Base.metadata,
+    Column('cluster_id', Integer, ForeignKey('cluster.id'), primary_key=True),
+    Column('jax_combination_id', Integer, ForeignKey('jax_api_combination.id'), primary_key=True)
+)
 
 
-class Pytorch(Base):
-    __tablename__ = 'pytorch'
+# ----------------------------------Pytorch----------------------------------
+class PytorchAPI(Base):
+    __tablename__ = 'pytorch_api'
     id = Column(Integer, primary_key=True)
     name = Column(String(255), nullable=False)
     signature = Column(String(255), nullable=True)
     description = Column(Text, nullable=True)
-    energy = Column(Integer, default=5)
     is_clustered = Column(Boolean, default=False)
-    code_snippets = relationship('CodeSnippet', back_populates='pytorch')
-    output_clusters = relationship('OutputEquivalenceCluster', secondary=output_equivalence_association_pytorch,
-                                   back_populates='pytorches')
-    function_clusters = relationship('FunctionEquivalenceCluster', secondary=function_equivalence_association_pytorch,
-                                     back_populates='pytorches')
+    error_triggers = relationship('PytorchErrorTriggerCode', back_populates='api')
 
 
-class Tensorflow(Base):
-    __tablename__ = 'tensorflow'
+class PytorchErrorTriggerCode(Base):
+    __tablename__ = 'pytorch_error_trigger_code'
     id = Column(Integer, primary_key=True)
-    name = Column(String(255), nullable=False)
-    signature = Column(String(255), nullable=True)
-    description = Column(Text, nullable=True)
-    energy = Column(Integer, default=5)
-    is_clustered = Column(Boolean, default=False)
-    code_snippets = relationship('CodeSnippet', back_populates='tensorflow')
-    output_clusters = relationship('OutputEquivalenceCluster', secondary=output_equivalence_association_tensorflow,
-                                   back_populates='tensorflows')
-    function_clusters = relationship('FunctionEquivalenceCluster',
-                                     secondary=function_equivalence_association_tensorflow,
-                                     back_populates='tensorflows')
-
-
-class JAX(Base):
-    __tablename__ = 'jax'
-    id = Column(Integer, primary_key=True)
-    name = Column(String(255), nullable=False)
-    signature = Column(String(255), nullable=True)
-    description = Column(Text, nullable=True)
-    energy = Column(Integer, default=5)
-    is_clustered = Column(Boolean, default=False)
-    code_snippets = relationship('CodeSnippet', back_populates='jax')
-    output_clusters = relationship('OutputEquivalenceCluster', secondary=output_equivalence_association_jax,
-                                   back_populates='jaxes')
-    function_clusters = relationship('FunctionEquivalenceCluster', secondary=function_equivalence_association_jax,
-                                     back_populates='jaxes')
-
-
-class CodeSnippet(Base):
-    __tablename__ = 'code_snippet'
-    id = Column(Integer, primary_key=True)
+    api_id = Column(Integer, ForeignKey('pytorch_api.id'))
+    api = relationship('PytorchAPI', back_populates='error_triggers')
     code = Column(Text, nullable=False)
-    # description = Column(Text, nullable=True) # 可以选择新增一列来描述该代码片段是怎么触发bug的
-    pytorch_id = Column(Integer, ForeignKey('pytorch.id'))
-    tensorflow_id = Column(Integer, ForeignKey('tensorflow.id'))
-    jax_id = Column(Integer, ForeignKey('jax.id'))
-    pytorch = relationship('Pytorch', back_populates='code_snippets')
-    tensorflow = relationship('Tensorflow', back_populates='code_snippets')
-    jax = relationship('JAX', back_populates='code_snippets')
+    description = Column(Text, nullable=True)  # 描述该代码片段是怎么触发bug的
 
 
-class OutputEquivalenceCluster(Base):
-    __tablename__ = 'output_equivalence_cluster'
+class PytorchAPICombination(Base):
+    __tablename__ = 'pytorch_api_combination'
     id = Column(Integer, primary_key=True)
-    pytorches = relationship('Pytorch', secondary=output_equivalence_association_pytorch,
-                             back_populates='output_clusters')
-    tensorflows = relationship('Tensorflow', secondary=output_equivalence_association_tensorflow,
-                               back_populates='output_clusters')
-    jaxes = relationship('JAX', secondary=output_equivalence_association_jax, back_populates='output_clusters')
-    # seeds = relationship('OutputEquivalenceTestSeed', back_populates='cluster')
+    apis = relationship('PytorchAPI', secondary=pytorch_api_combination_association)
+    test_seeds = relationship('ClusterTestSeed', back_populates='pytorch_combination')
 
 
-class FunctionEquivalenceCluster(Base):
-    __tablename__ = 'function_equivalence_cluster'
+# ----------------------------------Tensorflow----------------------------------
+
+class TensorflowAPI(Base):
+    __tablename__ = 'tensorflow_api'
     id = Column(Integer, primary_key=True)
-    pytorches = relationship('Pytorch', secondary=function_equivalence_association_pytorch,
-                             back_populates='function_clusters')
-    tensorflows = relationship('Tensorflow', secondary=function_equivalence_association_tensorflow,
-                               back_populates='function_clusters')
-    jaxes = relationship('JAX', secondary=function_equivalence_association_jax, back_populates='function_clusters')
+    name = Column(String(255), nullable=False)
+    signature = Column(String(255), nullable=True)
+    description = Column(Text, nullable=True)
+    is_clustered = Column(Boolean, default=False)
+    error_triggers = relationship('TensorflowErrorTriggerCode', back_populates='api')
 
 
-# class OutputEquivalenceTestSeed(Base): # 同一个聚类可以有多个测试种子, 每个测试种子中都同时包含了Pytorch, Tensorflow和JAX的API的测试代码
-#     __tablename__ = 'seed'
-#     id = Column(Integer, primary_key=True)
-#     # OutputEquivalenceTestSeed与OutputEquivalenceCluster存在多对一关系
-#     cluster_id = Column(Integer, ForeignKey('output_equivalence_cluster.id'))
-#     cluster = relationship('OutputEquivalenceCluster', back_populates='seeds')
-#     # 关联三个CodeSnippet对象, 分别对应Pytorch, Tensorflow和JAX的API的测试代码
+class TensorflowErrorTriggerCode(Base):
+    __tablename__ = 'tensorflow_error_trigger_code'
+    id = Column(Integer, primary_key=True)
+    api_id = Column(Integer, ForeignKey('tensorflow_api.id'))
+    api = relationship('TensorflowAPI', back_populates='error_triggers')
+    code = Column(Text, nullable=False)
+    description = Column(Text, nullable=True)
+
+
+class TensorflowAPICombination(Base):
+    __tablename__ = 'tensorflow_api_combination'
+    id = Column(Integer, primary_key=True)
+    apis = relationship('TensorflowAPI', secondary=tensorflow_api_combination_association)
+    test_seeds = relationship('ClusterTestSeed', back_populates='tensorflow_combination')
+
+
+# ----------------------------------Jax----------------------------------
+
+class JaxAPI(Base):
+    __tablename__ = 'jax_api'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255), nullable=False)
+    signature = Column(String(255), nullable=True)
+    description = Column(Text, nullable=True)
+    is_clustered = Column(Boolean, default=False)
+    error_triggers = relationship('JaxErrorTriggerCode', back_populates='api')
+
+
+class JaxErrorTriggerCode(Base):
+    __tablename__ = 'jax_error_trigger_code'
+    id = Column(Integer, primary_key=True)
+    api_id = Column(Integer, ForeignKey('jax_api.id'))
+    api = relationship('JaxAPI', back_populates='error_triggers')
+    code = Column(Text, nullable=False)
+    description = Column(Text, nullable=True)
+
+
+class JaxAPICombination(Base):
+    __tablename__ = 'jax_api_combination'
+    id = Column(Integer, primary_key=True)
+    apis = relationship('JaxAPI', secondary=jax_api_combination_association)
+    test_seeds = relationship('ClusterTestSeed', back_populates='jax_combination')
+
+
+# ----------------------------------Cluster----------------------------------
+
+class Cluster(Base):
+    __tablename__ = 'cluster'
+    id = Column(Integer, primary_key=True)
+    description = Column(Text, nullable=True)
+    energy = Column(Integer, default=10)
+    pytorch_combinations = relationship('PytorchAPICombination', secondary=cluster_pytorch_combination_association)
+    tensorflow_combinations = relationship('TensorflowAPICombination',
+                                           secondary=cluster_tensorflow_combination_association)
+    jax_combinations = relationship('JaxAPICombination', secondary=cluster_jax_combination_association)
+    test_seeds = relationship('ClusterTestSeed', back_populates='cluster')
+
+
+class ClusterTestSeed(Base):
+    __tablename__ = 'seed'
+    id = Column(Integer, primary_key=True)
+    cluster_id = Column(Integer, ForeignKey('cluster.id'))
+    cluster = relationship('Cluster', back_populates='test_seeds')
+    pytorch_combination_id = Column(Integer, ForeignKey('pytorch_api_combination.id'))
+    pytorch_combination = relationship('PytorchAPICombination', back_populates='test_seeds')
+    tensorflow_combination_id = Column(Integer, ForeignKey('tensorflow_api_combination.id'))
+    tensorflow_combination = relationship('TensorflowAPICombination', back_populates='test_seeds')
+    jax_combination_id = Column(Integer, ForeignKey('jax_api_combination.id'))
+    jax_combination = relationship('JaxAPICombination', back_populates='test_seeds')
+    pytorch_code = Column(Text, nullable=False)
+    tensorflow_code = Column(Text, nullable=False)
+    jax_code = Column(Text, nullable=False)
 
 
 # 创建表
@@ -157,7 +172,8 @@ Base.metadata.create_all(engine)
 def add_data():
     Session = sessionmaker(bind=engine)
     session = Session()
-    if not session.query(Pytorch).first() and not session.query(Tensorflow).first() and not session.query(JAX).first():
+    if not session.query(PytorchAPI).first() and not session.query(TensorflowAPI).first() and not session.query(
+            JaxAPI).first():
         # 从文件读取Pytorch APIs并添加到数据库
         try:
             with open('cluster/api_signatures/pytorch/torch_valid_apis.txt', 'r', encoding='utf-8') as file:
@@ -166,7 +182,7 @@ def add_data():
                     api_name = line.strip()
                     # 创建Pytorch实例并添加到session
                     if api_name:  # 确保不是空行
-                        pytorch_api = Pytorch(name=api_name)
+                        pytorch_api = PytorchAPI(name=api_name)
                         session.add(pytorch_api)
         except Exception as e:
             print(f"Error reading Pytorch APIs file: {e}")
@@ -179,7 +195,7 @@ def add_data():
                     api_name = line.strip()
                     # 创建Tensorflow实例并添加到session
                     if api_name:  # 确保不是空行
-                        tensorflow_api = Tensorflow(name=api_name)
+                        tensorflow_api = TensorflowAPI(name=api_name)
                         session.add(tensorflow_api)
         except Exception as e:
             print(f"Error reading Tensorflow APIs file: {e}")
@@ -192,7 +208,7 @@ def add_data():
                     api_name = line.strip()
                     # 创建Tensorflow实例并添加到session
                     if api_name:  # 确保不是空行
-                        jax_api = JAX(name=api_name)
+                        jax_api = JaxAPI(name=api_name)
                         session.add(jax_api)
         except Exception as e:
             print(f"Error reading Tensorflow APIs file: {e}")
@@ -207,9 +223,11 @@ def add_data():
             session.close()
             print("Data loaded successfully!")
 
+
 def attach_code_snippet():
     print("Attach code snippets")
     # TODO
+
 
 if __name__ == '__main__':
     # 如果JAX/Tensorflow/Pytorch数据库为空，添加数据
