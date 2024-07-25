@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker, joinedload
 import yaml
 from tqdm.contrib import itertools
 import os
-from orm import OutputEquivalenceCluster, Tensorflow, Pytorch, JAX
+from orm import Cluster, TensorflowAPI, PytorchAPI, JaxAPI
 
 
 def generate_seeds(session, openai_client, cluster, seeds_num=5):
