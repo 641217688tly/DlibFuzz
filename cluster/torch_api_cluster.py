@@ -20,7 +20,7 @@ def process_apis(session, api_data, api_class):
             api_objects[api_id] = api_obj
     return api_objects
 
-def relate_apis_to_cluster(session, cluster, api_objects, combination_class):
+def associate_api_combinations_to_cluster(session, cluster, api_objects, combination_class):
     for api_id, api_obj in api_objects.items():
         combination = combination_class(apis=[api_obj], cluster=[cluster])
         session.add(combination)
@@ -91,24 +91,21 @@ def pytorch_apis_cluster(session, openai_client, pytorch_api):
         return
 
     try:
-        #TODO 1. 解析返回的JSON数据并检查Pytorch,Tensorflow和Jax中的所有API名,如果PytorchAPI表或TensorflowAPI表或JAX表中没有对应的API,则先在对应表中创建对应的数据
-
-        # 处理 PyTorch APIs
+        pytorch_api.is_clustered = True
+        #1. 解析返回的JSON数据并检查Pytorch,Tensorflow和Jax中的所有API名,如果PytorchAPI表或TensorflowAPI表或JAX表中没有对应的API,则先在对应表中创建对应的数据
         pytorch_apis = process_apis(session, clusterer_json_data['Pytorch'], PytorchAPI)
-        # 处理 TensorFlow APIs
         tensorflow_apis = process_apis(session, clusterer_json_data['Tensorflow'], TensorflowAPI)
-        # 处理 JAX APIs
         jax_apis = process_apis(session, clusterer_json_data['JAX'], JaxAPI)
 
-        #TODO 2. 为Pytorch, Tensorflow和Jax的每个API组合创建对应的PytorchAPICombination, TensorflowAPICombination和JaxAPICombination对象
+        #2. 创建Cluster对象
         new_cluster = Cluster()
         session.add(new_cluster)
         session.commit()
-        #TODO 3. 创建Cluster对象, 并将其与刚刚创建的PytorchAPICombination, TensorflowAPICombination和JaxAPICombination对象关联
-        pytorch_api.is_clustered = True
-        relate_apis_to_cluster(session, new_cluster, pytorch_apis, PytorchAPICombination)
-        relate_apis_to_cluster(session, new_cluster, tensorflow_apis, TensorflowAPICombination)
-        relate_apis_to_cluster(session, new_cluster, jax_apis, JaxAPICombination)
+
+        #3. 为Pytorch, Tensorflow和Jax的每个API组合创建对应的PytorchAPICombination, TensorflowAPICombination和JaxAPICombination对象, 之后将它们与新创建的Cluster对象关联
+        associate_api_combinations_to_cluster(session, new_cluster, pytorch_apis, PytorchAPICombination)
+        associate_api_combinations_to_cluster(session, new_cluster, tensorflow_apis, TensorflowAPICombination)
+        associate_api_combinations_to_cluster(session, new_cluster, jax_apis, JaxAPICombination)
         session.commit()
     except Exception as e:
         session.rollback()  # 回滚在异常中的任何数据库更改
@@ -131,14 +128,14 @@ def run():
     session = Session()
 
     # 设置代理
-    # proxy = httpx.Client(proxies={
-    #     "http://": "http://127.0.0.1:7890",
-    #     "https://": "http://127.0.0.1:7890"
-    # })
-    # openai_client = OpenAI(api_key=config['openai']['api_key'], http_client=proxy)
+    proxy = httpx.Client(proxies={
+        "http://": "http://127.0.0.1:7890",
+        "https://": "http://127.0.0.1:7890"
+    })
+    openai_client = OpenAI(api_key=config['openai']['api_key'], http_client=proxy)
 
-    openai_client = OpenAI(base_url="https://api.gptsapi.net/v1/",
-                           api_key="sk-4Yg7f4b436b8fb189fc0f426d378e395adf93f7ba45pT6Os")  # WildCard API + 转发, 无需代理
+    # openai_client = OpenAI(base_url="https://api.gptsapi.net/v1/",
+    #                        api_key="sk-4Yg7f4b436b8fb189fc0f426d378e395adf93f7ba45pT6Os")  # WildCard API + 转发, 无需代理
 
     uncluttered_torch_apis = session.query(PytorchAPI).filter_by(is_clustered=False).all()
     while uncluttered_torch_apis:
