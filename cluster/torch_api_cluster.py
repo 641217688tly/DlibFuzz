@@ -1,6 +1,4 @@
 from json import JSONDecodeError
-import httpx
-from openai import OpenAI
 from orm import *
 from utils import *
 
@@ -90,7 +88,7 @@ class Clusterer:
                     results[api_name] = is_valid
         return results
 
-    def generate_cluster(self):
+    def conduct_cluster(self):
         attempt_num = 0
         while attempt_num < 5:  # 设置最大尝试次数以避免无限循环
             try:  # 假如返回的数据不符合JSON格式, 则重新调用OpenAI API, 直到返回的数据符合JSON格式为止
@@ -120,11 +118,8 @@ class Clusterer:
                 print(f"An unexpected error occurred: {e}")
                 break
 
-        if attempt_num == 5:  # 设置最大尝试次数以避免无限循环
-            print("Max attempts reached. Unable to get valid JSON data.")
-            return
-
-        return json_data
+        print("Max attempts reached. Unable to get valid JSON data.")
+        return
 
     # --------------------------------------store API Combinations and Cluster into database--------------------------------------
     def supplement_apis(self, api_combinations, api_class):  # 将Jax/Pytorch/Tensorflow的API组合内不在数据库中的API添加到数据库中
@@ -188,7 +183,7 @@ class Clusterer:
     # ----------------------------------------------run()----------------------------------------------
     def cluster_api(self):
         # 利用clusterer进行聚类
-        clusterer_json_data = self.generate_cluster()
+        clusterer_json_data = self.conduct_cluster()
         self.save_cluster(clusterer_json_data)
 
 
