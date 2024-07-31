@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker, joinedload
 import yaml
 from tqdm.contrib import itertools
 import os
-from orm import Cluster, TensorflowAPI, PytorchAPI, JaxAPI
+from orm import Cluster, TensorflowAPI, PytorchAPI, JaxAPI, PytorchAPICombination, TensorflowAPICombination, JaxAPICombination
 
 
 def generate_seeds(session, openai_client, cluster, seeds_num=5):
@@ -112,9 +112,9 @@ def run():
                            api_key="sk-4Yg7f4b436b8fb189fc0f426d378e395adf93f7ba45pT6Os")  # WildCard API + 转发, 无需代理
 
     # 获得所有的OutputEquivalenceCluster
-    clusters = session.query(OutputEquivalenceCluster).options(joinedload(OutputEquivalenceCluster.tensorflows),
-                                                               joinedload(OutputEquivalenceCluster.pytorches),
-                                                               joinedload(OutputEquivalenceCluster.jaxes)).all()
+    clusters = session.query(Cluster).options(joinedload(Cluster.tensorflows),
+                                                               joinedload(Cluster.pytorches),
+                                                               joinedload(Cluster.jaxes)).all()
 
     # 取前20个cluster进行处理
     clusters = clusters[:1]

@@ -6,6 +6,35 @@ from sqlalchemy.orm import sessionmaker, joinedload
 import yaml
 from orm import Cluster, TensorflowAPI, PytorchAPI, JaxAPI, PytorchAPICombination, TensorflowAPICombination, \
     JaxAPICombination
+import importlib
+
+
+def dynamic_api_call(module_name, function_name):
+    try:
+        # 动态导入模块
+        module = importlib.import_module(module_name)
+        # 尝试获取函数引用
+        func = getattr(module, function_name, None)
+        if func is None:
+            return False, f"Function {function_name} not found in {module_name}"
+        return True, "Function exists and is callable"
+    except ImportError:
+        return False, f"Module {module_name} not found"
+    except Exception as e:
+        return False, str(e)
+
+
+def validate_api_function_names(api_data):
+    results = {}
+    for tech, apis in api_data.items():
+        for api_group_id, api_names in apis.items():
+            for api_name in api_names:
+                module_name, func_name = api_name.rsplit('.', 1)
+                is_valid, message = dynamic_api_call(module_name, func_name)
+                if not is_valid:
+                    print(f"Validation failed for {api_name}: {message}")
+                results[api_name] = is_valid
+    return results
 
 
 def process_apis(session, api_data, api_class):
@@ -20,11 +49,13 @@ def process_apis(session, api_data, api_class):
             api_objects[api_id] = api_obj
     return api_objects
 
+
 def associate_api_combinations_to_cluster(session, cluster, api_objects, combination_class):
     for api_id, api_obj in api_objects.items():
-        combination = combination_class(apis=[api_obj], cluster=[cluster])
+        combination = combination_class(apis=[api_obj], cluster=cluster)
         session.add(combination)
         session.commit()
+
 
 def pytorch_apis_cluster(session, openai_client, pytorch_api):
     # 利用clusterer进行聚类
@@ -65,7 +96,7 @@ def pytorch_apis_cluster(session, openai_client, pytorch_api):
         try:  # 假如返回的数据不符合JSON格式, 则重新调用OpenAI API, 直到返回的数据符合JSON格式为止
             # 调用 OpenAI API
             response = openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="gpt-4o-mini", # gpt-4o-mini gpt-3.5-turbo
                 response_format={"type": "json_object"},
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
@@ -77,11 +108,15 @@ def pytorch_apis_cluster(session, openai_client, pytorch_api):
             print(f"Clustered Pytorch API: {pytorch_api.name}")
             print(clusterer_response_data)
             clusterer_json_data = json.loads(clusterer_response_data)
-            #TODO 在此处需要检查返回的是API的函数名而非函数签名, 同时必须检查所有的API函数名是否有效(不是虚构的)
+            # TODO 在此处需要检查返回的是API的函数名而非函数签名, 同时必须检查所有的API函数名是否有效(不是虚构的)
+            validation_results = validate_api_function_names(clusterer_json_data)
+            if not all(validation_results.values()):  # 如果有任何 API 名称验证失败
+                raise ValueError("One or more API names are invalid or unknown.")
             break  # 成功解析 JSON,跳出循环
-        except json.JSONDecodeError as e:
+        except (json.JSONDecodeError, ValueError) as e:
             print(f"Failed to decode JSON due to: {e}.\nCurrent attempt: {clusterer_attempt_num + 1}. Retrying...")
             clusterer_attempt_num += 1
+            
         except Exception as e:
             session.rollback()  # 回滚在异常中的任何数据库更改
             print(f"An unexpected error occurred: {e}")
@@ -92,17 +127,17 @@ def pytorch_apis_cluster(session, openai_client, pytorch_api):
 
     try:
         pytorch_api.is_clustered = True
-        #1. 解析返回的JSON数据并检查Pytorch,Tensorflow和Jax中的所有API名,如果PytorchAPI表或TensorflowAPI表或JAX表中没有对应的API,则先在对应表中创建对应的数据
+        # 1. 解析返回的JSON数据并检查Pytorch,Tensorflow和Jax中的所有API名,如果PytorchAPI表或TensorflowAPI表或JAX表中没有对应的API,则先在对应表中创建对应的数据
         pytorch_apis = process_apis(session, clusterer_json_data['Pytorch'], PytorchAPI)
         tensorflow_apis = process_apis(session, clusterer_json_data['Tensorflow'], TensorflowAPI)
         jax_apis = process_apis(session, clusterer_json_data['JAX'], JaxAPI)
 
-        #2. 创建Cluster对象
+        # 2. 创建Cluster对象
         new_cluster = Cluster()
         session.add(new_cluster)
         session.commit()
 
-        #3. 为Pytorch, Tensorflow和Jax的每个API组合创建对应的PytorchAPICombination, TensorflowAPICombination和JaxAPICombination对象, 之后将它们与新创建的Cluster对象关联
+        # 3. 为Pytorch, Tensorflow和Jax的每个API组合创建对应的PytorchAPICombination, TensorflowAPICombination和JaxAPICombination对象, 之后将它们与新创建的Cluster对象关联
         associate_api_combinations_to_cluster(session, new_cluster, pytorch_apis, PytorchAPICombination)
         associate_api_combinations_to_cluster(session, new_cluster, tensorflow_apis, TensorflowAPICombination)
         associate_api_combinations_to_cluster(session, new_cluster, jax_apis, JaxAPICombination)

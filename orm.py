@@ -1,7 +1,9 @@
+import json
 import yaml
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Text, Enum, Table, Boolean
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.orm import sessionmaker
+from cluster import utils
 
 # 读取config.yml文件
 with open('config.yml', 'r', encoding='utf-8') as file:
@@ -56,11 +58,15 @@ cluster_jax_combination_association = Table(
 class PytorchAPI(Base):
     __tablename__ = 'pytorch_api'
     id = Column(Integer, primary_key=True)
-    name = Column(String(255), nullable=False)
-    signature = Column(String(255), nullable=True)
-    description = Column(Text, nullable=True)
-    is_clustered = Column(Boolean, default=False)
-    error_triggers = relationship('PytorchErrorTriggerCode', back_populates='api')
+    name = Column(String(255), nullable=False)  # API名
+    module = Column(String(255), nullable=True)  # API所在的模块
+    full_name = Column(String(255), nullable=True)  # API的完整名字 = 模块名.API名
+    signature = Column(Text, nullable=True)  # API函数签名
+    description = Column(Text, nullable=True)  # 对该API功能的描述
+    version = Column(String(255), nullable=True)  # API的版本
+    embedding = Column(Text, nullable=True)  # 该API的嵌入向量, 包括函数名和功能描述
+    is_clustered = Column(Boolean, default=False)  # 该API是否已经被聚类
+    error_triggers = relationship('PytorchErrorTriggerCode', back_populates='api')  # 一个API可能有多个触发bug的代码片段
 
 
 class PytorchErrorTriggerCode(Base):
@@ -68,7 +74,7 @@ class PytorchErrorTriggerCode(Base):
     id = Column(Integer, primary_key=True)
     api_id = Column(Integer, ForeignKey('pytorch_api.id'))
     api = relationship('PytorchAPI', back_populates='error_triggers')
-    code = Column(Text, nullable=False)
+    code = Column(Text, nullable=False)  # 触发error的代码片段
     description = Column(Text, nullable=True)  # 描述该代码片段是怎么触发bug的
 
 
@@ -84,11 +90,15 @@ class PytorchAPICombination(Base):
 class TensorflowAPI(Base):
     __tablename__ = 'tensorflow_api'
     id = Column(Integer, primary_key=True)
-    name = Column(String(255), nullable=False)
-    signature = Column(String(255), nullable=True)
-    description = Column(Text, nullable=True)
-    is_clustered = Column(Boolean, default=False)
-    error_triggers = relationship('TensorflowErrorTriggerCode', back_populates='api')
+    name = Column(String(255), nullable=False)  # API名
+    module = Column(String(255), nullable=True)  # API所在的模块
+    full_name = Column(String(255), nullable=True)  # API的完整名字 = 模块名.API名
+    signature = Column(Text, nullable=True)  # API函数签名
+    description = Column(Text, nullable=True)  # 对该API功能的描述
+    version = Column(String(255), nullable=True)  # API的版本
+    embedding = Column(Text, nullable=True)  # 该API的嵌入向量, 包括函数名和功能描述
+    is_clustered = Column(Boolean, default=False)  # 该API是否已经被聚类
+    error_triggers = relationship('TensorflowErrorTriggerCode', back_populates='api')  # 一个API可能有多个触发bug的代码片段
 
 
 class TensorflowErrorTriggerCode(Base):
@@ -96,8 +106,8 @@ class TensorflowErrorTriggerCode(Base):
     id = Column(Integer, primary_key=True)
     api_id = Column(Integer, ForeignKey('tensorflow_api.id'))
     api = relationship('TensorflowAPI', back_populates='error_triggers')
-    code = Column(Text, nullable=False)
-    description = Column(Text, nullable=True)
+    code = Column(Text, nullable=False)  # 触发error的代码片段
+    description = Column(Text, nullable=True)  # 描述该代码片段是怎么触发bug的
 
 
 class TensorflowAPICombination(Base):
@@ -112,11 +122,15 @@ class TensorflowAPICombination(Base):
 class JaxAPI(Base):
     __tablename__ = 'jax_api'
     id = Column(Integer, primary_key=True)
-    name = Column(String(255), nullable=False)
-    signature = Column(String(255), nullable=True)
-    description = Column(Text, nullable=True)
-    is_clustered = Column(Boolean, default=False)
-    error_triggers = relationship('JaxErrorTriggerCode', back_populates='api')
+    name = Column(String(255), nullable=False)  # API名
+    module = Column(String(255), nullable=True)  # API所在的模块
+    full_name = Column(String(255), nullable=True)  # API的完整名字 = 模块名.API名
+    signature = Column(Text, nullable=True)  # API函数签名
+    description = Column(Text, nullable=True)  # 对该API功能的描述
+    version = Column(String(255), nullable=True)  # API的版本
+    embedding = Column(Text, nullable=True)  # 该API的嵌入向量, 包括函数名和功能描述
+    is_clustered = Column(Boolean, default=False)  # 该API是否已经被聚类
+    error_triggers = relationship('JaxErrorTriggerCode', back_populates='api')  # 一个API可能有多个触发bug的代码片段
 
 
 class JaxErrorTriggerCode(Base):
@@ -124,8 +138,8 @@ class JaxErrorTriggerCode(Base):
     id = Column(Integer, primary_key=True)
     api_id = Column(Integer, ForeignKey('jax_api.id'))
     api = relationship('JaxAPI', back_populates='error_triggers')
-    code = Column(Text, nullable=False)
-    description = Column(Text, nullable=True)
+    code = Column(Text, nullable=False)  # 触发error的代码片段
+    description = Column(Text, nullable=True)  # 描述该代码片段是怎么触发bug的
 
 
 class JaxAPICombination(Base):
@@ -141,7 +155,7 @@ class Cluster(Base):
     __tablename__ = 'cluster'
     id = Column(Integer, primary_key=True)
     description = Column(Text, nullable=True)
-    energy = Column(Integer, default=10)
+    energy = Column(Integer, default=5)
     pytorch_combinations = relationship('PytorchAPICombination', secondary=cluster_pytorch_combination_association)
     tensorflow_combinations = relationship('TensorflowAPICombination',
                                            secondary=cluster_tensorflow_combination_association)
@@ -169,59 +183,167 @@ class ClusterTestSeed(Base):
 Base.metadata.create_all(engine)
 
 
-def add_data():
+def add_data_from_txt():
     Session = sessionmaker(bind=engine)
     session = Session()
-    if not session.query(PytorchAPI).first() and not session.query(TensorflowAPI).first() and not session.query(
-            JaxAPI).first():
-        # 从文件读取Pytorch APIs并添加到数据库
+
+    if not session.query(PytorchAPI).first():  # 从文件读取Pytorch APIs并添加到数据库
         try:
             with open('cluster/api_signatures/pytorch/torch_valid_apis.txt', 'r', encoding='utf-8') as file:
                 for line in file:
-                    # 移除空格和换行符
-                    api_name = line.strip()
-                    # 创建Pytorch实例并添加到session
-                    if api_name:  # 确保不是空行
-                        pytorch_api = PytorchAPI(name=api_name)
-                        session.add(pytorch_api)
+                    full_api_name = line.strip()
+                    if full_api_name:  # 确保不是空行
+                        module_name, api_name = full_api_name.rsplit('.', 1)
+                        is_valid = utils.validate_api(module_name, api_name)
+                        if is_valid:
+                            pytorch_api = PytorchAPI(
+                                name=api_name,
+                                module=module_name,
+                                full_name=full_api_name,
+                                version="1.12"
+                            )
+                            session.add(pytorch_api)
+                session.commit()
         except Exception as e:
-            print(f"Error reading Pytorch APIs file: {e}")
+            session.rollback()
+            print(f"Error processing Pytorch APIs file: {e}")
+        finally:
+            session.close()
+            print("Pytorch API data loaded successfully!")
 
-        # 从文件读取Tensorflow APIs并添加到数据库
+    if not session.query(TensorflowAPI).first():  # 从文件读取Tensorflow APIs并添加到数据库
         try:
             with open('cluster/api_signatures/tensorflow/tf_valid_apis.txt', 'r', encoding='utf-8') as file:
                 for line in file:
-                    # 移除空格和换行符
-                    api_name = line.strip()
-                    # 创建Tensorflow实例并添加到session
-                    if api_name:  # 确保不是空行
-                        tensorflow_api = TensorflowAPI(name=api_name)
-                        session.add(tensorflow_api)
-        except Exception as e:
-            print(f"Error reading Tensorflow APIs file: {e}")
-
-        # JAX APIs并添加到数据库
-        try:
-            with open('cluster/api_signatures/jax/jax_valid_apis.txt', 'r', encoding='utf-8') as file:
-                for line in file:
-                    # 移除空格和换行符
-                    api_name = line.strip()
-                    # 创建Tensorflow实例并添加到session
-                    if api_name:  # 确保不是空行
-                        jax_api = JaxAPI(name=api_name)
-                        session.add(jax_api)
-        except Exception as e:
-            print(f"Error reading Tensorflow APIs file: {e}")
-
-        # 提交到数据库
-        try:
-            session.commit()
+                    full_api_name = line.strip()
+                    if full_api_name:  # 确保不是空行
+                        module_name, api_name = full_api_name.rsplit('.', 1)
+                        is_valid = utils.validate_api(module_name, api_name)
+                        if is_valid:
+                            tensorflow_api = TensorflowAPI(
+                                name=api_name,
+                                module=module_name,
+                                full_name=full_api_name,
+                                version="2.10"
+                            )
+                            session.add(tensorflow_api)
+                session.commit()
         except Exception as e:
             session.rollback()
-            print(f"Error committing to database: {e}")
+            print(f"Error processing Tensorflow APIs file: {e}")
         finally:
             session.close()
-            print("Data loaded successfully!")
+            print("Tensorflow API data loaded successfully!")
+
+    # if not session.query(JaxAPI).first():  # JAX APIs并添加到数据库
+    #     try:
+    #         with open('cluster/api_signatures/jax/jax_valid_apis.txt', 'r', encoding='utf-8') as file:
+    #             for line in file:
+    #                 full_api_name = line.strip()
+    #                 if full_api_name:  # 确保不是空行
+    #                     module_name, api_name = full_api_name.rsplit('.', 1)
+    #                     is_valid = utils.validate_api(module_name, api_name)
+    #                     if is_valid:
+    #                         jax_api = JaxAPI(
+    #                             name=api_name,
+    #                             module=module_name,
+    #                             full_name=full_api_name,
+    #                             version="0.4.13"
+    #                         )
+    #                         session.add(jax_api)
+    #             session.commit()
+    #     except Exception as e:
+    #         session.rollback()
+    #         print(f"Error processing Jax APIs file: {e}")
+    #     finally:
+    #         session.close()
+    #         print("Jax API data loaded successfully!")
+
+
+def add_data_from_json():
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    if not session.query(JaxAPI).first():  # 从JSON文件读取Jax APIs并添加到数据库
+        try:
+            with open('cluster/api_signatures/jax/jax_apis.json', 'r', encoding='utf-8') as file:
+                torch_apis = json.load(file)
+                for api_id, api_info in torch_apis.items():
+                    # 检查数据库中是否已存在该API
+                    is_valid = utils.validate_api(api_info['module'], api_info['name'])
+                    api_exists = session.query(JaxAPI).filter_by(name=api_info['name']).first()
+                    if not (api_exists and is_valid):
+                        # 创建JaxAPI实例并添加到session
+                        new_api = JaxAPI(
+                            name=api_info['name'],
+                            module=api_info['module'],
+                            full_name=api_info['fullName'],
+                            signature=api_info['signature'],
+                            description=api_info['description'],
+                            version="0.4.13"
+                        )
+                        session.add(new_api)
+                session.commit()
+        except Exception as e:
+            session.rollback()
+            print(f"Error processing JAX APIs file: {e}")
+        finally:
+            session.close()
+            print("JAX API data loaded successfully!")
+
+    if not session.query(PytorchAPI).first():  # 从JSON文件读取Pytorch APIs并添加到数据库
+        try:
+            with open('cluster/api_signatures/pytorch/torch_apis.json', 'r', encoding='utf-8') as file:
+                torch_apis = json.load(file)
+                for api_id, api_info in torch_apis.items():
+                    # 检查数据库中是否已存在该API
+                    is_valid = utils.validate_api(api_info['module'], api_info['name'])
+                    api_exists = session.query(PytorchAPI).filter_by(name=api_info['name']).first()
+                    if not (api_exists and is_valid):
+                        # 创建PytorchAPI实例并添加到session
+                        new_api = PytorchAPI(
+                            name=api_info['name'],
+                            module=api_info['module'],
+                            full_name=api_info['fullName'],
+                            signature=api_info['signature'],
+                            description=api_info['description'],
+                            version="1.12"
+                        )
+                        session.add(new_api)
+                session.commit()
+        except Exception as e:
+            session.rollback()
+            print(f"Error processing Pytorch APIs file: {e}")
+        finally:
+            session.close()
+            print("Pytorch API data loaded successfully!")
+
+    if not session.query(TensorflowAPI).first():  # 从JSON文件读取Tensorflow APIs并添加到数据库
+        try:
+            with open('cluster/api_signatures/tensorflow/tf_apis.json', 'r', encoding='utf-8') as file:
+                torch_apis = json.load(file)
+                for api_id, api_info in torch_apis.items():
+                    # 检查数据库中是否已存在该API
+                    is_valid = utils.validate_api(api_info['module'], api_info['name'])
+                    api_exists = session.query(TensorflowAPI).filter_by(name=api_info['name']).first()
+                    if not (api_exists and is_valid):
+                        # 创建TensorflowAPI实例并添加到session
+                        new_api = TensorflowAPI(
+                            name=api_info['name'],
+                            module=api_info['module'],
+                            full_name=api_info['fullName'],
+                            signature=api_info['signature'],
+                            description=api_info['description'],
+                            version="2.10"
+                        )
+                        session.add(new_api)
+                session.commit()
+        except Exception as e:
+            session.rollback()
+            print(f"Error processing Tensorflow APIs file: {e}")
+        finally:
+            session.close()
+            print("Tensorflow API data loaded successfully!")
 
 
 def attach_code_snippet():
@@ -231,4 +353,5 @@ def attach_code_snippet():
 
 if __name__ == '__main__':
     # 如果JAX/Tensorflow/Pytorch数据库为空，添加数据
-    add_data()
+    add_data_from_txt()
+    add_data_from_json()
