@@ -1,3 +1,4 @@
+import random
 from json import JSONDecodeError
 from orm import *
 from utils import *
@@ -144,12 +145,12 @@ class Clusterer:
                     self.errors = []  # 清空错误列表
                     return json.loads(response)
                 else:
-                    attempt_num += 1
+                    attempt_num = attempt_num + 1
                     self.messages.append({"role": "user", "content": f"The JSON data you generated has the following errors: \n{self.errors} \n Please try again."})
-                    print(f"Incorrect JSON format or invalid API.\n Error Details: \n {self.errors} \nRetrying(Current attempt: {attempt_num + 1})...")
+                    print(f"Incorrect JSON format or invalid API.\n Error Details: \n {self.errors} \nRetrying(Current attempt: {attempt_num })...")
                     self.errors = []  # 清空错误列表
             except Exception as e:
-                attempt_num += 1
+                attempt_num = attempt_num + 1
                 self.session.rollback()  # 回滚在异常中的任何数据库更改
                 print(f"An unexpected error occurred: {e}")
         self.errors = []  # 清空错误列表
@@ -234,8 +235,10 @@ def run():
     uncluttered_torch_apis = session.query(PytorchAPI).filter_by(is_clustered=False).all()
     while uncluttered_torch_apis:
         print("----------------------------------------------------------------------------------")
-        cluster = Clusterer(uncluttered_torch_apis[0], session, openai_client)
-        cluster.cluster_api()
+        # 随机选择一个未聚类的PytorchAPI
+        uncluttered_torch_api = random.choice(uncluttered_torch_apis)
+        clusterer = Clusterer(uncluttered_torch_api, session, openai_client)
+        clusterer.cluster_api()
 
         uncluttered_torch_apis = session.query(PytorchAPI).filter_by(is_clustered=False).all()
         total_apis_num = session.query(PytorchAPI).count()

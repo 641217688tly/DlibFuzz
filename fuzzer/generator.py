@@ -19,7 +19,7 @@ def generate_seeds(session, openai_client, cluster, seeds_num=3):
 
     for multi_lib_combinations in all_combinations:  # 对于每种组合都生成5个seed
         # 在folder_path下创建一个新的文件夹, 文件夹名为combination中Pytorch, Tensorflow和JAX对象的id组合. 比如当前的combination为(A1,B1,C1), 则创建的文件夹名为(A1.id)_(B1.id)_(C1.id)
-        seed_folder_name = "_".join([single_lib_combination.id for single_lib_combination in multi_lib_combinations if single_lib_combination])
+        seed_folder_name = "_".join([str(single_lib_combination.id) for single_lib_combination in multi_lib_combinations if single_lib_combination])
         if not os.path.exists(f'{folder_path}/{seed_folder_name}'):
             os.makedirs(f'{folder_path}/{seed_folder_name}')
 
@@ -31,32 +31,7 @@ def generate_seeds(session, openai_client, cluster, seeds_num=3):
         # 构建prompt
         example1 = """json
         {
-            "code" : {
-                # Logits
-                logits = [[4.0, 1.0, 0.2]]
-                # Labels (one-hot encoded)
-                labels = [[1.0, 0.0, 0.0]]
-                
-                # PyTorch
-                logits_pt = torch.tensor(logits, requires_grad=True)
-                labels_pt = torch.tensor(labels)
-                loss_fn_pt = torch.nn.CrossEntropyLoss()
-                output_pt = loss_fn_pt(logits_pt, torch.argmax(labels_pt, dim=1))
-                print("PyTorch Loss:", output_pt.item())
-                
-                # TensorFlow: tf.nn.softmax_cross_entropy_with_logits
-                logits_tf = tf.constant(logits)
-                labels_tf = tf.constant(labels)
-                output_tf = tf.nn.softmax_cross_entropy_with_logits(labels=labels_tf, logits=logits_tf)
-                print("TensorFlow NN Loss:", output_tf.numpy()[0])
-                                
-                # Jax
-                logits_jax = jnp.array(logits)
-                labels_jax = jnp.array(labels)
-                log_softmax = jax.nn.log_softmax(logits_jax)
-                output_jax = -jnp.sum(labels_jax * log_softmax)
-                print("JAX Loss:", output_jax)
-            }
+            "code": "\n# Logits\nlogits = [[4.0, 1.0, 0.2]]\n# Labels (one-hot encoded)\nlabels = [[1.0, 0.0, 0.0]]\n\n# PyTorch\nlogits_pt = torch.tensor(logits, requires_grad=True)\nlabels_pt = torch.tensor(labels)\nloss_fn_pt = torch.nn.CrossEntropyLoss()\noutput_pt = loss_fn_pt(logits_pt, torch.argmax(labels_pt, dim=1))\nprint(\"PyTorch Loss:\", output_pt.item())\n\n# TensorFlow: tf.nn.softmax_cross_entropy_with_logits\nlogits_tf = tf.constant(logits)\nlabels_tf = tf.constant(labels)\noutput_tf = tf.nn.softmax_cross_entropy_with_logits(labels=labels_tf, logits=logits_tf)\nprint(\"TensorFlow NN Loss:\", output_tf.numpy()[0])\n\n# Jax\nlogits_jax = jnp.array(logits)\nlabels_jax = jnp.array(labels)\nlog_softmax = jax.nn.log_softmax(logits_jax)\noutput_jax = -jnp.sum(labels_jax * log_softmax)\nprint(\"JAX Loss:\", output_jax)\n"
         }
         """
         prompt = f"""
@@ -83,7 +58,7 @@ def generate_seeds(session, openai_client, cluster, seeds_num=3):
                             {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
                             {"role": "user", "content": prompt}
                         ],
-                        temperature=0,
+                        temperature=1,
                     )
                     response_data = response.choices[0].message.content
                     print(response_data)
@@ -115,6 +90,7 @@ def generate_seeds(session, openai_client, cluster, seeds_num=3):
             with open(f'{folder_path}/{seed_folder_name}/seed_{i}.py', 'w') as file:
                 # 读取json_data中的code字段, 并将其写入到文件中
                 file.write(json_data['code'])
+    # 在所有的seed生成完毕后, 将cluster的is_tested字段设置为True
     cluster.is_tested = True
     session.commit()
 

@@ -158,10 +158,10 @@ class ClusterTestSeed(Base):
     tensorflow_combination = relationship('TensorflowAPICombination', back_populates='test_seeds')
     jax_combination_id = Column(Integer, ForeignKey('jax_api_combination.id'))
     jax_combination = relationship('JaxAPICombination', back_populates='test_seeds')
-    code = Column(Text, nullable=False) # pytorch_code + tensorflow_code + jax_code
-    pytorch_code = Column(Text, nullable=False)
-    tensorflow_code = Column(Text, nullable=False)
-    jax_code = Column(Text, nullable=False)
+    code = Column(Text, nullable=True) # pytorch_code + tensorflow_code + jax_code
+    pytorch_code = Column(Text, nullable=True)
+    tensorflow_code = Column(Text, nullable=True)
+    jax_code = Column(Text, nullable=True)
 
 
 # 创建表
