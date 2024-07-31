@@ -194,7 +194,7 @@ def add_data_from_txt():
                     full_api_name = line.strip()
                     if full_api_name:  # 确保不是空行
                         module_name, api_name = full_api_name.rsplit('.', 1)
-                        is_valid = utils.validate_api(module_name, api_name)
+                        is_valid = utils.validate_api_existence(module_name, api_name)
                         if is_valid:
                             pytorch_api = PytorchAPI(
                                 name=api_name,
@@ -218,7 +218,7 @@ def add_data_from_txt():
                     full_api_name = line.strip()
                     if full_api_name:  # 确保不是空行
                         module_name, api_name = full_api_name.rsplit('.', 1)
-                        is_valid = utils.validate_api(module_name, api_name)
+                        is_valid = utils.validate_api_existence(module_name, api_name)
                         if is_valid:
                             tensorflow_api = TensorflowAPI(
                                 name=api_name,
@@ -270,7 +270,7 @@ def add_data_from_json():
                 torch_apis = json.load(file)
                 for api_id, api_info in torch_apis.items():
                     # 检查数据库中是否已存在该API
-                    is_valid = utils.validate_api(api_info['module'], api_info['name'])
+                    is_valid = utils.validate_api_existence(api_info['module'], api_info['name'])
                     api_exists = session.query(JaxAPI).filter_by(name=api_info['name']).first()
                     if not (api_exists and is_valid):
                         # 创建JaxAPI实例并添加到session
@@ -297,7 +297,7 @@ def add_data_from_json():
                 torch_apis = json.load(file)
                 for api_id, api_info in torch_apis.items():
                     # 检查数据库中是否已存在该API
-                    is_valid = utils.validate_api(api_info['module'], api_info['name'])
+                    is_valid = utils.validate_api_existence(api_info['module'], api_info['name'])
                     api_exists = session.query(PytorchAPI).filter_by(name=api_info['name']).first()
                     if not (api_exists and is_valid):
                         # 创建PytorchAPI实例并添加到session
@@ -324,7 +324,7 @@ def add_data_from_json():
                 torch_apis = json.load(file)
                 for api_id, api_info in torch_apis.items():
                     # 检查数据库中是否已存在该API
-                    is_valid = utils.validate_api(api_info['module'], api_info['name'])
+                    is_valid = utils.validate_api_existence(api_info['module'], api_info['name'])
                     api_exists = session.query(TensorflowAPI).filter_by(name=api_info['name']).first()
                     if not (api_exists and is_valid):
                         # 创建TensorflowAPI实例并添加到session

@@ -1,3 +1,4 @@
+import inspect
 from json import JSONDecodeError
 from orm import *
 from utils import *
@@ -7,7 +8,7 @@ TF_VERSION = "2.10"
 JAX_VERSION = "0.4.13"
 
 
-# ----------------------------------------------clusterer----------------------------------------------
+# ----------------------------------------------Clusterer----------------------------------------------
 class Clusterer:
     def __init__(self, api, session, openai_client):
         self.api = api
@@ -62,31 +63,60 @@ class Clusterer:
         ]
         return messages
 
-    def dynamic_api_call(self, module_name, function_name):
+    def validate_api(self, full_api_name):
+        module_name = ""
+        api_name = ""
         try:
-            # 动态导入模块
+            module_name, api_name = full_api_name.rsplit('.', 1)
             module = importlib.import_module(module_name)
-            # 尝试获取函数引用
-            func = getattr(module, function_name, None)
-            if func is None:
-                return False, f"Function {function_name} not found in {module_name}"
-            return True, "Function exists and is callable"
-        except ImportError:
-            return False, f"Module {module_name} not found"
-        except Exception as e:
-            return False, str(e)
+            func = getattr(module, api_name, None)
 
-    def validate_api_function_names(self, api_data):
-        results = {}
-        for tech, apis in api_data.items():
-            for api_group_id, api_names in apis.items():
-                for api_name in api_names:
-                    module_name, func_name = api_name.rsplit('.', 1)
-                    is_valid, message = self.dynamic_api_call(module_name, func_name)
-                    if not is_valid:
-                        print(f"Validation failed for {api_name}: {message}")
-                    results[api_name] = is_valid
-        return results
+            if func is None or not callable(func):
+                self.errors.append(f"{full_api_name} is not callable or does not exist.")
+                return False
+
+            if inspect.ismodule(func):
+                self.errors.append(f"{full_api_name} is a module, not a function.")
+                return False
+
+            if inspect.isclass(func):
+                self.errors.append(f"{full_api_name} is a class, not a function.")
+                return False
+
+            # if validate_api_availability(func):
+            #     self.errors.append(f"{full_api_name} is deprecated.")
+            #     return False
+            return True
+        except ImportError as e:
+            self.errors.append(f"Module {module_name} not found: {str(e)}")
+            return False
+        except AttributeError:
+            self.errors.append(f"{api_name} does not exist in {module_name}.")
+            return False
+        except Exception as e:
+            self.errors.append(str(e))
+            return False
+
+    def validate_apis(self, response):
+        """
+        验证JSON中API的格式是完整函数名(完整函数名 = 模块名.API名)而非函数签名
+        所有的API函数名必须有效(有效的定义为: JSON数据中的API为函数全名(函数全名 = 模块.函数名)而非函数签名, 该API不是被弃用的, 该API必须是函数而非模块或类, 该API可以被导入)
+        """
+        try:
+            is_valid = True
+            json_data = json.loads(response)
+            for dl_lib, api_combinations in json_data.items(): # 逐个访问Pytorch, Tensorflow和Jax
+                for api_combination_id, api_combination in api_combinations.items(): # 逐个访问Pytorch, Tensorflow和Jax下的各个API组合
+                    for full_api_name in api_combination: # 逐个访问API组合下的各个API
+                        if not self.validate_api(full_api_name):
+                            is_valid = False
+            return is_valid
+        except JSONDecodeError:
+            self.errors.append("The response data has an invalid JSON format.")
+            return False
+        except Exception as e:
+            self.errors.append(str(e))
+            return False
 
     def conduct_cluster(self):
         attempt_num = 0
@@ -103,23 +133,23 @@ class Clusterer:
                 self.responses.append(response)
                 self.messages.append({"role": "assistant", "content": response})
                 print(f"Clustered Pytorch API: {self.api.name}\nResponse:\n{response}")
-
                 # 在此处需要检查: 1.响应的数据是否遵循JSON格式; 2.返回的是API的完整函数名(完整函数名 = 模块名.API名)而非函数签名 3.所有的API函数名必须有效(不是虚构的, 也不是被弃用的)
-                json_data = json.loads(response)
-                validation_results = self.validate_api_function_names(json_data)
-                if not all(validation_results.values()):  # 如果有任何 API 名称验证失败
-                    raise ValueError("One or more API names are invalid or unknown.")
-                break  # 成功解析 JSON,跳出循环
-            except (JSONDecodeError, ValueError) as e:
-                print(f"Failed to decode JSON due to: {e}.\nCurrent attempt: {attempt_num + 1}. Retrying...")
-                attempt_num += 1
+                if self.validate_apis(response):
+                    self.errors = []  # 清空错误列表
+                    return json.loads(response)
+                else:
+                    attempt_num += 1
+                    self.messages.append({"role": "user", "content": f"The JSON data you generated has the following errors: \n{self.errors} \n Please try again."})
+                    self.errors = []  # 清空错误列表
+                    print(f"Incorrect JSON format or invalid API. Current attempt: {attempt_num + 1}. Retrying...")
+                    break
             except Exception as e:
                 self.session.rollback()  # 回滚在异常中的任何数据库更改
                 print(f"An unexpected error occurred: {e}")
                 break
-
+        self.errors = []  # 清空错误列表
         print("Max attempts reached. Unable to get valid JSON data.")
-        return
+        return None
 
     # --------------------------------------store API Combinations and Cluster into database--------------------------------------
     def supplement_apis(self, api_combinations, api_class):  # 将Jax/Pytorch/Tensorflow的API组合内不在数据库中的API添加到数据库中
@@ -133,7 +163,7 @@ class Clusterer:
         """
         api_combination_objects = {}
         for api_id, api_combination in api_combinations.items():  # 逐个访问每个API组合
-            api_combination_objects[api_id] = [] # api_combination_objects = { "1" : [], "2" : [] }
+            api_combination_objects[api_id] = []  # api_combination_objects = { "1" : [], "2" : [] }
             for full_api_name in api_combination:  # 获取某个API组合中的每个API
                 api = self.session.query(api_class).filter_by(full_name=full_api_name).first()
                 if not api:
@@ -141,16 +171,17 @@ class Clusterer:
                     api = api_class(
                         name=api_name,
                         module=module_name,
-                        full_name=full_api_name,# 根据api_class来设置version
-                        version= self.torch_ver if api_class == PytorchAPI else self.tf_ver if api_class == TensorflowAPI else self.jax_ver
+                        full_name=full_api_name,  # 根据api_class来设置version
+                        version=self.torch_ver if api_class == PytorchAPI else self.tf_ver if api_class == TensorflowAPI else self.jax_ver
                     )
                     self.session.add(api)
                     self.session.commit()
-                api_combination_objects[api_id].append(api) # { "1" : [CategoricalCrossentropy], "2" : [constant, softmax_cross_entropy_with_logits] }
+                api_combination_objects[api_id].append(
+                    api)  # { "1" : [CategoricalCrossentropy], "2" : [constant, softmax_cross_entropy_with_logits] }
         return api_combination_objects
 
     def associate_api_combinations_to_cluster(self, cluster, api_combination_objects, combination_class):
-        for api_id, api_combination in api_combination_objects.items(): # 逐个访问每个API组合
+        for api_id, api_combination in api_combination_objects.items():  # 逐个访问每个API组合
             combination = combination_class(apis=api_combination, cluster=cluster)
             self.session.add(combination)
             self.session.commit()
@@ -172,8 +203,10 @@ class Clusterer:
             self.session.commit()
 
             # 3. 为Pytorch, Tensorflow和Jax的每个API组合创建对应的PytorchAPICombination, TensorflowAPICombination和JaxAPICombination对象, 之后将它们与新创建的Cluster对象关联
-            self.associate_api_combinations_to_cluster(new_cluster, torch_apis_combination_objects, PytorchAPICombination)
-            self.associate_api_combinations_to_cluster(new_cluster, tf_apis_combination_objects, TensorflowAPICombination)
+            self.associate_api_combinations_to_cluster(new_cluster, torch_apis_combination_objects,
+                                                       PytorchAPICombination)
+            self.associate_api_combinations_to_cluster(new_cluster, tf_apis_combination_objects,
+                                                       TensorflowAPICombination)
             self.associate_api_combinations_to_cluster(new_cluster, jax_apis_combination_objects, JaxAPICombination)
             self.session.commit()
         except Exception as e:
@@ -182,9 +215,9 @@ class Clusterer:
 
     # ----------------------------------------------run()----------------------------------------------
     def cluster_api(self):
-        # 利用clusterer进行聚类
-        clusterer_json_data = self.conduct_cluster()
-        self.save_cluster(clusterer_json_data)
+        json_data = self.conduct_cluster()
+        if json_data:
+            self.save_cluster(json_data)
 
 
 def run():
@@ -198,6 +231,7 @@ def run():
         print("----------------------------------------------------------------------------------")
         cluster = Clusterer(uncluttered_torch_apis[0], session, openai_client)
         cluster.cluster_api()
+
         uncluttered_torch_apis = session.query(PytorchAPI).filter_by(is_clustered=False).all()
         total_apis_num = session.query(PytorchAPI).count()
         unclustered_torch_apis_num = len(uncluttered_torch_apis)

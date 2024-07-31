@@ -1,4 +1,7 @@
 import importlib
+import inspect
+import warnings
+
 import httpx
 import yaml
 from openai import OpenAI
@@ -36,7 +39,7 @@ def get_openai_client():
 
 
 
-def validate_api(module_name, api_name):  # 验证API是否存在的函数
+def validate_api_existence(module_name, api_name):  # 验证API是否存在的函数
     # module_name, api_name = full_api_name.rsplit('.', 1)
     try:
         # 先检查模块是否存在
@@ -46,6 +49,22 @@ def validate_api(module_name, api_name):  # 验证API是否存在的函数
         return True
     except (ModuleNotFoundError, AttributeError):
         return False
+
+def validate_api_availability(function):  # 验证API是否可用的函数
+    """Check if the function is deprecated."""
+    docstring = inspect.getdoc(function)
+    if docstring and 'deprecated' in docstring.lower():
+        return True
+
+    # Capture DeprecationWarning
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter('always', DeprecationWarning)
+        try:
+            function()  # Attempt to call the function
+        except Exception:
+            pass
+        return any(item.category == DeprecationWarning for item in w)
+
 
 
 def check_api_list(file_path):  # 检查每个API是否存在
@@ -57,7 +76,7 @@ def check_api_list(file_path):  # 检查每个API是否存在
     for full_api_name in api_names:
         module_name, api_name = full_api_name.rsplit('.', 1)
         try:
-            existence = validate_api(module_name, api_name)
+            existence = validate_api_existence(module_name, api_name)
             results[full_api_name] = existence
             if existence:
                 exists_count += 1
