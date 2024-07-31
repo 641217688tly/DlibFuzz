@@ -35,25 +35,6 @@ jax_api_combination_association = Table('jax_api_combination_association', Base.
                                         Column('api_combination_id', Integer, ForeignKey('jax_api_combination.id')),
                                         Column('api_id', Integer, ForeignKey('jax_api.id')))
 
-cluster_pytorch_combination_association = Table(
-    'cluster_pytorch_combination_association', Base.metadata,
-    Column('cluster_id', Integer, ForeignKey('cluster.id'), primary_key=True),
-    Column('pytorch_combination_id', Integer, ForeignKey('pytorch_api_combination.id'), primary_key=True)
-)
-
-cluster_tensorflow_combination_association = Table(
-    'cluster_tensorflow_combination_association', Base.metadata,
-    Column('cluster_id', Integer, ForeignKey('cluster.id'), primary_key=True),
-    Column('tensorflow_combination_id', Integer, ForeignKey('tensorflow_api_combination.id'), primary_key=True)
-)
-
-cluster_jax_combination_association = Table(
-    'cluster_jax_combination_association', Base.metadata,
-    Column('cluster_id', Integer, ForeignKey('cluster.id'), primary_key=True),
-    Column('jax_combination_id', Integer, ForeignKey('jax_api_combination.id'), primary_key=True)
-)
-
-
 # ----------------------------------Pytorch----------------------------------
 class PytorchAPI(Base):
     __tablename__ = 'pytorch_api'
@@ -83,7 +64,8 @@ class PytorchAPICombination(Base):
     id = Column(Integer, primary_key=True)
     apis = relationship('PytorchAPI', secondary=pytorch_api_combination_association)
     test_seeds = relationship('ClusterTestSeed', back_populates='pytorch_combination')
-
+    cluster_id = Column(Integer, ForeignKey('cluster.id'))
+    cluster = relationship('Cluster', back_populates='pytorch_combinations')
 
 # ----------------------------------Tensorflow----------------------------------
 
@@ -115,7 +97,8 @@ class TensorflowAPICombination(Base):
     id = Column(Integer, primary_key=True)
     apis = relationship('TensorflowAPI', secondary=tensorflow_api_combination_association)
     test_seeds = relationship('ClusterTestSeed', back_populates='tensorflow_combination')
-
+    cluster_id = Column(Integer, ForeignKey('cluster.id'))
+    cluster = relationship('Cluster', back_populates='tensorflow_combinations')
 
 # ----------------------------------Jax----------------------------------
 
@@ -147,7 +130,8 @@ class JaxAPICombination(Base):
     id = Column(Integer, primary_key=True)
     apis = relationship('JaxAPI', secondary=jax_api_combination_association)
     test_seeds = relationship('ClusterTestSeed', back_populates='jax_combination')
-
+    cluster_id = Column(Integer, ForeignKey('cluster.id'))
+    cluster = relationship('Cluster', back_populates='jax_combinations')
 
 # ----------------------------------Cluster----------------------------------
 
@@ -156,10 +140,9 @@ class Cluster(Base):
     id = Column(Integer, primary_key=True)
     description = Column(Text, nullable=True)
     energy = Column(Integer, default=5)
-    pytorch_combinations = relationship('PytorchAPICombination', secondary=cluster_pytorch_combination_association)
-    tensorflow_combinations = relationship('TensorflowAPICombination',
-                                           secondary=cluster_tensorflow_combination_association)
-    jax_combinations = relationship('JaxAPICombination', secondary=cluster_jax_combination_association)
+    pytorch_combinations = relationship('PytorchAPICombination', back_populates='cluster')
+    tensorflow_combinations = relationship('TensorflowAPICombination', back_populates='cluster')
+    jax_combinations = relationship('JaxAPICombination', back_populates='cluster')
     test_seeds = relationship('ClusterTestSeed', back_populates='cluster')
 
 

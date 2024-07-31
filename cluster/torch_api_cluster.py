@@ -60,7 +60,7 @@ class Clusterer:
         """
         messages = [
             {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
-            {"role": "user", "content": f"{clusterer_prompt}"}
+            {"role": "user", "content": clusterer_prompt}
         ]
         return messages
 
@@ -81,9 +81,9 @@ class Clusterer:
             module_name = self.handle_module_alias(module_name)
             module = importlib.import_module(module_name)
             func = getattr(module, api_name, None)
-            if func is None or not callable(func):
-                self.errors.append(f"{full_api_name} is not callable or does not exist.")
-                return False
+            #if func is None or not callable(func):
+            #    self.errors.append(f"{full_api_name} is not callable or does not exist.")
+            #    return False
             if inspect.ismodule(func):
                 self.errors.append(f"{full_api_name} is a module, not a function.")
                 return False
@@ -93,7 +93,7 @@ class Clusterer:
             #if validate_api_availability(func):
             #    self.errors.append(f"{full_api_name} is deprecated.")
             #    return False
-            #return True
+            return True
         except ImportError as e:
             self.errors.append(f"Module {module_name} not found: {str(e)}")
             return False
@@ -146,8 +146,8 @@ class Clusterer:
                 else:
                     attempt_num += 1
                     self.messages.append({"role": "user", "content": f"The JSON data you generated has the following errors: \n{self.errors} \n Please try again."})
+                    print(f"Incorrect JSON format or invalid API.\n Error Details: \n {self.errors} \nRetrying(Current attempt: {attempt_num + 1})...")
                     self.errors = []  # 清空错误列表
-                    print(f"Incorrect JSON format or invalid API. Current attempt: {attempt_num + 1}. Retrying...")
             except Exception as e:
                 attempt_num += 1
                 self.session.rollback()  # 回滚在异常中的任何数据库更改
