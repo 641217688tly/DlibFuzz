@@ -35,9 +35,9 @@ def check_api_list(file_path):  # 检查每个API是否存在
 
 
 def check_all_api_lists():
-    file_path1 = './api_signatures/jax/jax_valid_apis.txt'
-    file_path2 = './api_signatures/pytorch/torch_valid_apis.txt'
-    file_path3 = './api_signatures/tensorflow/tf_valid_apis.txt'
+    file_path1 = 'cluster/apis/jax/jax_valid_apis.txt'
+    file_path2 = 'cluster/apis/pytorch/torch_valid_apis.txt'
+    file_path3 = 'cluster/apis/tensorflow/tf_valid_apis.txt'
     api_check_results1, exists_count1, not_exists_count1 = check_api_list(file_path1)
     # for api, exists in api_check_results.items():
     #     print(f"{api}: {'Exists' if exists else 'Does not exist'}")

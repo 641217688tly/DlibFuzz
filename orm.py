@@ -1,9 +1,9 @@
 import json
 import yaml
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Text, Enum, Table, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Text, Table, Boolean
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.orm import sessionmaker
-from cluster import utils
+import utils
 
 # 读取config.yml文件
 with open('config.yml', 'r', encoding='utf-8') as file:
@@ -189,7 +189,7 @@ def add_data_from_txt():
 
     if not session.query(PytorchAPI).first():  # 从文件读取Pytorch APIs并添加到数据库
         try:
-            with open('cluster/api_signatures/pytorch/torch_valid_apis.txt', 'r', encoding='utf-8') as file:
+            with open('cluster/apis/pytorch/torch_valid_apis.txt', 'r', encoding='utf-8') as file:
                 for line in file:
                     full_api_name = line.strip()
                     if full_api_name:  # 确保不是空行
@@ -213,7 +213,7 @@ def add_data_from_txt():
 
     if not session.query(TensorflowAPI).first():  # 从文件读取Tensorflow APIs并添加到数据库
         try:
-            with open('cluster/api_signatures/tensorflow/tf_valid_apis.txt', 'r', encoding='utf-8') as file:
+            with open('cluster/apis/tensorflow/tf_valid_apis.txt', 'r', encoding='utf-8') as file:
                 for line in file:
                     full_api_name = line.strip()
                     if full_api_name:  # 确保不是空行
@@ -237,7 +237,7 @@ def add_data_from_txt():
 
     # if not session.query(JaxAPI).first():  # JAX APIs并添加到数据库
     #     try:
-    #         with open('cluster/api_signatures/jax/jax_valid_apis.txt', 'r', encoding='utf-8') as file:
+    #         with open('cluster/apis/jax/jax_valid_apis.txt', 'r', encoding='utf-8') as file:
     #             for line in file:
     #                 full_api_name = line.strip()
     #                 if full_api_name:  # 确保不是空行
@@ -266,7 +266,7 @@ def add_data_from_json():
 
     if not session.query(JaxAPI).first():  # 从JSON文件读取Jax APIs并添加到数据库
         try:
-            with open('cluster/api_signatures/jax/jax_apis.json', 'r', encoding='utf-8') as file:
+            with open('cluster/apis/jax/jax_apis.json', 'r', encoding='utf-8') as file:
                 torch_apis = json.load(file)
                 for api_id, api_info in torch_apis.items():
                     # 检查数据库中是否已存在该API
@@ -293,7 +293,7 @@ def add_data_from_json():
 
     if not session.query(PytorchAPI).first():  # 从JSON文件读取Pytorch APIs并添加到数据库
         try:
-            with open('cluster/api_signatures/pytorch/torch_apis.json', 'r', encoding='utf-8') as file:
+            with open('cluster/apis/pytorch/torch_apis.json', 'r', encoding='utf-8') as file:
                 torch_apis = json.load(file)
                 for api_id, api_info in torch_apis.items():
                     # 检查数据库中是否已存在该API
@@ -320,7 +320,7 @@ def add_data_from_json():
 
     if not session.query(TensorflowAPI).first():  # 从JSON文件读取Tensorflow APIs并添加到数据库
         try:
-            with open('cluster/api_signatures/tensorflow/tf_apis.json', 'r', encoding='utf-8') as file:
+            with open('cluster/apis/tensorflow/tf_apis.json', 'r', encoding='utf-8') as file:
                 torch_apis = json.load(file)
                 for api_id, api_info in torch_apis.items():
                     # 检查数据库中是否已存在该API
