@@ -140,6 +140,7 @@ class Cluster(Base):
     id = Column(Integer, primary_key=True)
     description = Column(Text, nullable=True)
     energy = Column(Integer, default=5)
+    is_tested = Column(Boolean, default=False)  # 该API是否已经生成过了种子
     pytorch_combinations = relationship('PytorchAPICombination', back_populates='cluster')
     tensorflow_combinations = relationship('TensorflowAPICombination', back_populates='cluster')
     jax_combinations = relationship('JaxAPICombination', back_populates='cluster')
@@ -157,6 +158,7 @@ class ClusterTestSeed(Base):
     tensorflow_combination = relationship('TensorflowAPICombination', back_populates='test_seeds')
     jax_combination_id = Column(Integer, ForeignKey('jax_api_combination.id'))
     jax_combination = relationship('JaxAPICombination', back_populates='test_seeds')
+    code = Column(Text, nullable=False) # pytorch_code + tensorflow_code + jax_code
     pytorch_code = Column(Text, nullable=False)
     tensorflow_code = Column(Text, nullable=False)
     jax_code = Column(Text, nullable=False)

@@ -52,7 +52,7 @@ class Clusterer:
         
         """
         clusterer_prompt = f"""
-        Which apis or combinations of api calls in TensorFlow (v{self.tf_ver}) and JAX (v{self.jax_ver}) have the exact same functionality as {self.api.name} in PyTorch (v{self.torch_ver})?
+        Which function apis or combinations of function api calls in TensorFlow (v{self.tf_ver}) and JAX (v{self.jax_ver}) have the exact same functionality as {self.api.name} in PyTorch (v{self.torch_ver})?
         Note: "The same functionality" means that these APIs are responsible for performing exactly the same tasks. When these APIs have no return value, using these APIs to perform the same operations on inputs with the same structure or element values (such as tensors) should result in consistent changes to the original input. For example, PyTorch's torch.scatter_, TensorFlow's tf.scatter_update, and JAX's jax.ops.index_update all have the functionality to update tensors, and when the tensors being updated and the update strategies are the same, the updated tensors should be consistent. When these APIs have return values, PyTorch's torch.nn.ReLU, TensorFlow's tf.nn.relu or tf.keras.layers.ReLU, and Jax's jax.nn.relu all produce the same output values when given the same input values.
         Please output the function names or combinations of function names in PyTorch, TensorFlow, and JAX that meet the above conditions in JSON format, with an example shown below:
         Example 1: {example1}
@@ -70,8 +70,8 @@ class Clusterer:
         if module_parts[0] in self.module_alias_mapper:
             module_parts[0] = self.module_alias_mapper[module_parts[0]]
         # 将替换后的模块名重新组合为完整模块名
-        module_name = '.'.join(module_parts)
-        return module_name
+        new_module_name = '.'.join(module_parts)
+        return new_module_name
 
     def validate_api(self, full_api_name):
         module_name = ""

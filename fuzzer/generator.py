@@ -1,67 +1,89 @@
 from utils import *
-from sqlalchemy.orm import joinedload
 from tqdm.contrib import itertools
 import os
 from orm import *
 
 
-def generate_seeds(session, openai_client, cluster, seeds_num=5):
-    # 在fuzzer/seeds/unverified_seeds/下创建一个新的文件夹, 文件夹名为cluster.id
-    if not os.path.exists(f'seeds/unverified_seeds/{cluster.id}'):
-        os.makedirs(f'seeds/unverified_seeds/{cluster.id}')
+def generate_seeds(session, openai_client, cluster, seeds_num=3):
+    folder_path = f'seeds/unverified_seeds/{cluster.__class__.__name__}/{cluster.id}'
+    # 在folder_path下创建一个新的文件夹, 文件夹名为cluster.id
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
 
-    # 先从cluster中获取所有的Pytorch对象, Tensorflow对象和JAX对象的组合
-    # 比如当前有一个cluster, 其中包含了Pytorch对象A1和A2, Tensorflow对象B1和JAX对象C1, 则有以下组合: (A1,B1,C1), (A2,B1,C1)
-    # 再比如当前有一个cluster, 其中包含了Pytorch对象A1, Tensorflow对象为null, JAX对象C1和C2, 则有以下组合: (A1,C1), (A1,C2)
+    # 先从cluster中获取所有的Pytorch对象, Tensorflow对象和JAX对象的组合. 比如当前有一个cluster, 其中包含了Pytorch对象A1和A2, Tensorflow对象B1和JAX对象C1, 则有以下组合: (A1,B1,C1), (A2,B1,C1); 再比如当前有一个cluster, 其中包含了Pytorch对象A1, Tensorflow对象为null, JAX对象C1和C2, 则有以下组合: (A1,C1), (A1,C2)
     all_combinations = list(itertools.product(
-        cluster.pytorches if cluster.pytorches else [None],
-        cluster.tensorflows if cluster.tensorflows else [None],
-        cluster.jaxes if cluster.jaxes else [None]
+        cluster.pytorch_combinations if cluster.pytorch_combinations else [None],
+        cluster.tensorflow_combinations if cluster.tensorflow_combinations else [None],
+        cluster.jax_combinations if cluster.jax_combinations else [None]
     ))
 
-    for combination in all_combinations:  # 对于每种组合都生成5个seed
-        # 在seeds/unverified_seeds/{cluster.id}/下创建一个新的文件夹, 文件夹名为combination中Pytorch, Tensorflow和JAX对象的name组合:
-        # 比如当前的combination为(A1,B1,C1), 则创建的文件夹名为A1_B1_C1
-        seed_folder_name = "_".join([obj.name for obj in combination if obj])
-        if not os.path.exists(f'seeds/unverified_seeds/{cluster.id}/{seed_folder_name}'):
-            os.makedirs(f'seeds/unverified_seeds/{cluster.id}/{seed_folder_name}')
+    for multi_lib_combinations in all_combinations:  # 对于每种组合都生成5个seed
+        # 在folder_path下创建一个新的文件夹, 文件夹名为combination中Pytorch, Tensorflow和JAX对象的id组合. 比如当前的combination为(A1,B1,C1), 则创建的文件夹名为(A1.id)_(B1.id)_(C1.id)
+        seed_folder_name = "_".join([single_lib_combination.id for single_lib_combination in multi_lib_combinations if single_lib_combination])
+        if not os.path.exists(f'{folder_path}/{seed_folder_name}'):
+            os.makedirs(f'{folder_path}/{seed_folder_name}')
 
-        output_format_example = """
+        # 分别获取PytorchAPICombination, TensorFlowAPICombination和JaxAPICombination内所有的API
+        torch_apis = multi_lib_combinations[0].apis if multi_lib_combinations[0] else []
+        tf_apis = multi_lib_combinations[1].apis if multi_lib_combinations[1] else []
+        jax_apis = multi_lib_combinations[2].apis if multi_lib_combinations[2] else []
+
+        # 构建prompt
+        example1 = """json
         {
-            Pytorch : {"code" : "code snippet..."},
-            TensorFlow : {"code" : "code snippet..."},
-            JAX : {"code" : "code snippet..."},
+            "code" : {
+                # Logits
+                logits = [[4.0, 1.0, 0.2]]
+                # Labels (one-hot encoded)
+                labels = [[1.0, 0.0, 0.0]]
+                
+                # PyTorch
+                logits_pt = torch.tensor(logits, requires_grad=True)
+                labels_pt = torch.tensor(labels)
+                loss_fn_pt = torch.nn.CrossEntropyLoss()
+                output_pt = loss_fn_pt(logits_pt, torch.argmax(labels_pt, dim=1))
+                print("PyTorch Loss:", output_pt.item())
+                
+                # TensorFlow: tf.nn.softmax_cross_entropy_with_logits
+                logits_tf = tf.constant(logits)
+                labels_tf = tf.constant(labels)
+                output_tf = tf.nn.softmax_cross_entropy_with_logits(labels=labels_tf, logits=logits_tf)
+                print("TensorFlow NN Loss:", output_tf.numpy()[0])
+                                
+                # Jax
+                logits_jax = jnp.array(logits)
+                labels_jax = jnp.array(labels)
+                log_softmax = jax.nn.log_softmax(logits_jax)
+                output_jax = -jnp.sum(labels_jax * log_softmax)
+                print("JAX Loss:", output_jax)
+            }
         }
         """
-        torch_api = combination[0].api_signature if combination[0] else "Pytorch"
-        tf_api = combination[1].api_signature if combination[1] else "TensorFlow"
-        jax_api = combination[2].api_signature if combination[2] else "JAX"
         prompt = f"""
-        Given the {torch_api} of the Pytorch library, the {tf_api} of the TensorFlow library and the {jax_api} of the JAX library all have the same functionality.
-
-        Generate test code snippets for the apis of the different libraries mentioned above.
-
+        Given the API combinations{torch_apis} of the Pytorch library, the {tf_apis} of the TensorFlow library and the {jax_apis} of the Jax library all have the same functionality.
+        Please Generate test code snippets for the apis of the different libraries mentioned above.
         Requirements:
-        1. The output values of test code snippets generated for different apis need to remain the same
-        2. Your answers should be in JSON format:
-        {output_format_example}
+        1. The output values of test code snippets generated for different apis need to remain the same.
+        2. Your answers should be in JSON format.
+        
+        Following is a example:
+        API combinations ["torch.tensor", "torch.nn.CrossEntropyLoss"] of the Pytorch library, the ["tensorflow.constant", "tensorflow.nn.softmax_cross_entropy_with_logits"] of the TensorFlow library and the ["jax.numpy.array", "jax.nn.log_softmax", "jax.numpy.sum"] of the Jax library all have the same functionality.
+        The code snippet to test these API combinations is as follows:
+        {example1}
         """
-        for i in range(seeds_num):  # 生成5个seed
-            response_data = None
+        for i in range(seeds_num):  # 生成n个seed
             json_data = None
             attempt_num = 0
-            max_attempts_num = 5  # 设置最大尝试次数以避免无限循环
-            while attempt_num < max_attempts_num:
+            while attempt_num < 5: # 设置最大尝试次数以避免无限循环
                 try:  # 假如返回的数据不符合JSON格式, 则重新调用OpenAI API, 直到返回的数据符合JSON格式为止
-                    # 调用 OpenAI API
                     response = openai_client.chat.completions.create(
-                        model="gpt-3.5-turbo",
+                        model="gpt-4o-mini",  # gpt-4o-mini  gpt-3.5-turbo
                         response_format={"type": "json_object"},
                         messages=[
                             {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
                             {"role": "user", "content": prompt}
                         ],
-                        temperature=0.0,
+                        temperature=0,
                     )
                     response_data = response.choices[0].message.content
                     print(response_data)
@@ -69,33 +91,47 @@ def generate_seeds(session, openai_client, cluster, seeds_num=5):
                     break  # 成功解析 JSON,跳出循环
                 except json.JSONDecodeError as e:
                     print(
-                        f"Failed to decode JSON due to: {e}.\nCurrent attempt: {attempt_num + 1}. Retrying...")
+                        f"Failed to decode JSON due to.\nError Details: \n{e} \nRetrying(Current attempt: {attempt_num + 1})...")
                     attempt_num += 1
                 except Exception as e:
                     session.rollback()  # 回滚在异常中的任何数据库更改
                     print(f"An unexpected error occurred: {e}")
                     break
-            if attempt_num == max_attempts_num:
+            if attempt_num == 5: # 设置最大尝试次数以避免无限循环
                 print("Max attempts reached. Unable to get valid JSON data.")
                 return
-            # 在seed_folder_name文件夹下创建一个新的json文件, 文件名为seed_{i}.json, 文件内容为json_data
-            with open(f'seeds/unverified_seeds/{cluster.id}/{seed_folder_name}/seed_{i}.json', 'w') as file:
-                json.dump(json_data, file, indent=4)
+
+            # 创建一个新的ClusterTestSeed对象
+            new_seed = ClusterTestSeed(
+                cluster_id=cluster.id,
+                pytorch_combination_id= multi_lib_combinations[0].id if multi_lib_combinations[0] else None,
+                tensorflow_combination_id=multi_lib_combinations[1].id if multi_lib_combinations[1] else None,
+                jax_combination_id=multi_lib_combinations[2].id if multi_lib_combinations[2] else None,
+                code=json_data['code'])
+            session.add(new_seed)
+            session.commit()
+
+            # 在seed_folder_name文件夹下创建一个新的json文件, 文件名为seed_{i}.py
+            with open(f'{folder_path}/{seed_folder_name}/seed_{i}.py', 'w') as file:
+                # 读取json_data中的code字段, 并将其写入到文件中
+                file.write(json_data['code'])
+    cluster.is_tested = True
+    session.commit()
+
 
 def run():
     session = get_session()
     openai_client = get_openai_client()
 
-    # 获得所有的OutputEquivalenceCluster
-    clusters = session.query(Cluster).options(joinedload(Cluster.tensorflows),
-                                                               joinedload(Cluster.pytorches),
-                                                               joinedload(Cluster.jaxes)).all()
-
-    # 取前20个cluster进行处理
-    clusters = clusters[:1]
-    for cluster in clusters:
+    # 获得所有的cluster未测试的cluster
+    untested_clusters = session.query(Cluster).filter(Cluster.is_tested == False).all()
+    while untested_clusters:
         print("----------------------------------------------------------------------------------")
-        generate_seeds(session, openai_client, cluster)
+        generate_seeds(session, openai_client, untested_clusters[0])
+        untested_clusters = session.query(Cluster).filter(Cluster.is_tested == False).all()
+        total_clusters_num = session.query(Cluster).count()
+        untested_clusters_num = len(untested_clusters)
+        print(f"Untested / Total: {untested_clusters_num} / {total_clusters_num}")
 
 
 if __name__ == '__main__':
