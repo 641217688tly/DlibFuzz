@@ -13,7 +13,6 @@ class Clusterer:
         self.api = api
         self.session = session
         self.openai_client = openai_client
-        self.model = "gpt-3.5-turbo",  # gpt-4o-mini gpt-3.5-turbo
         self.torch_ver = TORCH_VERSION
         self.tf_ver = TF_VERSION
         self.jax_ver = JAX_VERSION
@@ -56,7 +55,7 @@ class Clusterer:
         """
         messages = [
             {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
-            {"role": "user", "content": clusterer_prompt}
+            {"role": "user", "content": f"{clusterer_prompt}"}
         ]
         return messages
 
@@ -102,9 +101,9 @@ class Clusterer:
         try:
             is_valid = True
             json_data = json.loads(response)
-            for dl_lib, api_combinations in json_data.items(): # 逐个访问Pytorch, Tensorflow和Jax
-                for api_combination_id, api_combination in api_combinations.items(): # 逐个访问Pytorch, Tensorflow和Jax下的各个API组合
-                    for full_api_name in api_combination: # 逐个访问API组合下的各个API
+            for dl_lib, api_combinations in json_data.items():  # 逐个访问Pytorch, Tensorflow和Jax
+                for api_combination_id, api_combination in api_combinations.items():  # 逐个访问Pytorch, Tensorflow和Jax下的各个API组合
+                    for full_api_name in api_combination:  # 逐个访问API组合下的各个API
                         if not self.validate_api(full_api_name):
                             is_valid = False
             return is_valid
@@ -115,33 +114,34 @@ class Clusterer:
             self.errors.append(str(e))
             return False
 
-    def conduct_cluster(self): # 生成并检验JSON数据, 在检验完成或尝试次数达到上限后返回JSON数据或空值
+    def conduct_cluster(self):  # 生成并检验JSON数据, 在检验完成或尝试次数达到上限后返回JSON数据或空值
         attempt_num = 0
         while attempt_num < 5:  # 设置最大尝试次数以避免无限循环
-            try:  # 假如返回的数据不符合JSON格式, 则重新调用OpenAI API, 直到返回的数据符合JSON格式为止
-                response = self.openai_client.chat.completions.create(
-                    model=self.model,
-                    response_format={"type": "json_object"},
-                    messages=self.messages,
-                    temperature=0.1,
-                )
-                response = response.choices[0].message.content
-                self.responses.append(response)
-                self.messages.append({"role": "assistant", "content": response})
-                print(f"Clustered Pytorch API: {self.api.name}\nResponse:\n{response}")
-                # 在此处需要检查: 1.响应的数据是否遵循JSON格式; 2.返回的是API的完整函数名(完整函数名 = 模块名.API名)而非函数签名 3.所有的API函数名必须有效(不是虚构的, 也不是被弃用的)
-                if self.validate_apis(response):
-                    self.errors = []  # 清空错误列表
-                    return json.loads(response)
-                else:
-                    attempt_num += 1
-                    self.messages.append({"role": "user", "content": f"The JSON data you generated has the following errors: \n{self.errors} \n Please try again."})
-                    self.errors = []  # 清空错误列表
-                    print(f"Incorrect JSON format or invalid API. Current attempt: {attempt_num + 1}. Retrying...")
-            except Exception as e:
+            # try:  # 假如返回的数据不符合JSON格式, 则重新调用OpenAI API, 直到返回的数据符合JSON格式为止
+            response = self.openai_client.chat.completions.create(
+                model="gpt-4o-mini",  # gpt-4o-mini  gpt-3.5-turbo
+                response_format={"type": "json_object"},
+                messages=self.messages,
+                temperature=0,
+            )
+            response = response.choices[0].message.content
+            self.responses.append(response)
+            self.messages.append({"role": "assistant", "content": response})
+            print(f"Clustered Pytorch API: {self.api.name}\nResponse:\n{response}")
+            # 在此处需要检查: 1.响应的数据是否遵循JSON格式; 2.返回的是API的完整函数名(完整函数名 = 模块名.API名)而非函数签名 3.所有的API函数名必须有效(不是虚构的, 也不是被弃用的)
+            if self.validate_apis(response):
+                self.errors = []  # 清空错误列表
+                return json.loads(response)
+            else:
                 attempt_num += 1
-                self.session.rollback()  # 回滚在异常中的任何数据库更改
-                print(f"An unexpected error occurred: {e}")
+                self.messages.append({"role": "user",
+                                      "content": f"The JSON data you generated has the following errors: \n{self.errors} \n Please try again."})
+                self.errors = []  # 清空错误列表
+                print(f"Incorrect JSON format or invalid API. Current attempt: {attempt_num + 1}. Retrying...")
+            # except Exception as e:
+            #    attempt_num += 1
+            #    self.session.rollback()  # 回滚在异常中的任何数据库更改
+            #    print(f"An unexpected error occurred: {e}")
         self.errors = []  # 清空错误列表
         print("Max attempts reached. Unable to get valid JSON data.")
         return None

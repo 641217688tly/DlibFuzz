@@ -32,7 +32,7 @@ def get_openai_client():
             "https://": "http://127.0.0.1:7890"
         })
         openai_client = OpenAI(api_key=config['openai']['api_key'], http_client=proxy)
-        # openai_client = OpenAI(base_url="https://api.gptsapi.net/v1/", api_key="sk-4Yg7f4b436b8fb189fc0f426d378e395adf93f7ba45pT6Os")  # WildCard API + 转发, 无需代理
+        # openai_client = OpenAI(base_url="https://api.gptsapi.net/v1", api_key="sk-lBR9ab45cb8a12646896f37fe57070f6e1b7b05e8a3N9xPt")  # WildCard API + 转发, 无需代理
         return openai_client
 
 
