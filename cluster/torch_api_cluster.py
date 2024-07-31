@@ -1,4 +1,3 @@
-import inspect
 from json import JSONDecodeError
 from orm import *
 from utils import *
@@ -14,7 +13,7 @@ class Clusterer:
         self.api = api
         self.session = session
         self.openai_client = openai_client
-        self.model = "gpt-4o-mini",  # gpt-4o-mini gpt-3.5-turbo
+        self.model = "gpt-3.5-turbo",  # gpt-4o-mini gpt-3.5-turbo
         self.torch_ver = TORCH_VERSION
         self.tf_ver = TF_VERSION
         self.jax_ver = JAX_VERSION
@@ -24,7 +23,7 @@ class Clusterer:
 
     def initialize_message(self):  # 构建clusterer的初始提词并返回对话消息
         # TODO 后续可能会从将Prompt中的Example存入JSON以避免硬编码
-        clusterer_example_1 = """json
+        example1 = """json
         {   
             "Pytorch" : {
                 "1" : ["torch.tensor", "torch.nn.CrossEntropyLoss"],
@@ -39,7 +38,7 @@ class Clusterer:
         }
         """
 
-        clusterer_example_2 = """json
+        example2 = """json
         {   
             // When there are no TensorFlow APIs whose combined output with Pytorch's API has the same value, output an empty json
             "Pytorch" : {}, 
@@ -50,12 +49,10 @@ class Clusterer:
         """
         clusterer_prompt = f"""
         Which apis or combinations of api calls in TensorFlow (v{self.tf_ver}) and JAX (v{self.jax_ver}) have the exact same functionality as {self.api.name} in PyTorch (v{self.torch_ver})?
-        Note: "The same functionality" means that these APIs are responsible for performing exactly the same tasks. When these APIs have no return value, using these APIs to perform the same operations on inputs with the same structure or element values (such as tensors) should result in consistent changes to the original input. For example, PyTorch's torch.scatter_, TensorFlow's tf.scatter_update, and JAX's jax.ops.index_update all have the functionality to update tensors, and when the tensors being updated and the update strategies are the same, the updated tensors should be consistent. When these APIs have return values, PyTorch's torch.nn.ReLU, TensorFlow's tf.nn.relu or tf.keras.layers.ReLU, and JAX's jax.nn.relu all produce the same output values when given the same input values.
+        Note: "The same functionality" means that these APIs are responsible for performing exactly the same tasks. When these APIs have no return value, using these APIs to perform the same operations on inputs with the same structure or element values (such as tensors) should result in consistent changes to the original input. For example, PyTorch's torch.scatter_, TensorFlow's tf.scatter_update, and JAX's jax.ops.index_update all have the functionality to update tensors, and when the tensors being updated and the update strategies are the same, the updated tensors should be consistent. When these APIs have return values, PyTorch's torch.nn.ReLU, TensorFlow's tf.nn.relu or tf.keras.layers.ReLU, and Jax's jax.nn.relu all produce the same output values when given the same input values.
         Please output the function names or combinations of function names in PyTorch, TensorFlow, and JAX that meet the above conditions in JSON format, with an example shown below:
-        Example 1: 
-        {clusterer_example_1}
-        Example 2: 
-        {clusterer_example_2}
+        Example 1: {example1}
+        Example 2: {example2}
         """
         messages = [
             {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
@@ -118,16 +115,15 @@ class Clusterer:
             self.errors.append(str(e))
             return False
 
-    def conduct_cluster(self):
+    def conduct_cluster(self): # 生成并检验JSON数据, 在检验完成或尝试次数达到上限后返回JSON数据或空值
         attempt_num = 0
         while attempt_num < 5:  # 设置最大尝试次数以避免无限循环
             try:  # 假如返回的数据不符合JSON格式, 则重新调用OpenAI API, 直到返回的数据符合JSON格式为止
-                # 调用 OpenAI API
                 response = self.openai_client.chat.completions.create(
                     model=self.model,
                     response_format={"type": "json_object"},
                     messages=self.messages,
-                    temperature=0.0,
+                    temperature=0.1,
                 )
                 response = response.choices[0].message.content
                 self.responses.append(response)
@@ -142,16 +138,15 @@ class Clusterer:
                     self.messages.append({"role": "user", "content": f"The JSON data you generated has the following errors: \n{self.errors} \n Please try again."})
                     self.errors = []  # 清空错误列表
                     print(f"Incorrect JSON format or invalid API. Current attempt: {attempt_num + 1}. Retrying...")
-                    break
             except Exception as e:
+                attempt_num += 1
                 self.session.rollback()  # 回滚在异常中的任何数据库更改
                 print(f"An unexpected error occurred: {e}")
-                break
         self.errors = []  # 清空错误列表
         print("Max attempts reached. Unable to get valid JSON data.")
         return None
 
-    # --------------------------------------store API Combinations and Cluster into database--------------------------------------
+    # --------------------------------------save API Combinations and Cluster into database--------------------------------------
     def supplement_apis(self, api_combinations, api_class):  # 将Jax/Pytorch/Tensorflow的API组合内不在数据库中的API添加到数据库中
         """
         以下列数据为例:
