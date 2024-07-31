@@ -194,26 +194,8 @@ class Clusterer:
 
 def run():
     # 创建数据库连接
-    with open('config.yml', 'r', encoding='utf-8') as file:  # 读取config.yml文件
-        config = yaml.safe_load(file)
-    # 从配置中提取数据库连接信息
-    db_config = config['db']['mysql']
-    host = db_config['host']
-    user = db_config['user']
-    password = db_config['password']
-    database = db_config['database']
-    db_url = f"mysql+pymysql://{user}:{password}@{host}/{database}"  # 创建数据库连接字符串
-    engine = create_engine(db_url)
-    Session = sessionmaker(bind=engine)
-    session = Session()
-
-    # 设置代理
-    proxy = httpx.Client(proxies={
-        "http://": "http://127.0.0.1:7890",
-        "https://": "http://127.0.0.1:7890"
-    })
-    openai_client = OpenAI(api_key=config['openai']['api_key'], http_client=proxy)
-    # openai_client = OpenAI(base_url="https://api.gptsapi.net/v1/", api_key="sk-4Yg7f4b436b8fb189fc0f426d378e395adf93f7ba45pT6Os")  # WildCard API + 转发, 无需代理
+    session = get_session()
+    openai_client = get_openai_client()
 
     # 对未聚类的PytorchAPI进行聚类
     uncluttered_torch_apis = session.query(PytorchAPI).filter_by(is_clustered=False).all()

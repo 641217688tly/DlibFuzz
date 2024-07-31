@@ -1,4 +1,39 @@
 import importlib
+import httpx
+import yaml
+from openai import OpenAI
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+def get_session():
+    with open('config.yml', 'r', encoding='utf-8') as file:  # 读取config.yml文件
+        config = yaml.safe_load(file)
+        # 从配置中提取数据库连接信息
+        db_config = config['db']['mysql']
+        host = db_config['host']
+        user = db_config['user']
+        password = db_config['password']
+        database = db_config['database']
+        db_url = f"mysql+pymysql://{user}:{password}@{host}/{database}"  # 创建数据库连接字符串
+        engine = create_engine(db_url)
+        Session = sessionmaker(bind=engine)
+        session = Session()
+        return session
+
+
+def get_openai_client():
+    with open('config.yml', 'r', encoding='utf-8') as file:  # 读取config.yml文件
+        config = yaml.safe_load(file)
+        # 设置代理
+        proxy = httpx.Client(proxies={
+            "http://": "http://127.0.0.1:7890",
+            "https://": "http://127.0.0.1:7890"
+        })
+        openai_client = OpenAI(api_key=config['openai']['api_key'], http_client=proxy)
+
+        # openai_client = OpenAI(base_url="https://api.gptsapi.net/v1/", api_key="sk-4Yg7f4b436b8fb189fc0f426d378e395adf93f7ba45pT6Os")  # WildCard API + 转发, 无需代理
+        return openai_client
+
 
 
 def validate_api(module_name, api_name):  # 验证API是否存在的函数
