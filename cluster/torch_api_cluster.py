@@ -19,6 +19,11 @@ class Clusterer:
         self.messages = self.initialize_message()
         self.responses = []
         self.errors = []
+        self.module_alias_mapper = {
+            "tf": "tensorflow",
+            "np": "numpy",
+            "pd": "pandas",
+        }
 
     def initialize_message(self):  # 构建clusterer的初始提词并返回对话消息
         # TODO 后续可能会从将Prompt中的Example存入JSON以避免硬编码
@@ -59,30 +64,36 @@ class Clusterer:
         ]
         return messages
 
+    def handle_module_alias(self, module_name):
+        module_parts = module_name.split('.')
+        # 如果模块名的第一个部分是别名, 则将其替换为完整模块名
+        if module_parts[0] in self.module_alias_mapper:
+            module_parts[0] = self.module_alias_mapper[module_parts[0]]
+        # 将替换后的模块名重新组合为完整模块名
+        module_name = '.'.join(module_parts)
+        return module_name
+
     def validate_api(self, full_api_name):
         module_name = ""
         api_name = ""
         try:
             module_name, api_name = full_api_name.rsplit('.', 1)
+            module_name = self.handle_module_alias(module_name)
             module = importlib.import_module(module_name)
             func = getattr(module, api_name, None)
-
             if func is None or not callable(func):
                 self.errors.append(f"{full_api_name} is not callable or does not exist.")
                 return False
-
             if inspect.ismodule(func):
                 self.errors.append(f"{full_api_name} is a module, not a function.")
                 return False
-
             if inspect.isclass(func):
                 self.errors.append(f"{full_api_name} is a class, not a function.")
                 return False
-
-            # if validate_api_availability(func):
-            #     self.errors.append(f"{full_api_name} is deprecated.")
-            #     return False
-            return True
+            #if validate_api_availability(func):
+            #    self.errors.append(f"{full_api_name} is deprecated.")
+            #    return False
+            #return True
         except ImportError as e:
             self.errors.append(f"Module {module_name} not found: {str(e)}")
             return False
@@ -134,8 +145,7 @@ class Clusterer:
                     return json.loads(response)
                 else:
                     attempt_num += 1
-                    self.messages.append({"role": "user",
-                                          "content": f"The JSON data you generated has the following errors: \n{self.errors} \n Please try again."})
+                    self.messages.append({"role": "user", "content": f"The JSON data you generated has the following errors: \n{self.errors} \n Please try again."})
                     self.errors = []  # 清空错误列表
                     print(f"Incorrect JSON format or invalid API. Current attempt: {attempt_num + 1}. Retrying...")
             except Exception as e:
