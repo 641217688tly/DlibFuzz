@@ -331,7 +331,7 @@ def add_data_from_json():
             print("Tensorflow API data loaded successfully!")
 
 
-def attach_code_snippet():
+def attach_error_trigger_code():
     print("Attach code snippets")
     # TODO
 
