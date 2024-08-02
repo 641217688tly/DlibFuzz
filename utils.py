@@ -50,7 +50,7 @@ def validate_api_existence(module_name, api_name):  # 验证API是否存在的�
 def validate_api_availability(function):  # 验证API是否可用的函数
     """Check if the function is deprecated."""
     docstring = inspect.getdoc(function)
-    if docstring and 'deprecated' in docstring.lower():
+    if docstring and ('deprecated' and 'removed') in docstring.lower():
         return True
 
     # Capture DeprecationWarning

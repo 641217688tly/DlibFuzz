@@ -29,17 +29,38 @@ def generate_seeds(session, openai_client, cluster, seeds_num=3):
         jax_apis = multi_lib_combinations[2].apis if multi_lib_combinations[2] else []
 
         # 构建prompt
-        example1 = """json
-        {
-            "code": "\n# Logits\nlogits = [[4.0, 1.0, 0.2]]\n# Labels (one-hot encoded)\nlabels = [[1.0, 0.0, 0.0]]\n\n# PyTorch\nlogits_pt = torch.tensor(logits, requires_grad=True)\nlabels_pt = torch.tensor(labels)\nloss_fn_pt = torch.nn.CrossEntropyLoss()\noutput_pt = loss_fn_pt(logits_pt, torch.argmax(labels_pt, dim=1))\nprint(\"PyTorch Loss:\", output_pt.item())\n\n# TensorFlow: tf.nn.softmax_cross_entropy_with_logits\nlogits_tf = tf.constant(logits)\nlabels_tf = tf.constant(labels)\noutput_tf = tf.nn.softmax_cross_entropy_with_logits(labels=labels_tf, logits=logits_tf)\nprint(\"TensorFlow NN Loss:\", output_tf.numpy()[0])\n\n# Jax\nlogits_jax = jnp.array(logits)\nlabels_jax = jnp.array(labels)\nlog_softmax = jax.nn.log_softmax(logits_jax)\noutput_jax = -jnp.sum(labels_jax * log_softmax)\nprint(\"JAX Loss:\", output_jax)\n"
-        }
+        example1 = """
+logits = [[4.0, 1.0, 0.2]]
+# Labels (one-hot encoded)
+labels = [[1.0, 0.0, 0.0]]
+
+# PyTorch
+logits_pt = torch.tensor(logits, requires_grad=True)
+labels_pt = torch.tensor(labels)
+loss_fn_pt = torch.nn.CrossEntropyLoss()
+output_pt = loss_fn_pt(logits_pt, torch.argmax(labels_pt, dim=1))
+print("PyTorch Loss:", output_pt.item())
+
+# TensorFlow: tf.nn.softmax_cross_entropy_with_logits
+logits_tf = tf.constant(logits)
+labels_tf = tf.constant(labels)
+output_tf = tf.nn.softmax_cross_entropy_with_logits(labels=labels_tf, logits=logits_tf)
+print("TensorFlow NN Loss:", output_tf.numpy()[0])
+
+# JAX
+logits_jax = jnp.array(logits)
+labels_jax = jnp.array(labels)
+log_softmax = jax.nn.log_softmax(logits_jax)
+output_jax = -jnp.sum(labels_jax * log_softmax)
+print("JAX Loss:", output_jax)
         """
         prompt = f"""
         Given the API combinations{torch_apis} of the Pytorch library, the {tf_apis} of the TensorFlow library and the {jax_apis} of the Jax library all have the same functionality.
         Please Generate test code snippets for the apis of the different libraries mentioned above.
         Requirements:
         1. The output values of test code snippets generated for different apis need to remain the same.
-        2. Your answers should be in JSON format.
+        2. Import the required modules or apis in your code.
+        3. Output only code, nothing else.
         
         Following is a example:
         API combinations ["torch.tensor", "torch.nn.CrossEntropyLoss"] of the Pytorch library, the ["tensorflow.constant", "tensorflow.nn.softmax_cross_entropy_with_logits"] of the TensorFlow library and the ["jax.numpy.array", "jax.nn.log_softmax", "jax.numpy.sum"] of the Jax library all have the same functionality.
@@ -47,13 +68,12 @@ def generate_seeds(session, openai_client, cluster, seeds_num=3):
         {example1}
         """
         for i in range(seeds_num):  # 生成n个seed
-            json_data = None
+            response_data = None
             attempt_num = 0
             while attempt_num < 5: # 设置最大尝试次数以避免无限循环
-                try:  # 假如返回的数据不符合JSON格式, 则重新调用OpenAI API, 直到返回的数据符合JSON格式为止
+                try:
                     response = openai_client.chat.completions.create(
                         model="gpt-4o-mini",  # gpt-4o-mini  gpt-3.5-turbo
-                        response_format={"type": "json_object"},
                         messages=[
                             {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
                             {"role": "user", "content": prompt}
@@ -62,34 +82,29 @@ def generate_seeds(session, openai_client, cluster, seeds_num=3):
                     )
                     response_data = response.choices[0].message.content
                     print(response_data)
-                    json_data = json.loads(response_data)
-                    break  # 成功解析 JSON,跳出循环
-                except json.JSONDecodeError as e:
-                    print(
-                        f"Failed to decode JSON due to.\nError Details: \n{e} \nRetrying(Current attempt: {attempt_num + 1})...")
-                    attempt_num += 1
+                    break
                 except Exception as e:
+                    print(f"Failed to get response due to: \n{e} \nRetrying(Current attempt: {attempt_num + 1})...")
+                    attempt_num += 1
                     session.rollback()  # 回滚在异常中的任何数据库更改
-                    print(f"An unexpected error occurred: {e}")
                     break
             if attempt_num == 5: # 设置最大尝试次数以避免无限循环
                 print("Max attempts reached. Unable to get valid JSON data.")
                 return
-
             # 创建一个新的ClusterTestSeed对象
             new_seed = ClusterTestSeed(
                 cluster_id=cluster.id,
                 pytorch_combination_id= multi_lib_combinations[0].id if multi_lib_combinations[0] else None,
                 tensorflow_combination_id=multi_lib_combinations[1].id if multi_lib_combinations[1] else None,
                 jax_combination_id=multi_lib_combinations[2].id if multi_lib_combinations[2] else None,
-                code=json_data['code'])
+                code=response_data)
             session.add(new_seed)
             session.commit()
 
             # 在seed_folder_name文件夹下创建一个新的json文件, 文件名为seed_{i}.py
             with open(f'{folder_path}/{seed_folder_name}/seed_{i}.py', 'w') as file:
                 # 读取json_data中的code字段, 并将其写入到文件中
-                file.write(json_data['code'])
+                file.write(response_data)
     # 在所有的seed生成完毕后, 将cluster的is_tested字段设置为True
     cluster.is_tested = True
     session.commit()
