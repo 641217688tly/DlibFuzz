@@ -12,13 +12,14 @@
 
 ### Environment
 
-|     **依赖项**     |                    **具体细节**                     |
-| :----------------: | :-------------------------------------------------: |
-|  **Python解释器**  |                     版本v3.9.19                     |
-|     **依赖库**     |          见项目根目录下的requirements.txt           |
-|      **GPU**       |              实验的当前阶段尚不需要GPU              |
-|     **数据库**     |  需要本地或远程mysql中有一个名为“dlibfuzz”的数据库  |
-| **OpenAI API Key** | 你需要一个Openai的API Key以驱动我们的聚类器和模糊器 |
+|     **依赖项**     |                         **具体细节**                         |
+| :----------------: | :----------------------------------------------------------: |
+|    **操作系统**    | 需要Linux系统, 因为jaxlib没有提供Windows版本, 推荐在本地的wsl上运行该项目 |
+|  **Python解释器**  |                         版本v3.9.19                          |
+|     **依赖库**     |               见项目根目录下的requirements.txt               |
+|      **GPU**       |                  实验的当前阶段尚不需要GPU                   |
+|     **数据库**     |      需要本地或远程mysql中有一个名为“dlibfuzz”的数据库       |
+| **OpenAI API Key** |     你需要一个Openai的API Key以驱动我们的聚类器和模糊器      |
 
 ### **Test Target**
 
@@ -34,6 +35,7 @@
 
 **可以通过以下步骤使用我们的模糊器:**
 
+1. 在Linux系统中搭建运行所需的各种环境
 1. 分别为项目根目录, cluster模块和fuzzer模块下的config.yml配置文件填充必要的信息(包括mysql数据库的用户名和密码, Openai的秘钥)
 2. 运行***orm.py***以在数据库中初始化表并添加Pytorch, Tensorflow和Jax的API
 3. 分别运行***cluster/torch_api_cluster.py***, ***cluster/tf_api_cluster.py***和***cluster/jax_api_cluster.py***来分别为先前添加进数据库中的添加Pytorch, Tensorflow和Jax的API进行聚类
