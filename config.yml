@@ -1,0 +1,11 @@
+db:
+  mysql:
+    host: "localhost"
+    user: "root"
+    password: ""
+    database: "dlibfuzz"
+
+openai:
+    api_key: ""
+    engine: "gpt-4o-mini"
+    temperature: 0
