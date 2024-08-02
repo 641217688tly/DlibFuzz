@@ -45,16 +45,17 @@ class Clusterer:
 
         example2 = """json
         {   
-            // When there are no TensorFlow APIs whose combined output with Pytorch's API has the same value, output an empty json
-            "Pytorch" : {}, 
+            // Output an empty dictionary when no combination output from the TensorFlow API or JAX API has the same value as the Pytorch API
+            "Pytorch" : {
+                "1" : ["torch.tensor", "torch.nn.CrossEntropyLoss"],
+            }, 
             "Tensorflow" : {}, 
             "JAX" : {}
         }
-        
         """
         clusterer_prompt = f"""
-        Which function apis or combinations of function api calls in TensorFlow (v{self.tf_ver}) and JAX (v{self.jax_ver}) have the exact same functionality as {self.api.name} in PyTorch (v{self.torch_ver})?
-        Note: "The same functionality" means that these APIs are responsible for performing exactly the same tasks. When these APIs have no return value, using these APIs to perform the same operations on inputs with the same structure or element values (such as tensors) should result in consistent changes to the original input. For example, PyTorch's torch.scatter_, TensorFlow's tf.scatter_update, and JAX's jax.ops.index_update all have the functionality to update tensors, and when the tensors being updated and the update strategies are the same, the updated tensors should be consistent. When these APIs have return values, PyTorch's torch.nn.ReLU, TensorFlow's tf.nn.relu or tf.keras.layers.ReLU, and Jax's jax.nn.relu all produce the same output values when given the same input values.
+        Which function apis or combinations of function api calls in TensorFlow (v{self.tf_ver}) and JAX (v{self.jax_ver}) have the exact same functionality as {self.api.full_name} in PyTorch (v{self.torch_ver})?
+        Note: "The same functionality" means that these APIs are responsible for performing exactly the same tasks. When these APIs have no return value, using these APIs to perform the same operations on inputs with the same structure or element values (such as tensors) should result in consistent changes to the original input. For example, PyTorch's torch.scatter_, TensorFlow's tensorflow.scatter_update, and JAX's jax.ops.index_update all have the functionality to update tensors, and when the tensors being updated and the update strategies are the same, the updated tensors should be consistent. When these APIs have return values, PyTorch's torch.nn.ReLU, TensorFlow's tensorflow.nn.relu or tensorflow.keras.layers.ReLU, and Jax's jax.nn.relu all produce the same output values when given the same input values.
         Please output the function names or combinations of function names in PyTorch, TensorFlow, and JAX that meet the above conditions in JSON format, with an example shown below:
         Example 1: {example1}
         Example 2: {example2}
