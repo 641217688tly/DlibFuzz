@@ -1,0 +1,41 @@
+This is an example of labelled buggy {} code snippet from {}'s github repository issues. 
+You are asked to label other issues I provide in the format of the given snippet. 
+You should figure out the API, title, URL, code, and context sections of the issue and provide them in the format below. 
+This may require your knowledge of {} and its common issues. 
+Note that in the code section you only need to put the relevant code snippet instead of the full issue. 
+If there is no code snippet provided in the issue, you can put "[No code snippet provided]". 
+Other relevant content should be put in the context section. 
+Note that you should answer in JSON format. Do not add any Markdown syntax.
+
+The example is as follows:
+API: torch.compile
+Title: 2nd compile of deepcopy(model) fails on multiple ubuntu-pc (fatal error: Python.h: file not found)
+URL: https://github.com/pytorch/pytorch/issues/128121
+Code:
+class Net(torch.nn.Module): # 10+10, N= 7960
+    def __init__(self):
+        super(Net, self).__init__()
+        self.fc1 = torch.nn.Linear(784, 10)
+        self.relu = torch.nn.ReLU()
+        self.fc2 = torch.nn.Linear(10, 10)
+
+    def forward(self, x): # line 59 from stderr log below
+        z1 = self.fc1(torch.flatten(x, start_dim=1))
+        z1 = self.fc2(self.relu(z1))
+        return F.log_softmax(z1, dim=1)
+
+# model is trivial Net above or ResNet (18 or 34 or Wide28 or 50)
+model = torch.compile(model) # always ok
+# here 10 epochs training (good progress, no issues)
+model2 = deepcopy(model) # ok
+model2 = torch.compile(model2) # fails (system dependent)
+Context:
+parts of stderr log:
+/tmp/tmpmiq1y2mh/main.c:5:10: fatal error: Python.h: Datei oder Verzeichnis nicht gefunden # German: cannot find file
+    5 | #include <Python.h>
+      |          ^~~~~~~~~~
+compilation terminated.
+/tmp/tmpj15_8vtb/main.c:5:10: fatal error: Python.h: Datei oder Verzeichnis nicht gefunden
+    5 | #include <Python.h>
+      |          ^~~~~~~~~~
+compilation terminated. # repeated for 8 C-files.
