@@ -1,0 +1,301 @@
+依赖项 pypi:tensorflow:2.10.0 为 vulnerable
+
+升级到 2.16.2
+
+CVE-2022-35991，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. When `TensorListScatter` and `TensorListScatterV2` receive an `element_shape` of a rank greater than one, they give a `CHECK` fail that can trigger a denial of service attack. This issue affects versions prior to 2.8.4, 2.9.x prior to 2.9.3, and 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-35991?utm_source=jetbrains&utm_medium=referral
+
+CVE-2023-25676，分数: 7.5
+
+TensorFlow is an open-source machine learning platform. In tensorflow versions prior to 2.11.1, when running  with XLA, "tf.raw_ops.ParallelConcat" segfaults with a NULL Pointer Dereference when given a parameter "shape" with "rank" that is not greater than zero.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2023-25676?utm_source=jetbrains&utm_medium=referral
+
+CVE-2023-25666，分数: 7.5
+
+TensorFlow is an open-source platform for machine learning. In tensorflow versions prior to 2.11.1, there is a Floating Point Exception in "AudioSpectrogram".
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2023-25666?utm_source=jetbrains&utm_medium=referral
+
+CVE-2023-25659，分数: 7.5
+
+TensorFlow is an open-source platform for machine learning. In versions prior to 2.11.1, if the parameter `indices` for `DynamicStitch` does not match the shape of the parameter `data`, it can trigger stack OOB read.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2023-25659?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41911，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. When printing a tensor, we get it's data as a `const char*` array (since that's the underlying storage) and then we typecast it to the element type. However, conversions from `char` to `bool` are undefined if the `char` is not `0` or `1`, so sanitizers/fuzzers will crash. This issue affects versions prior to 2.8.4, 2.9.x prior to 2.9.3, 2.10.x prior to 2.10.1 and 2.11.x prior to 2.11.0-rc2.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41911?utm_source=jetbrains&utm_medium=referral
+
+CVE-2023-25674，分数: 7.5
+
+TensorFlow is an open source machine learning platform. Versions prior to 2.11.1 have a Null Pointer Error in "RandomShuffle" with XLA enabled.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2023-25674?utm_source=jetbrains&utm_medium=referral
+
+CVE-2023-25660，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. In versions prior to 2.11.1, when the parameter `summarize` of `tf.raw_ops.Print` is zero, the new method `SummarizeArray<bool>` will reference to a nullptr, leading to a seg fault.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2023-25660?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41894，分数: 8.1
+
+TensorFlow is an open source platform for machine learning. The reference kernel of the `CONV_3D_TRANSPOSE` TensorFlow Lite operator wrongly increments the `data_ptr` when adding the bias to the result. Instead of `data_ptr += num_channels;` it should be `data_ptr += output_num_channels;` as if the number of input channels is different than the number of output channels, the wrong result will be returned and a buffer overflow will occur if `num_channels > output_num_channels`. An attacker can craft a model with a specific number of input channels. It is then possible to write specific values through the bias of the layer outside the bounds of the buffer. This attack only works if the reference kernel resolver is used in the interpreter. This issue affects versions prior to 2.8.4, 2.9.x prior to 2.9.3 and 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41894?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41895，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. If `MirrorPadGrad` is given outsize input `paddings`, TensorFlow will give a heap OOB error. This issue affects versions prior to 2.8.4, 2.9.x prior to 2.9.3, and 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41895?utm_source=jetbrains&utm_medium=referral
+
+CVE-2023-25658，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. Prior to version 2.11.1, an Out-of-Bound read is in "GRUBlockCellGrad".
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2023-25658?utm_source=jetbrains&utm_medium=referral
+
+CVE-2023-25801，分数: 7.8
+
+TensorFlow is an open-source machine learning platform. In tensorflow versions prior to 2.11.1, "nn_ops.fractional_avg_pool_v2" and "nn_ops.fractional_max_pool_v2" require the first and fourth elements of their parameter "pooling_ratio" to be equal to 1.0, as pooling on batch and channel dimensions is not supported.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2023-25801?utm_source=jetbrains&utm_medium=referral
+
+CVE-2023-27579，分数: 7.5
+
+TensorFlow is an end-to-end open source platform for machine learning. Constructing a tflite model with a parameter "filter_input_channel" of less than 1 gives a FPE. This issue affects versions prior to 2.11.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2023-27579?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41908，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. An input `token` that is not a UTF-8 bytestring will trigger a `CHECK` fail in `tf.raw_ops.PyFunc`. This issue affects versions prior to 2.8.4, 2.9.x prior to 2.9.3, and 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41908?utm_source=jetbrains&utm_medium=referral
+
+CVE-2023-25668，分数: 9.8
+
+TensorFlow is an open source platform for machine learning. Attackers using Tensorflow prior to 2.11.1 can access heap memory which is not in the control of user, leading to a crash or remote code execution.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2023-25668?utm_source=jetbrains&utm_medium=referral
+
+CVE-2023-25663，分数: 7.5
+
+TensorFlow is an open-source platform for machine learning. In tensorflow versions rior to2.11.1, when "ctx->step_containter()" is a null ptr, the Lookup function will be executed with a Null Pointer.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2023-25663?utm_source=jetbrains&utm_medium=referral
+
+CVE-2023-25665，分数: 7.5
+
+TensorFlow is an open-source platform for machine learning. Prior to versions 2.11.1, when "SparseSparseMaximum" is given an invalid sparse tensor as inputs, it can give a null pointer error.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2023-25665?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41890，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. If `BCast::ToShape` is given input larger than an `int32`, it will crash, despite being supposed to handle up to an `int64`. An example can be seen in `tf.experimental.numpy.outer` by passing in large input to the input `b`. This issue affects versions prior to 2.8.4, 2.9.x prior to 2.9.3, and 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41890?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41898，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. If `SparseFillEmptyRowsGrad` is given empty inputs, TensorFlow will crash. This issue affects versions prior to 2.8.4, 2.9.x prior to 2.9.3 and 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41898?utm_source=jetbrains&utm_medium=referral
+
+CVE-2023-25675，分数: 7.5
+
+TensorFlow is an open-source machine learning platform. When running in versions prior to 2.11.1 with XLA, "tf.raw_ops.Bincount" segfaults when given a parameter "weights" that is neither the same shape as parameter "arr" nor a "length-0" tensor.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2023-25675?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41901，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. An input `sparse_matrix` that is not a matrix with a shape with rank 0 will trigger a `CHECK` fail in `tf.raw_ops.SparseMatrixNNZ`. This issue affects versions prior to 2.8.4, 2.9.x prior to 2.9.3, and 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41901?utm_source=jetbrains&utm_medium=referral
+
+CVE-2023-25669，分数: 7.5
+
+TensorFlow is an open-source platform for machine learning. In tensorflow versions prior to 2.11.1, if the "stride" and "window" size are not positive for "tf.raw_ops.AvgPoolGrad", it can give a Floating Point Exception.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2023-25669?utm_source=jetbrains&utm_medium=referral
+
+CVE-2023-25673，分数: 7.5
+
+TensorFlow is an open-source platform for machine learning. The affected versions prior to 2.11.1 have a Floating Point Exception in TensorListSplit with XLA.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2023-25673?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41896，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. If `ThreadUnsafeUnigramCandidateSampler` is given input `filterbank_channel_count` greater than the allowed max size, TensorFlow will crash. This issue affects versions prior to 2.8.4, 2.9.x prior to 2.9.3, and 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41896?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41888，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. When running on GPU, `tf.image.generate_bounding_box_proposals` receives a `scores` input that must be of rank 4 but is not checked. This issue affects versions prior to 2.8.4, 2.9.x prior to 2.9.3, and 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41888?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41887，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. `tf.keras.losses.poisson` receives a `y_pred` and `y_true` that are passed through `functor::mul` in `BinaryOp`. If the resulting dimensions overflow an `int32`, TensorFlow will crash due to a size mismatch during broadcast assignment. This issue affects versions 2.9.x prior to 2.9.3, and 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41887?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-35935，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. The implementation of `SobolSampleOp` is vulnerable to a denial of service via CHECK-failure (assertion failure) caused by assuming `input(0)`, `input(1)`, and `input(2)` to be scalar. This issue affects versions prior to 2.8.4, 2.9.x prior to 2.9.3, and 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-35935?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41880，分数: 9.1
+
+TensorFlow is an open source platform for machine learning. When the `BaseCandidateSamplerOp` function receives a value in `true_classes` larger than `range_max`, a heap oob read occurs.  This issue affects versions prior to 2.8.4, 2.9.x prior to 2.9.3, and 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41880?utm_source=jetbrains&utm_medium=referral
+
+CVE-2023-25670，分数: 7.5
+
+TensorFlow is an open-source platform for machine learning. In tensorflow versions prior to 2.11.1, there is a NULL Pointer Dereference vulnerability in "QuantizedMatMulWithBiasAndDequantize" with MKL enabled.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2023-25670?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41909，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. An input `encoded` that is not a valid `CompositeTensorVariant` tensor will trigger a segfault in `tf.raw_ops.CompositeTensorVariantToComponents`. This issue affects versions prior to 2.8.4, 2.9.x prior to 2.9.3, and 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41909?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41889，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. If a list of quantized tensors is assigned to an attribute, the `pywrap` code fails to parse the tensor and returns a `nullptr`, which is not caught. An example can be seen in `tf.compat.v1.extract_volume_patches` by passing in quantized tensors as input `ksizes`. This issue affects versions prior to 2.8.4, 2.9.x prior to 2.9.3 and 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41889?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41886，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. When `tf.raw_ops.ImageProjectiveTransformV2` is given a large output shape, it overflows. This issue affects versions prior to 2.8.4, 2.9.x prior to 2.9.3, and 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41886?utm_source=jetbrains&utm_medium=referral
+
+CVE-2023-25667，分数: 7.5
+
+TensorFlow is an open-source platform for machine learning. In tensorflow versions prior to 2.11.1, Integer Overflow occurs  occurs when "2^31 <= num_frames * height * width * channels < 2^32", for example, a full HD screencast of at least 346 frames.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2023-25667?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41884，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. If a numpy array is created with a shape such that one element is zero and the others sum to a large number, an error will be raised. This issue affects versions prior to 2.8.4, 2.9.x prior to 2.9.3, and 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41884?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41885，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. When `tf.raw_ops.FusedResizeAndPadConv2D` is given a large tensor shape, it overflows. This issue affects versions prior to 2.8.4, 2.9.x prior to 2.9.3, and 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41885?utm_source=jetbrains&utm_medium=referral
+
+CVE-2023-25662，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. In versions prior to 2.11.1 are vulnerable to integer overflow in "EditDistance".
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2023-25662?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41897，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. If `FractionMaxPoolGrad` is given outsize inputs `row_pooling_sequence` and `col_pooling_sequence`, TensorFlow will crash. This issue affects versions prior to 2.8.4, 2.9.x prior to 2.9.3, and 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41897?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41900，分数: 9.8
+
+TensorFlow is an open source platform for machine learning. The security vulnerability results in "FractionalMax(AVG)Pool" with illegal "pooling_ratio". Attackers using Tensorflow can exploit the vulnerability. They can access heap memory which is not in the control of user, leading to a crash or Remote Code Execution. This issue affects TensorFlow versions prior to 2.8.4, 2.9.x prior to 2.9.3, 2.10.x prior to 2.10.1 and 2.11.x prior to 2.11.0-rc2.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41900?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41907，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. When `tf.raw_ops.ResizeNearestNeighborGrad` is given a large `size` input, it overflows. This issue affects versions prior to 2.8.4, 2.9.x prior to 2.9.3, and 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41907?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41910，分数: 9.1
+
+TensorFlow is an open source platform for machine learning. The function `MakeGrapplerFunctionItem` takes arguments that determine the sizes of inputs and outputs. If the inputs given are greater than or equal to the sizes of the outputs, an out-of-bounds memory read or a crash is triggered. This issue affects versions prior to 2.8.4, 2.9.x prior to 2.9.3, and 2.10.x prior to 2.10.1, 2.11.x prior to 2.11.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41910?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41883，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. When ops that have specified input sizes receive a differing number of inputs, the executor will crash. This issue affects versions 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41883?utm_source=jetbrains&utm_medium=referral
+
+CVE-2023-25661，分数: 6.5
+
+TensorFlow is an Open Source Machine Learning Framework. In versions prior to 2.11.1 a malicious invalid input crashes a tensorflow model (Check Failed) and can be used to trigger a denial of service attack. A proof of concept can be constructed with the `Convolution3DTranspose` function. This Convolution3DTranspose layer is a very common API in modern neural networks. The ML models containing such vulnerable components could be deployed in ML applications or as cloud services. This failure could be potentially used to trigger a denial of service attack on ML cloud services. An attacker must have privilege to provide input to a `Convolution3DTranspose` call. There are no known workarounds for this vulnerability.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2023-25661?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41893，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. If 'tf.raw_ops.TensorListResize' is given a nonscalar value for input 'size', it results 'CHECK' fail which can be used to trigger a denial of service attack. The affected versions are prior to 2.8.4, 2.9.x prior to 2.9.3 and 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41893?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41902，分数: 9.1
+
+TensorFlow is an open source platform for machine learning. The function `MakeGrapplerFunctionItem` takes arguments that determine the sizes of inputs and outputs. If the inputs given are greater than or equal to the sizes of the outputs, an Out-Of-Bounds Memory Read or a crash is triggered. This issue affects versions prior to 2.8.4, 2.9.x prior to 2.9.3, 2.10.x prior to 2.10.1, and 2.11.x prior to 2.11.0-rc2.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41902?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41891，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. If 'tf.raw_ops.TensorListConcat' is given 'element_shape=[]', it results segmentation fault which can be used to trigger a denial of service attack. The affected versions are prior to 2.8.4, 2.9.x prior to 2.9.3 and 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41891?utm_source=jetbrains&utm_medium=referral
+
+CVE-2023-25672，分数: 7.5
+
+TensorFlow is an open-source platform for machine learning. The function "tf.raw_ops.LookupTableImportV2" cannot handle scalars in the "values" parameter and gives an NPE. This issue affects versions prior to 2.11.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2023-25672?utm_source=jetbrains&utm_medium=referral
+
+CVE-2023-25671，分数: 7.5
+
+TensorFlow is an open-source platform for machine learning. In tensorflow versions prior to 2.11.1, there is Out-of-bounds access due to mismatched integer type sizes.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2023-25671?utm_source=jetbrains&utm_medium=referral
+
+CVE-2023-25664，分数: 9.8
+
+TensorFlow is an open source platform for machine learning. Prior to versions 2.11.1, there is a heap buffer overflow in "TAvgPoolGrad".
+
+
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2023-25664?utm_source=jetbrains&utm_medium=referral
+
+CVE-2022-41899，分数: 7.5
+
+TensorFlow is an open source platform for machine learning. Inputs `dense_features` or `example_state_data` not of rank 2 will trigger a `CHECK` fail in `SdcaOptimizer`. This issue affects versions prior to 2.8.4, 2.9.x prior to 2.9.3, and 2.10.x prior to 2.10.1.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2022-41899?utm_source=jetbrains&utm_medium=referral
+
+CVE-2023-27506，分数: 7.8
+
+Improper buffer restrictions in the Intel(R) Optimization for Tensorflow software prior to version 2.12.0rc0 may allow an authenticated user to potentially enable escalation of privilege via local access.
+
+阅读更多: https://devhub.checkmarx.com/cve-details/CVE-2023-27506?utm_source=jetbrains&utm_medium=referral
+
+结果由 Checkmarx © 提供支持
