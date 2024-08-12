@@ -23,7 +23,7 @@ def send_to_openai(prompt_template: str, content_to_be_annotated: str):
     ]
 
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4o-mini",
         response_format={"type": "json_object"},
         messages=message,
         temperature=0.0

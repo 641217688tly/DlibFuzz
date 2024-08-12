@@ -1,10 +1,11 @@
 This is an example of labelled buggy {} code snippet from {}'s github repository issues. 
 You are asked to label other issues I provide in the format of the given snippet. 
-You should figure out the API, title, URL, code, and context sections of the issue and provide them in the format below. 
+You should figure out the API, title, URL, code, and description sections of the issue and process them according to the prompts bellow.
 This may require your knowledge of {} and its common issues. 
-Note that in the code section you only need to put the relevant code snippet instead of the full issue. 
-If there is no code snippet provided in the issue, you can put "[No code snippet provided]". 
-Other relevant content should be put in the context section. 
+For the API section, put the relevant APIs in an JSON array literal.
+For the code section you only need to put the relevant code snippet instead of the full issue. 
+If there is no code snippet provided in the issue, you should put an empty string "". 
+Then, summarize the title and other relevant content and put them in the description section. 
 Note that you should answer in JSON format. Do not add any Markdown syntax.
 
 The example is as follows:
@@ -29,7 +30,7 @@ model = torch.compile(model) # always ok
 # here 10 epochs training (good progress, no issues)
 model2 = deepcopy(model) # ok
 model2 = torch.compile(model2) # fails (system dependent)
-Context:
+Description:
 parts of stderr log:
 /tmp/tmpmiq1y2mh/main.c:5:10: fatal error: Python.h: Datei oder Verzeichnis nicht gefunden # German: cannot find file
     5 | #include <Python.h>
