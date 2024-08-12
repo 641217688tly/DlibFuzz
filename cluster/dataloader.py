@@ -1,8 +1,5 @@
 import json
 import os
-
-from sqlalchemy.exc import NoResultFound
-
 from orm import *
 import utils
 
@@ -164,11 +161,16 @@ def add_apis_from_json(session):
             print("Tensorflow API data loaded successfully!")
 
 
-def attach_error_trigger_code(api_class, dir_path, session):
-    try:
-        # 读取目录下所有json文件
-        for filename in os.listdir(dir_path):
-            if filename.endswith(".json"):
+def add_error_trigger_code_from_json(torch_dir, tf_dir, jax_dir, session):
+    def attach_error_trigger_code(api_class, dir_path, session):
+        print(f"Adding error trigger codes for {api_class.__name__}...")
+
+        # 获取所有.json文件的列表
+        json_files = [f for f in os.listdir(dir_path) if f.endswith('.json')]
+        files_num = len(json_files)  # 总文件数
+        try:
+            # 读取目录下所有json文件
+            for count, filename in enumerate(json_files, start=1):  # start=1表示从1开始计数
                 file_path = os.path.join(dir_path, filename)
                 with open(file_path, 'r', encoding='utf-8') as file:
                     data = json.load(file)
@@ -205,50 +207,14 @@ def attach_error_trigger_code(api_class, dir_path, session):
                                 )
                                 session.add(new_trigger)
                         session.commit()  # 提交所有更改
-    except Exception as e:
-        session.rollback()  # 出现异常时回滚
-        print(f"An error occurred: {e}")
+                print(f"Processed {count}/{files_num} files")
+        except Exception as e:
+            session.rollback()  # 出现异常时回滚
+            print(f"An error occurred: {e}")
 
-def attach_error_trigger_code(api_class, dir_path, session):
-    # 读取目录下所有json文件
-    for filename in os.listdir(dir_path):
-        if filename.endswith(".json"):
-            file_path = os.path.join(dir_path, filename)
-            with open(file_path, 'r', encoding='utf-8') as file:
-                data = json.load(file)
-                apis = data.get("API", [])
-                title = data.get("Title", "")
-                code = data.get("Code", "")
-                description = data.get("Description", "")
-                if not code or not apis:  # 如果code为""或apis为空列表，则跳过
-                    continue
-
-                for full_api_name in apis:
-                    module_name, api_name = full_api_name.rsplit('.', 1)
-                    if utils.validate_api_existence(module_name, api_name):  # 验证API是否存在
-                        api = session.query(api_class).filter_by(full_name=full_api_name).first()
-                        if not api:
-                            api = api_class(name=api_name, module=module_name, full_name=full_api_name)
-                            session.add(api)
-                            session.flush()  # 确保api对象有id
-
-                        # 检查api.error_triggers中是否已经存在相同的错误触发代码
-                        existing_trigger = session.query(api.error_triggers.class_).filter_by(
-                            api_id=api.id,
-                            title=title,
-                            code=code
-                        ).first()
-
-                        if not existing_trigger:
-                            # 创建新的错误触发代码实例并添加到数据库
-                            new_trigger = api.error_triggers.class_(
-                                api_id=api.id,
-                                title=title,
-                                code=code,
-                                description=description
-                            )
-                            session.add(new_trigger)
-                    session.commit()  # 提交所有更改
+    attach_error_trigger_code(PytorchAPI, torch_dir, session)
+    attach_error_trigger_code(TensorflowAPI, tf_dir, session)
+    attach_error_trigger_code(JaxAPI, jax_dir, session)
 
 
 if __name__ == '__main__':
@@ -256,3 +222,8 @@ if __name__ == '__main__':
     # 如果JAX/Tensorflow/Pytorch数据库中为空，添加数据
     # add_apis_from_txt(session)
     # add_apis_from_json(session)
+
+    torch_dir = '../../data/error_triggers/pytorch_issue'
+    tf_dir = '../../data/error_triggers/tensorflow_issue'
+    jax_dir = '../../data/error_triggers/jax_issue'
+    add_error_trigger_code_from_json(torch_dir, tf_dir, jax_dir, session)
