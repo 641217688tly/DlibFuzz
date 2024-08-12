@@ -7,7 +7,7 @@ import utils
 def add_apis_from_txt(session):
     if not session.query(PytorchAPI).first():  # 从文件读取Pytorch APIs并添加到数据库
         try:
-            with open('cluster/apis/pytorch/torch_valid_apis.txt', 'r', encoding='utf-8') as file:
+            with open('apis/pytorch/torch_valid_apis.txt', 'r', encoding='utf-8') as file:
                 for line in file:
                     full_api_name = line.strip()
                     if full_api_name:  # 确保不是空行
@@ -31,7 +31,7 @@ def add_apis_from_txt(session):
 
     if not session.query(TensorflowAPI).first():  # 从文件读取Tensorflow APIs并添加到数据库
         try:
-            with open('cluster/apis/tensorflow/tf_valid_apis.txt', 'r', encoding='utf-8') as file:
+            with open('apis/tensorflow/tf_valid_apis.txt', 'r', encoding='utf-8') as file:
                 for line in file:
                     full_api_name = line.strip()
                     if full_api_name:  # 确保不是空行
@@ -55,7 +55,7 @@ def add_apis_from_txt(session):
 
     # if not session.query(JaxAPI).first():  # JAX APIs并添加到数据库
     #     try:
-    #         with open('cluster/apis/jax/jax_valid_apis.txt', 'r', encoding='utf-8') as file:
+    #         with open('apis/jax/jax_valid_apis.txt', 'r', encoding='utf-8') as file:
     #             for line in file:
     #                 full_api_name = line.strip()
     #                 if full_api_name:  # 确保不是空行
@@ -81,7 +81,7 @@ def add_apis_from_txt(session):
 def add_apis_from_json(session):
     if not session.query(JaxAPI).first():  # 从JSON文件读取Jax APIs并添加到数据库
         try:
-            with open('cluster/apis/jax/jax_apis.json', 'r', encoding='utf-8') as file:
+            with open('apis/jax/jax_apis.json', 'r', encoding='utf-8') as file:
                 torch_apis = json.load(file)
                 for api_id, api_info in torch_apis.items():
                     # 检查数据库中是否已存在该API
@@ -108,7 +108,7 @@ def add_apis_from_json(session):
 
     if not session.query(PytorchAPI).first():  # 从JSON文件读取Pytorch APIs并添加到数据库
         try:
-            with open('cluster/apis/pytorch/torch_apis.json', 'r', encoding='utf-8') as file:
+            with open('apis/pytorch/torch_apis.json', 'r', encoding='utf-8') as file:
                 torch_apis = json.load(file)
                 for api_id, api_info in torch_apis.items():
                     # 检查数据库中是否已存在该API
@@ -135,7 +135,7 @@ def add_apis_from_json(session):
 
     if not session.query(TensorflowAPI).first():  # 从JSON文件读取Tensorflow APIs并添加到数据库
         try:
-            with open('cluster/apis/tensorflow/tf_apis.json', 'r', encoding='utf-8') as file:
+            with open('apis/tensorflow/tf_apis.json', 'r', encoding='utf-8') as file:
                 torch_apis = json.load(file)
                 for api_id, api_info in torch_apis.items():
                     # 检查数据库中是否已存在该API
@@ -161,60 +161,63 @@ def add_apis_from_json(session):
             print("Tensorflow API data loaded successfully!")
 
 
-def add_error_trigger_code_from_json(torch_dir, tf_dir, jax_dir, session):
-    def attach_error_trigger_code(api_class, dir_path, session):
-        print(f"Adding error trigger codes for {api_class.__name__}...")
+def attach_error_trigger_code(api_class, error_trigger_class, dir_path, session):
+    # 获取所有.json文件的列表
+    json_files = [f for f in os.listdir(dir_path) if f.endswith('.json')]
+    files_num = len(json_files)  # 总文件数
 
-        # 获取所有.json文件的列表
-        json_files = [f for f in os.listdir(dir_path) if f.endswith('.json')]
-        files_num = len(json_files)  # 总文件数
-        try:
-            # 读取目录下所有json文件
-            for count, filename in enumerate(json_files, start=1):  # start=1表示从1开始计数
-                file_path = os.path.join(dir_path, filename)
-                with open(file_path, 'r', encoding='utf-8') as file:
-                    data = json.load(file)
-                    apis = data.get("API", [])
-                    title = data.get("Title", "")
-                    code = data.get("Code", "")
-                    description = data.get("Description", "")
-                    if not code or not apis:  # 如果code为""或apis为空列表，则跳过
-                        continue
+    # 读取目录下所有json文件
+    for count, filename in enumerate(json_files, start=1):  # start=1表示从1开始计数
+        file_path = os.path.join(dir_path, filename)
+        print(
+            f"----------------------------------------------------------Loading {api_class.__name__}'s error trigger: {count}----------------------------------------------------------")
+        with open(file_path, 'r', encoding='utf-8') as file:
+            print(f"Current JSON File: {file_path}\n")
+            data = json.load(file)
+            apis = data.get("API", [])
+            title = data.get("Title", "")
+            code = data.get("Code", "")
+            description = data.get("Description", "")
+            if not code or not apis:  # 如果code为""或apis为空列表，则跳过
+                print(f"Skipping {file_path} due to missing code or APIs")
+                continue
 
-                    for full_api_name in apis:
-                        module_name, api_name = full_api_name.rsplit('.', 1)
-                        if utils.validate_api_existence(module_name, api_name):  # 验证API是否存在
-                            api = session.query(api_class).filter_by(full_name=full_api_name).first()
-                            if not api:
-                                api = api_class(name=api_name, module=module_name, full_name=full_api_name)
-                                session.add(api)
-                                session.flush()  # 确保api对象有id
+            for full_api_name in apis:
+                try:
+                    print(f"Processing {full_api_name}...")
+                    module_name, api_name = full_api_name.rsplit('.', 1)
+                    if utils.validate_api_existence(module_name, api_name):  # 验证API是否存在
+                        api = session.query(api_class).filter_by(full_name=full_api_name).first()
+                        if not api:
+                            api = api_class(name=api_name, module=module_name, full_name=full_api_name)
+                            session.add(api)
+                            session.flush()  # 确保api对象有id
 
-                            # 检查api.error_triggers中是否已经存在相同的错误触发代码
-                            existing_trigger = session.query(api.error_triggers.class_).filter_by(
+                        # 检查api.error_triggers中是否已经存在相同的错误触发代码
+                        existing_trigger = session.query(error_trigger_class).filter_by(
+                            api_id=api.id,
+                            title=title,
+                            code=code
+                        ).first()
+
+                        if not existing_trigger:
+                            # 创建新的错误触发代码实例并添加到数据库
+                            new_trigger = error_trigger_class(
                                 api_id=api.id,
                                 title=title,
-                                code=code
-                            ).first()
-
-                            if not existing_trigger:
-                                # 创建新的错误触发代码实例并添加到数据库
-                                new_trigger = api.error_triggers.class_(
-                                    api_id=api.id,
-                                    title=title,
-                                    code=code,
-                                    description=description
-                                )
-                                session.add(new_trigger)
-                        session.commit()  # 提交所有更改
-                print(f"Processed {count}/{files_num} files")
-        except Exception as e:
-            session.rollback()  # 出现异常时回滚
-            print(f"An error occurred: {e}")
-
-    attach_error_trigger_code(PytorchAPI, torch_dir, session)
-    attach_error_trigger_code(TensorflowAPI, tf_dir, session)
-    attach_error_trigger_code(JaxAPI, jax_dir, session)
+                                code=code,
+                                description=description
+                            )
+                            session.add(new_trigger)
+                        print(f"Successfully processed {full_api_name}\n")
+                    else:
+                        print(
+                            f"WARNING: The {full_api_name} does not exist or is deprecated in the current version of the library!\n")
+                    session.commit()  # 提交所有更改
+                except Exception as e:
+                    session.rollback()  # 出现异常时回滚
+                    print(f"An error occurred: {e}")
+        print(f"Processed {count}/{files_num} files")
 
 
 if __name__ == '__main__':
@@ -223,7 +226,9 @@ if __name__ == '__main__':
     # add_apis_from_txt(session)
     # add_apis_from_json(session)
 
-    torch_dir = '../../data/error_triggers/pytorch_issue'
-    tf_dir = '../../data/error_triggers/tensorflow_issue'
-    jax_dir = '../../data/error_triggers/jax_issue'
-    add_error_trigger_code_from_json(torch_dir, tf_dir, jax_dir, session)
+    torch_dir = '../data/error_triggers/pytorch_issue'
+    tf_dir = '../data/error_triggers/tensorflow_issue'
+    jax_dir = '../data/error_triggers/jax_issue'
+    attach_error_trigger_code(PytorchAPI, PytorchErrorTriggerCode, torch_dir, session)
+    attach_error_trigger_code(TensorflowAPI, TensorflowErrorTriggerCode, tf_dir, session)
+    attach_error_trigger_code(JaxAPI, JaxErrorTriggerCode, jax_dir, session)
