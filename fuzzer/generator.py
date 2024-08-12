@@ -48,6 +48,8 @@ def get_apis_error_triggers(apis, error_trigger_class, session):
 
 def weighted_sampling(error_triggers_dict, target):
     # TODO 函数功能有待检查
+    if target <= 0 or not error_triggers_dict: # 如果target <= 0或者error_triggers_dict为空, 则返回空列表
+        return []
     # 创建一个列表来存储所有API及其权重
     weighted_apis = []
     for count, apis in error_triggers_dict.items():
@@ -139,9 +141,11 @@ def generate_seeds(session, openai_client, cluster, seeds_num=5):
             torch_error_trigger_examples = weighted_sampling(torch_error_triggers_dict, target[0])
             tf_error_trigger_examples = weighted_sampling(tf_error_triggers_dict, target[1])
             jax_error_trigger_examples = weighted_sampling(jax_error_triggers_dict, target[2])
-            error_trigger_examples_prompt = construct_error_trigger_examples_prompt("Pytorch", torch_error_trigger_examples) + \
-                                                construct_error_trigger_examples_prompt("Tensorflow", tf_error_trigger_examples) + \
-                                                construct_error_trigger_examples_prompt("JAX", jax_error_trigger_examples)
+            error_trigger_examples_prompt = construct_error_trigger_examples_prompt("Pytorch",
+                                                                                    torch_error_trigger_examples) + \
+                                            construct_error_trigger_examples_prompt("Tensorflow",
+                                                                                    tf_error_trigger_examples) + \
+                                            construct_error_trigger_examples_prompt("JAX", jax_error_trigger_examples)
             # TODO Prompt有待优化
             prompt = f"""
             {error_trigger_examples_prompt}
@@ -206,11 +210,11 @@ def run():
     openai_client = get_openai_client()
 
     # 获得所有的cluster未测试的cluster
-    untested_clusters = session.query(Cluster).filter(Cluster.is_tested == False).all()
+    untested_clusters = session.query(Cluster).filter(is_tested=False).all()
     while untested_clusters:
         print("----------------------------------------------------------------------------------")
         generate_seeds(session, openai_client, untested_clusters[0])
-        untested_clusters = session.query(Cluster).filter(Cluster.is_tested == False).all()
+        untested_clusters = session.query(Cluster).filter(is_tested=False).all()
         total_clusters_num = session.query(Cluster).count()
         untested_clusters_num = len(untested_clusters)
         print(f"Untested / Total: {untested_clusters_num} / {total_clusters_num}")
