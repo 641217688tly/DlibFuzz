@@ -1,14 +1,63 @@
-Given the API combinations{torch_apis} of the Pytorch library, the {tf_apis} of the TensorFlow library and the {jax_apis} of the Jax library all have the same functionality.
-Please Generate test code snippets for the apis of the different libraries mentioned above.
+Example of triggering crashes in deep learning libraries:
+Example1:
+Title:
+Description:
+Code:
+
+Example2:
+Title:
+Description:
+Code:
+
+Example3:
+Title:
+Description:
+Code:
+
+Example4:
+Title:
+Description:
+Code:
+
+Example5:
+Title:
+Description:
+Code:
+
+Example6:
+Title:
+Description:
+Code:
+
+
+Background:
+It is known that the API combinations from the PyTorch library {torch_apis}, TensorFlow library {tf_apis}, and Jax library {jax_apis} all have identical functionalities.
+
+
+Task:
+Generate code snippets for differential testing using API combinations from the aforementioned deep learning libraries.
+
+
+Steps:
+1.Review the code examples above that caused crashes in the deep learning libraries, and consider which operations might trigger errors or crashes in the libraries.
+2.Begin generating code snippets that could expose errors or cause crashes in the deep learning libraries based on the insights from the previous step.
+2.1 First, define variable values that can be used by API combinations from different libraries.
+2.2 Then, generate calling code for the PyTorch API combination (if provided in the background).
+2.3 Next, generate calling code for the TensorFlow API combination (if provided in the background).
+2.4 Finally, generate calling code for the Jax API combination (if provided in the background).
+
 Requirements:
-1. The output values of test code snippets generated for different apis need to remain the same.
-2. Import the required modules or apis in your code.
-3. Output only code, nothing else.
+1.Ensure that the necessary modules or APIs are imported in the code.
+2.The code snippets using API combinations from different libraries should have the same input values.
+3.The output values from running the code snippets of different library API combinations must be the same.
+4.Use comments "# Pytorch", "# Tensorflow", and "# Jax" to separate the calling codes of different library API combinations.
+5.Only output code and comments, and avoid other content (such as Markdown syntax).
 
-Following is a example:
-API combinations ["torch.tensor", "torch.nn.CrossEntropyLoss"] of the Pytorch library, the ["tensorflow.constant", "tensorflow.nn.softmax_cross_entropy_with_logits"] of the TensorFlow library and the ["jax.numpy.array", "jax.nn.log_softmax", "jax.numpy.sum"] of the Jax library all have the same functionality.
-The code snippet to test these API combinations is as follows:
+Output format:
+# Note: Your output format can follow the example provided below:
+# Background: API combinations ["torch.tensor", "torch.nn.CrossEntropyLoss"] of the Pytorch library, the ["tensorflow.constant", "tensorflow.nn.softmax_cross_entropy_with_logits"] of the TensorFlow library and the ["jax.numpy.array", "jax.nn.log_softmax", "jax.numpy.sum"] of the Jax library all have the same functionality. The code snippet for differential testing of these API combinations is as follows:
 
+# Output:
 logits = [[4.0, 1.0, 0.2]]
 # Labels (one-hot encoded)
 labels = [[1.0, 0.0, 0.0]]
@@ -20,7 +69,7 @@ loss_fn_pt = torch.nn.CrossEntropyLoss()
 output_pt = loss_fn_pt(logits_pt, torch.argmax(labels_pt, dim=1))
 print("PyTorch Loss:", output_pt.item())
 
-# TensorFlow: tf.nn.softmax_cross_entropy_with_logits
+# TensorFlow
 logits_tf = tf.constant(logits)
 labels_tf = tf.constant(labels)
 output_tf = tf.nn.softmax_cross_entropy_with_logits(labels=labels_tf, logits=logits_tf)

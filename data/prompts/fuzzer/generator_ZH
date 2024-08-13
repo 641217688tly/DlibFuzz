@@ -1,0 +1,54 @@
+触发深度学习库崩溃的样例:
+Example1:
+Title:
+Description:
+Code:
+
+Example2:
+Title:
+Description:
+Code:
+
+Example3:
+Title:
+Description:
+Code:
+
+Example4:
+Title:
+Description:
+Code:
+
+Example5:
+Title:
+Description:
+Code:
+
+Example6:
+Title:
+Description:
+Code:
+
+背景:
+已知Pytorch库的API组合{torch_apis}、TensorFlow库的{tf_apis}和Jax库的{jax_apis}都具有相同的功能。
+
+任务:
+请为上述不同深度学习库的API组合生成用于差分测试的代码片段
+
+步骤:
+1.观察上文中导致深度学习库崩溃的代码调用样例, 思考样例中的哪些操作会触发库的错误或崩溃
+2.根据思考结果开始生成能够暴露深度学习库错误或引发库崩溃的代码片段
+2.1先定义能够被来自不同库的API组合所共用的变量值
+2.2接着为Pytorch的API组合(如果背景中提供的话)生成调用代码
+2.3然后为Tensorflow的API组合(如果背景中提供的话)生成调用代码
+2.4最后为Jax的API组合(如果背景中提供的话)生成调用代码
+
+要求:
+1.确保代码导入了所需的模块或API
+2.来自不同库的API组合的代码片段需要有相同的输入值
+3.来自不同库的API组合的代码片段运行后的输出值必须相同
+4.不同库的API组合调用代码之间需要用"# Pytorch", "# Tensorflow"和"# Jax"的注释分隔
+5.仅输出代码和注释, 不要输出其他内容(比如Markdown语法)
+
+输出格式:
+# 你的输出格式可以仿照以下例子

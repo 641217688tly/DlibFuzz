@@ -4,9 +4,30 @@ import os
 from orm import *
 import random
 
-ERROR_TRIGGER_TARGET = 8
+ERROR_TRIGGER_TARGET = 6
 
-OUTPUT_EXAMPLE = """
+STEPS_PROMPT = """
+1.Review the code examples above that caused crashes in the deep learning libraries, and consider which operations might trigger errors or crashes in the libraries.
+2.Begin generating code snippets that could expose errors or cause crashes in the deep learning libraries based on the insights from the previous step.
+2.1 First, define variable values that can be used by API combinations from different libraries.
+2.2 Then, generate calling code for the PyTorch API combination (if provided in the background).
+2.3 Next, generate calling code for the TensorFlow API combination (if provided in the background).
+2.4 Finally, generate calling code for the Jax API combination (if provided in the background).
+"""
+
+REQUIREMENTS_PROMPT = """
+1.Ensure that the necessary modules or APIs are imported in the code.
+2.The code snippets using API combinations from different libraries should have the same input values.
+3.The output values from running the code snippets of different library API combinations must be the same.
+4.Use comments "# Pytorch", "# Tensorflow", and "# Jax" to separate the calling codes of different library API combinations.
+5.Only output code and comments, and avoid other content (such as Markdown syntax).
+"""
+
+OUTPUT_EXAMPLE_PROMPT = """
+# Note: Your output format can follow the example provided below:
+# Background: API combinations ["torch.tensor", "torch.nn.CrossEntropyLoss"] of the Pytorch library, the ["tensorflow.constant", "tensorflow.nn.softmax_cross_entropy_with_logits"] of the TensorFlow library and the ["jax.numpy.array", "jax.nn.log_softmax", "jax.numpy.sum"] of the Jax library all have the same functionality. The code snippet for differential testing of these API combinations is as follows:
+
+# Output:
 logits = [[4.0, 1.0, 0.2]]
 # Labels (one-hot encoded)
 labels = [[1.0, 0.0, 0.0]]
@@ -18,7 +39,7 @@ loss_fn_pt = torch.nn.CrossEntropyLoss()
 output_pt = loss_fn_pt(logits_pt, torch.argmax(labels_pt, dim=1))
 print("PyTorch Loss:", output_pt.item())
 
-# TensorFlow: tf.nn.softmax_cross_entropy_with_logits
+# TensorFlow
 logits_tf = tf.constant(logits)
 labels_tf = tf.constant(labels)
 output_tf = tf.nn.softmax_cross_entropy_with_logits(labels=labels_tf, logits=logits_tf)
@@ -48,7 +69,7 @@ def get_apis_error_triggers(apis, error_trigger_class, session):
 
 def weighted_sampling(error_triggers_dict, target):
     # TODO 函数功能有待检查
-    if target <= 0 or not error_triggers_dict: # 如果target <= 0或者error_triggers_dict为空, 则返回空列表
+    if target <= 0 or not error_triggers_dict:  # 如果target <= 0或者error_triggers_dict为空, 则返回空列表
         return []
     # 创建一个列表来存储所有API及其权重
     weighted_apis = []
@@ -87,15 +108,45 @@ def weighted_sampling(error_triggers_dict, target):
     return selected_apis
 
 
-def construct_error_trigger_examples_prompt(lib_name: str, error_trigger_examples: list):
+def construct_error_trigger_examples_prompt(torch_error_trigger_examples: list, tf_error_trigger_examples: list,
+                                            jax_error_trigger_examples: list):
     prompt = ""
-    for error_trigger in error_trigger_examples:
-        prompt += f"""
-        {lib_name}'s Error Trigger Example:
-        Title: {error_trigger.title}
-        Description: {error_trigger.description}
-        Code:{error_trigger.code}\n
-        """
+    count = 1
+    if torch_error_trigger_examples:
+        prompt += f"Pytorch's Error Trigger Examples:"
+        for error_trigger in torch_error_trigger_examples:
+            prompt = prompt + f"""
+                   Example {count}:
+                   Title: {error_trigger.title}
+                   Description: {error_trigger.description}
+                   Code:
+                   {error_trigger.code}\n
+                   """
+            count = count + 1
+    count = 1
+    if tf_error_trigger_examples:
+        prompt += f"Tensorflow's Error Trigger Examples:"
+        for error_trigger in tf_error_trigger_examples:
+            prompt = prompt + f"""
+                   Example {count}:
+                   Title: {error_trigger.title}
+                   Description: {error_trigger.description}
+                   Code:
+                   {error_trigger.code}\n
+                   """
+            count = count + 1
+    count = 1
+    if jax_error_trigger_examples:
+        prompt += f"Jax's Error Trigger Examples:"
+        for error_trigger in jax_error_trigger_examples:
+            prompt = prompt + f"""
+                   Example {count}:
+                   Title: {error_trigger.title}
+                   Description: {error_trigger.description}
+                   Code:
+                   {error_trigger.code}\n
+                   """
+            count = count + 1
     return prompt
 
 
@@ -141,27 +192,31 @@ def generate_seeds(session, openai_client, cluster, seeds_num=5):
             torch_error_trigger_examples = weighted_sampling(torch_error_triggers_dict, target[0])
             tf_error_trigger_examples = weighted_sampling(tf_error_triggers_dict, target[1])
             jax_error_trigger_examples = weighted_sampling(jax_error_triggers_dict, target[2])
-            error_trigger_examples_prompt = construct_error_trigger_examples_prompt("Pytorch",
-                                                                                    torch_error_trigger_examples) + \
-                                            construct_error_trigger_examples_prompt("Tensorflow",
-                                                                                    tf_error_trigger_examples) + \
-                                            construct_error_trigger_examples_prompt("JAX", jax_error_trigger_examples)
+            error_trigger_examples_prompt = construct_error_trigger_examples_prompt(torch_error_trigger_examples,
+                                                                                    tf_error_trigger_examples,
+                                                                                    jax_error_trigger_examples)
             # TODO Prompt有待优化
             prompt = f"""
+            Example of triggering crashes in deep learning libraries:
             {error_trigger_examples_prompt}
             
-            Given the API combinations{torch_apis} of the Pytorch library, the {tf_apis} of the TensorFlow library and the {jax_apis} of the Jax library all have the same functionality.
-            Please Generate test code snippets for the apis of the different libraries mentioned above.
-            Requirements:
-            1. The output values of test code snippets generated for different apis need to remain the same.
-            2. Import the required modules or apis in your code.
-            3. Output only code, nothing else.
+            Background: 
+            It is known that the API combinations from the PyTorch library {torch_apis}, TensorFlow library {tf_apis}, and Jax library {jax_apis} all have identical functionalities.
+            
+            Task: 
+            Generate code snippets for differential testing using API combinations from the aforementioned deep learning libraries.
+            
+            Steps:
+            {STEPS_PROMPT}
 
-            Following is a example:
-            API combinations ["torch.tensor", "torch.nn.CrossEntropyLoss"] of the Pytorch library, the ["tensorflow.constant", "tensorflow.nn.softmax_cross_entropy_with_logits"] of the TensorFlow library and the ["jax.numpy.array", "jax.nn.log_softmax", "jax.numpy.sum"] of the Jax library all have the same functionality.
-            The code snippet to test these API combinations is as follows:
-            {OUTPUT_EXAMPLE}
+            Requirements:
+            {REQUIREMENTS_PROMPT}
+            
+            Output format:
+            {OUTPUT_EXAMPLE_PROMPT}
             """
+
+            print(f"---------Prompt---------:\n {prompt}")
 
             response_data = None
             attempt_num = 0
