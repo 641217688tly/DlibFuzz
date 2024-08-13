@@ -110,17 +110,18 @@ def weighted_sampling(error_triggers_dict, target):
 
 def construct_error_trigger_examples_prompt(torch_error_trigger_examples: list, tf_error_trigger_examples: list,
                                             jax_error_trigger_examples: list):
+    # 我知道你想吐槽这里提示词的缩进, 但不这样做的话, 最后生成的prompt会有很多意外缩进
     prompt = ""
     count = 1
     if torch_error_trigger_examples:
         prompt += f"Pytorch's Error Trigger Examples:"
         for error_trigger in torch_error_trigger_examples:
             prompt = prompt + f"""
-                   Example {count}:
-                   Title: {error_trigger.title}
-                   Description: {error_trigger.description}
-                   Code:
-                   {error_trigger.code}\n
+Example {count}:
+Title: {error_trigger.title}
+Description: {error_trigger.description}
+Code:
+{error_trigger.code}\n
                    """
             count = count + 1
     count = 1
@@ -128,11 +129,11 @@ def construct_error_trigger_examples_prompt(torch_error_trigger_examples: list, 
         prompt += f"Tensorflow's Error Trigger Examples:"
         for error_trigger in tf_error_trigger_examples:
             prompt = prompt + f"""
-                   Example {count}:
-                   Title: {error_trigger.title}
-                   Description: {error_trigger.description}
-                   Code:
-                   {error_trigger.code}\n
+Example {count}:
+Title: {error_trigger.title}
+Description: {error_trigger.description}
+Code:
+{error_trigger.code}\n
                    """
             count = count + 1
     count = 1
@@ -140,11 +141,11 @@ def construct_error_trigger_examples_prompt(torch_error_trigger_examples: list, 
         prompt += f"Jax's Error Trigger Examples:"
         for error_trigger in jax_error_trigger_examples:
             prompt = prompt + f"""
-                   Example {count}:
-                   Title: {error_trigger.title}
-                   Description: {error_trigger.description}
-                   Code:
-                   {error_trigger.code}\n
+Example {count}:
+Title: {error_trigger.title}
+Description: {error_trigger.description}
+Code:
+{error_trigger.code}\n
                    """
             count = count + 1
     return prompt
@@ -192,32 +193,26 @@ def generate_seeds(session, openai_client, cluster, seeds_num=5):
             torch_error_trigger_examples = weighted_sampling(torch_error_triggers_dict, target[0])
             tf_error_trigger_examples = weighted_sampling(tf_error_triggers_dict, target[1])
             jax_error_trigger_examples = weighted_sampling(jax_error_triggers_dict, target[2])
-            error_trigger_examples_prompt = construct_error_trigger_examples_prompt(torch_error_trigger_examples,
-                                                                                    tf_error_trigger_examples,
-                                                                                    jax_error_trigger_examples)
-            # TODO Prompt有待优化
+            error_trigger_examples_prompt = construct_error_trigger_examples_prompt(torch_error_trigger_examples,tf_error_trigger_examples,jax_error_trigger_examples)
             prompt = f"""
-            Example of triggering crashes in deep learning libraries:
-            {error_trigger_examples_prompt}
-            
-            Background: 
-            It is known that the API combinations from the PyTorch library {torch_apis}, TensorFlow library {tf_apis}, and Jax library {jax_apis} all have identical functionalities.
-            
-            Task: 
-            Generate code snippets for differential testing using API combinations from the aforementioned deep learning libraries.
-            
-            Steps:
-            {STEPS_PROMPT}
+Example of triggering crashes in deep learning libraries:
+{error_trigger_examples_prompt}
 
-            Requirements:
-            {REQUIREMENTS_PROMPT}
-            
-            Output format:
-            {OUTPUT_EXAMPLE_PROMPT}
+Background: 
+It is known that the API combinations from the PyTorch library {torch_apis}, TensorFlow library {tf_apis}, and Jax library {jax_apis} all have identical functionalities.
+
+Task: 
+Generate code snippets for differential testing using API combinations from the aforementioned deep learning libraries.
+
+Steps:
+{STEPS_PROMPT}
+
+Requirements:
+{REQUIREMENTS_PROMPT}
+
+Output format:
+{OUTPUT_EXAMPLE_PROMPT}
             """
-
-            print(f"---------Prompt---------:\n {prompt}")
-
             response_data = None
             attempt_num = 0
             while attempt_num < 5:  # 设置最大尝试次数以避免无限循环
@@ -265,11 +260,11 @@ def run():
     openai_client = get_openai_client()
 
     # 获得所有的cluster未测试的cluster
-    untested_clusters = session.query(Cluster).filter(is_tested=False).all()
+    untested_clusters = session.query(Cluster).filter(Cluster.is_tested == False).all()
     while untested_clusters:
         print("----------------------------------------------------------------------------------")
         generate_seeds(session, openai_client, untested_clusters[0])
-        untested_clusters = session.query(Cluster).filter(is_tested=False).all()
+        untested_clusters = session.query(Cluster).filter(Cluster.is_tested == False).all()
         total_clusters_num = session.query(Cluster).count()
         untested_clusters_num = len(untested_clusters)
         print(f"Untested / Total: {untested_clusters_num} / {total_clusters_num}")
