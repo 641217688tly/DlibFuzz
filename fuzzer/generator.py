@@ -210,7 +210,7 @@ Steps:
 Requirements:
 {REQUIREMENTS_PROMPT}
 
-Output format:
+Required Output format:
 {OUTPUT_EXAMPLE_PROMPT}
             """
             response_data = None
