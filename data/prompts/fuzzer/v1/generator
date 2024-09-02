@@ -29,14 +29,11 @@ Title:
 Description:
 Code:
 
-
 Background:
 It is known that the API combinations from the PyTorch library {torch_apis}, TensorFlow library {tf_apis}, and Jax library {jax_apis} all have identical functionalities.
 
-
 Task:
 Generate code snippets for differential testing using API combinations from the aforementioned deep learning libraries.
-
 
 Steps:
 1.Review the code examples above that caused crashes in the deep learning libraries, and consider which operations might trigger errors or crashes in the libraries.
@@ -46,14 +43,15 @@ Steps:
 2.3 Next, generate calling code for the TensorFlow API combination (if provided in the background).
 2.4 Finally, generate calling code for the Jax API combination (if provided in the background).
 
-Requirements:
+Generation Requirements:
 1.Ensure that the necessary modules or APIs are imported in the code.
 2.The code snippets using API combinations from different libraries should have the same input values.
 3.The output values from running the code snippets of different library API combinations must be the same.
 4.Use comments "# Pytorch", "# Tensorflow", and "# Jax" to separate the calling codes of different library API combinations.
 5.Only output code and comments, and avoid other content (such as Markdown syntax).
+6.When generating test cases, do not customize functions or classes for code that will not be reused multiple times.
 
-Output format:
+Required Output format:
 # Note: Your output format can follow the example provided below:
 # Background: API combinations ["torch.tensor", "torch.nn.CrossEntropyLoss"] of the Pytorch library, the ["tensorflow.constant", "tensorflow.nn.softmax_cross_entropy_with_logits"] of the TensorFlow library and the ["jax.numpy.array", "jax.nn.log_softmax", "jax.numpy.sum"] of the Jax library all have the same functionality. The code snippet for differential testing of these API combinations is as follows:
 

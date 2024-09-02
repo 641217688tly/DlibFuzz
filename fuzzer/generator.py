@@ -6,28 +6,31 @@ import random
 
 ERROR_TRIGGER_TARGET = 6
 
+TORCH_VERSION = "1.12"
+TF_VERSION = "2.10"
+JAX_VERSION = "0.4.13"
+
 STEPS_PROMPT = """
-1.Review the code examples above that caused crashes in the deep learning libraries, and consider which operations might trigger errors or crashes in the libraries.
-2.Begin generating code snippets that could expose errors or cause crashes in the deep learning libraries based on the insights from the previous step.
-2.1 First, define variable values that can be used by API combinations from different libraries.
-2.2 Then, generate calling code for the PyTorch API combination (if provided in the background).
-2.3 Next, generate calling code for the TensorFlow API combination (if provided in the background).
-2.4 Finally, generate calling code for the Jax API combination (if provided in the background).
+1.Review Examples: Analyze the provided code examples that caused crashes in deep learning libraries to understand which operations or input values might lead to errors.
+2.Generate Differential Testing Code: Create code snippets for differential testing using the identified API combinations from PyTorch, TensorFlow, and JAX.
+Step 1: Define common variable values that will be used across all three libraries.
+Step 2: Write code for PyTorch using the provided API combination ({torch_apis}).
+Step 3: Write code for TensorFlow using the provided API combination ({tf_apis}).
+Step 4: Write code for JAX using the provided API combination ({jax_apis}).
 """
 
 REQUIREMENTS_PROMPT = """
-1.Ensure that the necessary modules or APIs are imported in the code.
-2.The code snippets using API combinations from different libraries should have the same input values.
-3.The output values from running the code snippets of different library API combinations must be the same.
-4.Use comments "# Pytorch", "# Tensorflow", and "# Jax" to separate the calling codes of different library API combinations.
-5.Only output code and comments, and avoid other content (such as Markdown syntax).
+1.Imports: Ensure that all necessary modules or APIs are imported.
+2.Consistency in Input: Use the same input values for API combinations across different libraries.
+3.Consistency in Output: The output values from the code snippets should be identical when using the same inputs.
+4.Clear Separation: Use comments # PyTorch, # TensorFlow, and # JAX to clearly separate the code snippets for each library.
+5.Code-Only Format: Only output code and comments in the required format, avoiding any additional text or Markdown syntax.
+6.Simplicity: Avoid creating custom functions or classes for code that is not reused multiple times.
 """
 
 OUTPUT_EXAMPLE_PROMPT = """
-# Note: Your output format can follow the example provided below:
-# Background: API combinations ["torch.tensor", "torch.nn.CrossEntropyLoss"] of the Pytorch library, the ["tensorflow.constant", "tensorflow.nn.softmax_cross_entropy_with_logits"] of the TensorFlow library and the ["jax.numpy.array", "jax.nn.log_softmax", "jax.numpy.sum"] of the Jax library all have the same functionality. The code snippet for differential testing of these API combinations is as follows:
-
-# Output:
+```python
+# Background: API combinations ["torch.tensor", "torch.nn.CrossEntropyLoss"] from the PyTorch library, ["tensorflow.constant", "tensorflow.nn.softmax_cross_entropy_with_logits"] from the TensorFlow library, and ["jax.numpy.array", "jax.nn.log_softmax", "jax.numpy.sum"] from the JAX library all have the same functionality. The code snippet for differential testing of these API combinations is as follows:
 logits = [[4.0, 1.0, 0.2]]
 # Labels (one-hot encoded)
 labels = [[1.0, 0.0, 0.0]]
@@ -51,6 +54,7 @@ labels_jax = jnp.array(labels)
 log_softmax = jax.nn.log_softmax(logits_jax)
 output_jax = -jnp.sum(labels_jax * log_softmax)
 print("JAX Loss:", output_jax)
+```
 """
 
 
@@ -195,14 +199,11 @@ def generate_seeds(session, openai_client, cluster, seeds_num=5):
             jax_error_trigger_examples = weighted_sampling(jax_error_triggers_dict, target[2])
             error_trigger_examples_prompt = construct_error_trigger_examples_prompt(torch_error_trigger_examples,tf_error_trigger_examples,jax_error_trigger_examples)
             prompt = f"""
-Example of triggering crashes in deep learning libraries:
-{error_trigger_examples_prompt}
+Objective:
+Generate code snippets that can be used to differentially test API combinations from PyTorch (v{TORCH_VERSION}), TensorFlow (v{TF_VERSION}), and JAX (v{JAX_VERSION}), which have identical functionalities. The goal is to identify potential crashes or inconsistencies across these libraries.
 
-Background: 
-It is known that the API combinations from the PyTorch library {torch_apis}, TensorFlow library {tf_apis}, and Jax library {jax_apis} all have identical functionalities.
-
-Task: 
-Generate code snippets for differential testing using API combinations from the aforementioned deep learning libraries.
+Background:
+API combinations from the PyTorch {torch_apis}, TensorFlow {tf_apis}, and JAX {jax_apis} all have identical functionalities. The code examples below are intended to trigger crashes or reveal discrepancies in these deep learning libraries.
 
 Steps:
 {STEPS_PROMPT}
@@ -210,9 +211,12 @@ Steps:
 Requirements:
 {REQUIREMENTS_PROMPT}
 
-Output format:
+Example of triggering crashes in deep learning libraries:
+{error_trigger_examples_prompt}
+
+Output Format Example:
 {OUTPUT_EXAMPLE_PROMPT}
-            """
+"""
             response_data = None
             attempt_num = 0
             while attempt_num < 5:  # 设置最大尝试次数以避免无限循环

@@ -1,0 +1,49 @@
+Objective:
+Generate code snippets that can be used to differentially test API combinations from PyTorch (v{self.torch_ver}), TensorFlow (v{self.tf_ver}), and JAX (v{self.jax_ver}), which have identical functionalities. The goal is to identify potential crashes or inconsistencies across these libraries.
+
+Background:
+API combinations from the PyTorch {torch_apis}, TensorFlow {tf_apis}, and JAX {jax_apis} all have identical functionalities. The code examples below are intended to trigger crashes or reveal discrepancies in these deep learning libraries.
+
+Steps:
+1.Review Examples: Analyze the provided code examples that caused crashes in deep learning libraries to understand which operations or input values might lead to errors.
+2.Generate Differential Testing Code: Create code snippets for differential testing using the identified API combinations from PyTorch, TensorFlow, and JAX.
+Step 1: Define common variable values that will be used across all three libraries.
+Step 2: Write code for PyTorch using the provided API combination ({torch_apis}).
+Step 3: Write code for TensorFlow using the provided API combination ({tf_apis}).
+Step 4: Write code for JAX using the provided API combination ({jax_apis}).
+
+Requirements:
+1.Imports: Ensure that all necessary modules or APIs are imported.
+2.Consistency in Input: Use the same input values for API combinations across different libraries.
+3.Consistency in Output: The output values from the code snippets should be identical when using the same inputs.
+4.Clear Separation: Use comments # PyTorch, # TensorFlow, and # JAX to clearly separate the code snippets for each library.
+5.Code-Only Format: Only output code and comments in the required format, avoiding any additional text or Markdown syntax.
+6.Simplicity: Avoid creating custom functions or classes for code that is not reused multiple times.
+
+Output Format Example:
+```python
+# Background: API combinations ["torch.tensor", "torch.nn.CrossEntropyLoss"] from the PyTorch library, ["tensorflow.constant", "tensorflow.nn.softmax_cross_entropy_with_logits"] from the TensorFlow library, and ["jax.numpy.array", "jax.nn.log_softmax", "jax.numpy.sum"] from the JAX library all have the same functionality. The code snippet for differential testing of these API combinations is as follows:
+logits = [[4.0, 1.0, 0.2]]
+# Labels (one-hot encoded)
+labels = [[1.0, 0.0, 0.0]]
+
+# PyTorch
+logits_pt = torch.tensor(logits, requires_grad=True)
+labels_pt = torch.tensor(labels)
+loss_fn_pt = torch.nn.CrossEntropyLoss()
+output_pt = loss_fn_pt(logits_pt, torch.argmax(labels_pt, dim=1))
+print("PyTorch Loss:", output_pt.item())
+
+# TensorFlow
+logits_tf = tf.constant(logits)
+labels_tf = tf.constant(labels)
+output_tf = tf.nn.softmax_cross_entropy_with_logits(labels=labels_tf, logits=logits_tf)
+print("TensorFlow NN Loss:", output_tf.numpy()[0])
+
+# JAX
+logits_jax = jnp.array(logits)
+labels_jax = jnp.array(labels)
+log_softmax = jax.nn.log_softmax(logits_jax)
+output_jax = -jnp.sum(labels_jax * log_softmax)
+print("JAX Loss:", output_jax)
+```

@@ -8,6 +8,31 @@ TORCH_VERSION = "1.12"
 TF_VERSION = "2.10"
 JAX_VERSION = "0.4.13"
 
+EXAMPLE1 = """json
+{   
+    "Pytorch" : {
+        "1" : ["torch.tensor", "torch.nn.CrossEntropyLoss"],
+    },
+    "Tensorflow" : {
+        "1" : ["tensorflow.keras.losses.CategoricalCrossentropy"], // tensorflow.keras.losses.CategoricalCrossentropy internal will automatically array into Tensorflow tensor, so there is no need to be used with tensorflow.constant
+        "2" : ["tensorflow.constant", "tensorflow.nn.softmax_cross_entropy_with_logits"] // Before using tensorflow.nn.softmax_cross_entropy_with_logits, it needs to use tensorflow.constant to convert the input value into a tensor
+    },
+    "JAX" : {
+        "1" : ["jax.numpy.array", "jax.nn.log_softmax", "jax.numpy.sum"] // Before using jax.nn.softmax_cross_entropy, it needs to use jax.numpy.array to convert the input value into a tensor. After using jax.nn.softmax_cross_entropy, it needs to use jax.numpy.sum to calculate the sum of the cross entropy loss
+    }
+}
+"""
+
+EXAMPLE2 = """json
+{   
+    // Output an empty dictionary when no combination output from the TensorFlow API or Pytorch API has the same value as the JAX API
+    "Pytorch" : {
+        "1" : ["torch.tensor", "torch.nn.CrossEntropyLoss"],
+    }, 
+    "Tensorflow" : {}, 
+    "JAX" : {}
+}
+"""
 
 # ----------------------------------------------Clusterer----------------------------------------------
 class Clusterer:
@@ -29,38 +54,27 @@ class Clusterer:
 
     def initialize_message(self):  # 构建clusterer的初始提词并返回对话消息
         # TODO 后续可能会从将Prompt中的Example存入JSON以避免硬编码
-        example1 = """json
-        {   
-            "Pytorch" : {
-                "1" : ["torch.tensor", "torch.nn.CrossEntropyLoss"],
-            },
-            "Tensorflow" : {
-                "1" : ["tensorflow.keras.losses.CategoricalCrossentropy"], // tensorflow.keras.losses.CategoricalCrossentropy internal will automatically array into Tensorflow tensor, so there is no need to be used with tensorflow.constant
-                "2" : ["tensorflow.constant", "tensorflow.nn.softmax_cross_entropy_with_logits"] // Before using tensorflow.nn.softmax_cross_entropy_with_logits, it needs to use tensorflow.constant to convert the input value into a tensor
-            },
-            "JAX" : {
-                "1" : ["jax.numpy.array", "jax.nn.log_softmax", "jax.numpy.sum"] // Before using jax.nn.softmax_cross_entropy, it needs to use jax.numpy.array to convert the input value into a tensor. After using jax.nn.softmax_cross_entropy, it needs to use jax.numpy.sum to calculate the sum of the cross entropy loss
-            }
-        }
-        """
-
-        example2 = """json
-        {   
-            // Output an empty dictionary when no combination output from the TensorFlow API or JAX API has the same value as the Pytorch API
-            "Pytorch" : {
-                "1" : ["torch.tensor", "torch.nn.CrossEntropyLoss"],
-            }, 
-            "Tensorflow" : {}, 
-            "JAX" : {}
-        }
-        """
         clusterer_prompt = f"""
-        Which function apis or combinations of function api calls in TensorFlow (v{self.tf_ver}) and JAX (v{self.jax_ver}) have the exact same functionality as {self.api.full_name} in PyTorch (v{self.torch_ver})?
-        Note: "The same functionality" means that these APIs are responsible for performing exactly the same tasks. When these APIs have no return value, using these APIs to perform the same operations on inputs with the same structure or element values (such as tensors) should result in consistent changes to the original input. For example, PyTorch's torch.scatter_, TensorFlow's tensorflow.scatter_update, and JAX's jax.ops.index_update all have the functionality to update tensors, and when the tensors being updated and the update strategies are the same, the updated tensors should be consistent. When these APIs have return values, PyTorch's torch.nn.ReLU, TensorFlow's tensorflow.nn.relu or tensorflow.keras.layers.ReLU, and Jax's jax.nn.relu all produce the same output values when given the same input values.
-        Please output the function names or combinations of function names in PyTorch, TensorFlow, and JAX that meet the above conditions in JSON format, with an example shown below:
-        Example 1: {example1}
-        Example 2: {example2}
-        """
+Objective:
+Identify equivalent or similar API functions or combinations of functions in TensorFlow (v{self.tf_ver}) and JAX (v{self.jax_ver}) that perform the same tasks as the function {self.api.full_name} in Pytorch (v{self.torch_ver}).
+
+Steps:
+1.Identify the Functionality: First, understand the functionality of {self.api.full_name} in Pytorch.
+2.Search for Equivalents: Then, find API functions in TensorFlow and JAX that match this functionality.
+3.Format the Output: Present the findings in the specified JSON format.
+
+Criteria for "Same Functionality":
+1.Consistency in Input Transformation: When these APIs have no return value, applying them to inputs with the same structure or element values (such as tensors) should result in consistent transformations or changes to the original input.
+2.Consistency in Output: When these APIs have return values, they should produce the same output values when given the same input values.
+
+Required Output Format:
+1.Structure: The output should be a JSON object with three keys: "Pytorch", "Tensorflow", and "JAX". Each key should map to a dictionary where the values are lists of API functions (or combinations of API functions) that provide the same functionality.
+2.Examples:
+Example 1: 
+{EXAMPLE1}
+Example 2: 
+{EXAMPLE2}
+"""
         messages = [
             {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
             {"role": "user", "content": clusterer_prompt}
