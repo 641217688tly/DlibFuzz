@@ -246,7 +246,9 @@ Output Format Example:
                 pytorch_combination_id=multi_lib_combinations[0].id if multi_lib_combinations[0] else None,
                 tensorflow_combination_id=multi_lib_combinations[1].id if multi_lib_combinations[1] else None,
                 jax_combination_id=multi_lib_combinations[2].id if multi_lib_combinations[2] else None,
-                code=response_data)
+                code=response_data,
+                unverified_file_path=f'{folder_path}/{seed_folder_name}/seed_{i}.py',
+            )
             session.add(new_seed)
             session.commit()
 
