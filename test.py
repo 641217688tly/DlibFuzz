@@ -21,39 +21,106 @@
 # print(data)
 
 
-import torch
-import tensorflow as tf
-import jax
-import jax.numpy as jnp
+# import torch
+# import tensorflow as tf
+# import jax
+# import jax.numpy as jnp
+#
+# # Logits
+# logits = [[4.0, 1.0, 0.2]]
+# # Labels (one-hot encoded)
+# labels = [[1.0, 0.0, 0.0]]
+#
+# # PyTorch
+# logits_pt = torch.tensor(logits, requires_grad=True)
+# labels_pt = torch.tensor(labels)
+# loss_fn_pt = torch.nn.CrossEntropyLoss()
+# output_pt = loss_fn_pt(logits_pt, torch.argmax(labels_pt, dim=1))
+# print("PyTorch Loss:", output_pt.item())
+#
+# # TensorFlow: tf.keras.losses.CategoricalCrossentropy
+# loss_fn_tf_keras = tf.keras.losses.CategoricalCrossentropy(from_logits=True)
+# output_tf_keras = loss_fn_tf_keras(labels, logits).numpy()
+# print("TensorFlow Keras Loss:", output_tf_keras)
+#
+# # TensorFlow: tf.nn.softmax_cross_entropy_with_logits
+# logits_tf = tf.constant(logits)
+# labels_tf = tf.constant(labels)
+# output_tf = tf.nn.softmax_cross_entropy_with_logits(labels=labels_tf, logits=logits_tf)
+# print("TensorFlow NN Loss:", output_tf.numpy()[0])
+#
+# # JAX
+# logits_jax = jnp.array(logits)
+# labels_jax = jnp.array(labels)
+# log_softmax = jax.nn.log_softmax(logits_jax)
+# output_jax = -jnp.sum(labels_jax * log_softmax)
+# print("JAX Loss:", output_jax)
 
-# Logits
-logits = [[4.0, 1.0, 0.2]]
-# Labels (one-hot encoded)
-labels = [[1.0, 0.0, 0.0]]
+# import subprocess
+#
+# file_path = 'fuzzer/seeds/unverified_seeds/1/1_1_1/seed_0.py'
+#
+#
+# def static_analysis(file_path):  # 静态分析Python代码, 如果发现错误, 则返回False和错误信息
+#    errors2check = [
+#        'syntax-error',  # 语法错误
+#        'import-error',  # 导入错误
+#        'undefined-variable'  # 未定义变量
+#    ]
+#    enable_param = ','.join(errors2check)
+#    result = subprocess.run(
+#        ['pylint', file_path, '--disable=all', f'--enable={enable_param}', '--score=no'],
+#        capture_output=True, text=True
+#    )
+#    errors = result.stdout
+#    if errors == "":
+#        return True, errors
+#    else:
+#        errors_lines = errors.split('\n')
+#        if errors_lines[0].startswith("*************"):
+#            errors_cleaned = "\n".join(errors_lines[1:]).strip()
+#        else:
+#            errors_cleaned = errors.strip()
+#        return False, errors_cleaned
+# _, errors = static_analysis(file_path)
+# print(errors)
 
-# PyTorch
-logits_pt = torch.tensor(logits, requires_grad=True)
-labels_pt = torch.tensor(labels)
-loss_fn_pt = torch.nn.CrossEntropyLoss()
-output_pt = loss_fn_pt(logits_pt, torch.argmax(labels_pt, dim=1))
-print("PyTorch Loss:", output_pt.item())
-
-# TensorFlow: tf.keras.losses.CategoricalCrossentropy
-loss_fn_tf_keras = tf.keras.losses.CategoricalCrossentropy(from_logits=True)
-output_tf_keras = loss_fn_tf_keras(labels, logits).numpy()
-print("TensorFlow Keras Loss:", output_tf_keras)
-
-# TensorFlow: tf.nn.softmax_cross_entropy_with_logits
-logits_tf = tf.constant(logits)
-labels_tf = tf.constant(labels)
-output_tf = tf.nn.softmax_cross_entropy_with_logits(labels=labels_tf, logits=logits_tf)
-print("TensorFlow NN Loss:", output_tf.numpy()[0])
-
-# JAX
-logits_jax = jnp.array(logits)
-labels_jax = jnp.array(labels)
-log_softmax = jax.nn.log_softmax(logits_jax)
-output_jax = -jnp.sum(labels_jax * log_softmax)
-print("JAX Loss:", output_jax)
+import subprocess
 
 
+def run_flake8(file_path):
+    result = subprocess.run(
+        ['flake8', file_path, '--select=F'],
+        capture_output=True, text=True
+    )
+    errors = result.stdout
+    if errors == "":
+        return True, errors
+    else:
+        return False, errors
+
+
+file_path = 'fuzzer/seeds/unverified_seeds/1/1_2_1/seed_0.py'
+_, errors = run_flake8(file_path)
+print(errors)
+
+
+def eliminate_markdown(file_path):  # 去除markdown语法
+    def remove_markdown(code: str):
+        code_lines = code.split('\n')  # 将代码按行分割成列表
+        if code_lines[0].strip().startswith("```"):  # 检查并去除第一行如果它是"```python"
+            code_lines = code_lines[1:]
+        if code_lines[-1].strip().startswith("```"):  # 检查并去除最后一行如果它是"```"
+            code_lines = code_lines[:-1]
+        cleaned_code = '\n'.join(code_lines)  # 重新组合代码为单个字符串
+        return cleaned_code
+
+    with open(file_path, 'r') as f:
+        code = f.read()
+    cleaned_code = remove_markdown(code)
+
+    with open(file_path, 'w') as f:
+        f.write(cleaned_code + '\n')
+
+
+eliminate_markdown(file_path)

@@ -165,6 +165,9 @@ class ClusterTestSeed(Base):
     pytorch_code = Column(Text, nullable=True)
     tensorflow_code = Column(Text, nullable=True)
     jax_code = Column(Text, nullable=True)
+    unverified_file_path = Column(Text, nullable=True)  # 该种子的文件路径
+    verified_file_path = Column(Text, nullable=True)  # 该种子的文件路径
+    is_verified = Column(Boolean, default=False)  # 该种子是否已经验证过了
 
 
 # 创建表
