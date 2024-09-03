@@ -223,8 +223,8 @@ def attach_error_trigger_code(api_class, error_trigger_class, dir_path, session)
 if __name__ == '__main__':
     session = utils.get_session()
     # 如果JAX/Tensorflow/Pytorch数据库中为空，添加数据
-    # add_apis_from_txt(session)
-    # add_apis_from_json(session)
+    add_apis_from_txt(session)
+    add_apis_from_json(session)
 
     torch_dir = '../data/error_triggers/pytorch_issue'
     tf_dir = '../data/error_triggers/tensorflow_issue'

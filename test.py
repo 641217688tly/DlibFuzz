@@ -56,34 +56,34 @@
 # output_jax = -jnp.sum(labels_jax * log_softmax)
 # print("JAX Loss:", output_jax)
 
-# import subprocess
-#
-# file_path = 'fuzzer/seeds/unverified_seeds/1/1_1_1/seed_0.py'
-#
-#
-# def static_analysis(file_path):  # 静态分析Python代码, 如果发现错误, 则返回False和错误信息
-#    errors2check = [
-#        'syntax-error',  # 语法错误
-#        'import-error',  # 导入错误
-#        'undefined-variable'  # 未定义变量
-#    ]
-#    enable_param = ','.join(errors2check)
-#    result = subprocess.run(
-#        ['pylint', file_path, '--disable=all', f'--enable={enable_param}', '--score=no'],
-#        capture_output=True, text=True
-#    )
-#    errors = result.stdout
-#    if errors == "":
-#        return True, errors
-#    else:
-#        errors_lines = errors.split('\n')
-#        if errors_lines[0].startswith("*************"):
-#            errors_cleaned = "\n".join(errors_lines[1:]).strip()
-#        else:
-#            errors_cleaned = errors.strip()
-#        return False, errors_cleaned
-# _, errors = static_analysis(file_path)
-# print(errors)
+import subprocess
+
+file_path = 'fuzzer/seeds/unverified_seeds/1/1_1_1/seed_0.py'
+
+
+def static_analysis(file_path):  # 静态分析Python代码, 如果发现错误, 则返回False和错误信息
+   errors2check = [
+       'syntax-error',  # 语法错误
+       'import-error',  # 导入错误
+       'undefined-variable'  # 未定义变量
+   ]
+   enable_param = ','.join(errors2check)
+   result = subprocess.run(
+       ['pylint', file_path, '--disable=all', f'--enable={enable_param}', '--score=no'],
+       capture_output=True, text=True
+   )
+   errors = result.stdout
+   if errors == "":
+       return True, errors
+   else:
+       errors_lines = errors.split('\n')
+       if errors_lines[0].startswith("*************"):
+           errors_cleaned = "\n".join(errors_lines[1:]).strip()
+       else:
+           errors_cleaned = errors.strip()
+       return False, errors_cleaned
+_, errors = static_analysis(file_path)
+print(errors)
 
 import subprocess
 

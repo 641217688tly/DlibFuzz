@@ -29,8 +29,8 @@ REQUIREMENTS_PROMPT = """
 """
 
 OUTPUT_EXAMPLE_PROMPT = """
+Known API combinations ["torch.tensor", "torch.nn.CrossEntropyLoss"] from the PyTorch library, ["tensorflow.constant", "tensorflow.nn.softmax_cross_entropy_with_logits"] from the TensorFlow library, and ["jax.numpy.array", "jax.nn.log_softmax", "jax.numpy.sum"] from the JAX library all have the same functionality. The code snippet for differential testing of these API combinations is as follows:
 ```python
-# Background: API combinations ["torch.tensor", "torch.nn.CrossEntropyLoss"] from the PyTorch library, ["tensorflow.constant", "tensorflow.nn.softmax_cross_entropy_with_logits"] from the TensorFlow library, and ["jax.numpy.array", "jax.nn.log_softmax", "jax.numpy.sum"] from the JAX library all have the same functionality. The code snippet for differential testing of these API combinations is as follows:
 logits = [[4.0, 1.0, 0.2]]
 # Labels (one-hot encoded)
 labels = [[1.0, 0.0, 0.0]]
@@ -248,6 +248,7 @@ Output Format Example:
                 jax_combination_id=multi_lib_combinations[2].id if multi_lib_combinations[2] else None,
                 code=response_data,
                 unverified_file_path=f'{folder_path}/{seed_folder_name}/seed_{i}.py',
+                verified_file_path=f'{folder_path}/{seed_folder_name}/seed_{i}.py'.replace("unverified_seeds","verified_seeds")
             )
             session.add(new_seed)
             session.commit()
