@@ -87,7 +87,6 @@
 
 import subprocess
 
-
 def run_flake8(file_path):
     result = subprocess.run(
         ['flake8', file_path, '--select=F'],
@@ -99,28 +98,6 @@ def run_flake8(file_path):
     else:
         return False, errors
 
-
-file_path = 'fuzzer/seeds/unverified_seeds/1/1_2_1/seed_0.py'
+file_path = 'fuzzer/seeds/unverified_seeds/1/1_1_1/seed_0.py'
 _, errors = run_flake8(file_path)
 print(errors)
-
-
-def eliminate_markdown(file_path):  # 去除markdown语法
-    def remove_markdown(code: str):
-        code_lines = code.split('\n')  # 将代码按行分割成列表
-        if code_lines[0].strip().startswith("```"):  # 检查并去除第一行如果它是"```python"
-            code_lines = code_lines[1:]
-        if code_lines[-1].strip().startswith("```"):  # 检查并去除最后一行如果它是"```"
-            code_lines = code_lines[:-1]
-        cleaned_code = '\n'.join(code_lines)  # 重新组合代码为单个字符串
-        return cleaned_code
-
-    with open(file_path, 'r') as f:
-        code = f.read()
-    cleaned_code = remove_markdown(code)
-
-    with open(file_path, 'w') as f:
-        f.write(cleaned_code + '\n')
-
-
-eliminate_markdown(file_path)

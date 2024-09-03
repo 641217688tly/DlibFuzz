@@ -1,0 +1,20 @@
+Code Snippet:
+{seed.code}
+
+Error Details:
+{error_details}
+
+Objective:
+Please fix the error in the code snippet based on the error details.
+
+Requirements:
+1.Only output the corrected code snippet.
+2.Do not include any explanations, comments, or additional text.
+
+
+
+
+
+
+
+

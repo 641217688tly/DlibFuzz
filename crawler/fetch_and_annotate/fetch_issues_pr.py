@@ -4,7 +4,7 @@ import requests
 from bs4 import BeautifulSoup
 
 
-def fetch_issues(repo_owner: str, repo_name: str, label: str='bug', num_results: int=100) -> list[dict]:
+def fetch_issues(repo_owner: str, repo_name: str, label: str = 'bug', num_results: int = 100) -> list[dict]:
     issues = []
     page = 1
     while len(issues) < num_results:
@@ -26,11 +26,11 @@ def fetch_issues(repo_owner: str, repo_name: str, label: str='bug', num_results:
             if len(issues) >= num_results:
                 break
         page += 1
-    
+
     return issues
 
 
-def fetch_pull_requests(repo_owner: str, repo_name: str, state: str='open', num_results: int=100) -> list[dict]:
+def fetch_pull_requests(repo_owner: str, repo_name: str, state: str = 'open', num_results: int = 100) -> list[dict]:
     pull_requests = []
     page = 1
     while len(pull_requests) < num_results:
@@ -52,7 +52,7 @@ def fetch_pull_requests(repo_owner: str, repo_name: str, state: str='open', num_
             if len(pull_requests) >= num_results:
                 break
         page += 1
-    
+
     return pull_requests
 
 
@@ -60,7 +60,7 @@ def fetch_issue_content(issue_url: str) -> str:
     response = requests.get(issue_url)
     if response.status_code != 200:
         return 'Failed to fetch issue content.'
-    
+
     soup = BeautifulSoup(response.text, 'html.parser')
     content_div = soup.find('div', {'class': 'edit-comment-hide'})
     content = content_div.text.strip() if content_div else 'No content found...'
@@ -71,7 +71,7 @@ def fetch_pr_content(pr_url: str) -> str:
     response = requests.get(pr_url)
     if response.status_code != 200:
         return 'Failed to fetch pull request content.'
-    
+
     soup = BeautifulSoup(response.text, 'html.parser')
     content_div = soup.find('div', {'class': 'comment-body'})
     content = content_div.text.strip() if content_div else 'No content found...'
@@ -100,54 +100,54 @@ if __name__ == "__main__":
 
     # fetch issues and pull requests from PyTorch
     print('Fetching issues from PyTorch...')
-    issues_torch = fetch_issues('pytorch', 'pytorch', num_results=100)
+    issues_torch = fetch_issues('pytorch', 'pytorch', num_results=1000)
 
     print('Saving the results to "pytorch_issue"...')
     index_pytorch_issues = 0
     for issue in issues_torch:
         save_to_file(save_directory, 'pytorch_issue', str(index_pytorch_issues), issue)
         index_pytorch_issues += 1
-    
+
     print('Fetching pull requests from PyTorch...')
-    pr_torch = fetch_pull_requests('pytorch', 'pytorch', num_results=100)
+    pr_torch = fetch_pull_requests('pytorch', 'pytorch', num_results=1000)
 
     print('Saving the results to "pytorch_pr"...')
     index_pytorch_pr = 0
     for pr in pr_torch:
         save_to_file(save_directory, 'pytorch_pr', str(index_pytorch_pr), pr)
         index_pytorch_pr += 1
-    
+
     # fetch issues and pull requests from TensorFlow
     print('Fetching issues from TensorFlow...')
-    issues_tf = fetch_issues('tensorflow', 'tensorflow', label='type:bug', num_results=100)
+    issues_tf = fetch_issues('tensorflow', 'tensorflow', label='type:bug', num_results=1000)
 
     print('Saving the results to "tensorflow_issue"...')
     index_tf_issues = 0
     for issue in issues_tf:
         save_to_file(save_directory, 'tensorflow_issue', str(index_tf_issues), issue)
         index_tf_issues += 1
-    
+
     print('Fetching pull requests from TensorFlow...')
-    pr_tf = fetch_pull_requests('tensorflow', 'tensorflow', num_results=100)
+    pr_tf = fetch_pull_requests('tensorflow', 'tensorflow', num_results=1000)
 
     print('Saving the results to "tensorflow_pr"...')
     index_tf_pr = 0
     for pr in pr_tf:
         save_to_file(save_directory, 'tensorflow_pr', str(index_tf_pr), pr)
         index_tf_pr += 1
-    
+
     # fetch issues and pull requests from JAX
     print('Fetching issues from JAX...')
-    issues_jax = fetch_issues('google', 'jax', num_results=100)
+    issues_jax = fetch_issues('google', 'jax', num_results=1000)
 
     print('Saving the results to "jax_issue"...')
     index_jax_issues = 0
     for issue in issues_jax:
         save_to_file(save_directory, 'jax_issue', str(index_jax_issues), issue)
         index_jax_issues += 1
-    
+
     print('Fetching pull requests from JAX...')
-    pr_jax = fetch_pull_requests('google', 'jax', num_results=100)
+    pr_jax = fetch_pull_requests('google', 'jax', num_results=1000)
 
     print('Saving the results to "jax_pr"...')
     index_jax_pr = 0

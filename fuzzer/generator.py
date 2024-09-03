@@ -224,7 +224,7 @@ Output Format Example:
                     response = openai_client.chat.completions.create(
                         model="gpt-4o-mini",  # gpt-4o-mini  gpt-3.5-turbo
                         messages=[
-                            {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
+                            {"role": "system", "content": "You're an AI assistant adept at using multiple deep learning libraries"},
                             {"role": "user", "content": prompt}
                         ],
                         temperature=1,
