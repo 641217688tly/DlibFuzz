@@ -44,6 +44,7 @@
 4. 运行***cluster/dataloader***以添加Pytorch, Tensorflow和Jax的API信息以及触发崩溃的历史代码调用片段到数据库
 5. 分别运行***cluster/torch_api_cluster.py***, ***cluster/tf_api_cluster.py***和***cluster/jax_api_cluster.py***来分别为先前添加进数据库中的添加Pytorch, Tensorflow和Jax的API进行聚类**(这一步需要开启网络代理)**
 6. 在聚类完成后, 运行***fuzzer/generator.py***来对所有聚类逐个生成测试种子**(这一步需要开启网络代理)**
+7. 当模糊器完成初始种子生成后, 运行***fuzzer/validator.py***来修复存在错误的种子
 
 
 
