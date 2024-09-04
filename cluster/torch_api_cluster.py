@@ -56,14 +56,14 @@ class Clusterer:
         # TODO 后续可能会从将Prompt中的Example存入JSON以避免硬编码
         clusterer_prompt = f"""
 Objective:
-Identify equivalent or similar API functions or combinations of functions in TensorFlow (v{self.tf_ver}) and JAX (v{self.jax_ver}) that perform the same tasks as the function {self.api.full_name} in Pytorch (v{self.torch_ver}).
+Identify equivalent or identical API functions or combinations of functions in TensorFlow (v{self.tf_ver}) and JAX (v{self.jax_ver}) that perform the same tasks as the function {self.api.full_name} in Pytorch (v{self.torch_ver}).
 
 Steps:
 1.Identify the Functionality: First, understand the functionality of {self.api.full_name} in Pytorch.
 2.Search for Equivalents: Then, find API functions in TensorFlow and JAX that match this functionality.
 3.Format the Output: Present the findings in the specified JSON format.
 
-Criteria for "Same Functionality":
+Criteria for "Identical Functionality":
 1.Consistency in Input Transformation: When these APIs have no return value, applying them to inputs with the same structure or element values (such as tensors) should result in consistent transformations or changes to the original input.
 2.Consistency in Output: When these APIs have return values, they should produce the same output values when given the same input values.
 

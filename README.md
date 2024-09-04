@@ -43,7 +43,9 @@
 3. 运行***orm.py***以在mysql数据库中初始化表
 4. 运行***cluster/dataloader***以添加Pytorch, Tensorflow和Jax的API信息以及触发崩溃的历史代码调用片段到数据库
 5. 分别运行***cluster/torch_api_cluster.py***, ***cluster/tf_api_cluster.py***和***cluster/jax_api_cluster.py***来分别为先前添加进数据库中的添加Pytorch, Tensorflow和Jax的API进行聚类**(这一步需要开启网络代理)**
-6. 在聚类完成后, 运行***fuzzer/generator.py***来对所有聚类逐个生成测试种子**(这一步需要开启网络代理)**
+6. 在聚类完成后, 运行***fuzzer/generator_few_shot.py***或***fuzzer/generator_zero_shot.py***来对所有聚类逐个生成测试种子**(这一步需要开启网络代理)**
+   + ***fuzzer/generator_few_shot.py***的使用前提是：（1）爬取并处理了触发深度学习库的过往代码片段；（2）使用了***cluster/dataloader.py***中的**attach_error_trigger_code()**函数将代码片段数据添加进了数据库
+   + ***fuzzer/generator_zero_shot.py***将不使用触发崩溃的代码片段构建大语言模型的上下文，因此可以直接使用
 7. 当模糊器完成初始种子生成后, 运行***fuzzer/validator.py***来修复存在错误的种子
 
 

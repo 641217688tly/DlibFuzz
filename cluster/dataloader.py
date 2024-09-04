@@ -229,6 +229,6 @@ if __name__ == '__main__':
     torch_dir = '../data/error_triggers/pytorch_issue'
     tf_dir = '../data/error_triggers/tensorflow_issue'
     jax_dir = '../data/error_triggers/jax_issue'
-    attach_error_trigger_code(PytorchAPI, PytorchErrorTriggerCode, torch_dir, session)
-    attach_error_trigger_code(TensorflowAPI, TensorflowErrorTriggerCode, tf_dir, session)
-    attach_error_trigger_code(JaxAPI, JaxErrorTriggerCode, jax_dir, session)
+    #attach_error_trigger_code(PytorchAPI, PytorchErrorTriggerCode, torch_dir, session)
+    #attach_error_trigger_code(TensorflowAPI, TensorflowErrorTriggerCode, tf_dir, session)
+    #attach_error_trigger_code(JaxAPI, JaxErrorTriggerCode, jax_dir, session)

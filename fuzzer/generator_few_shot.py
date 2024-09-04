@@ -26,6 +26,7 @@ REQUIREMENTS_PROMPT = """
 4.Clear Separation: Use comments # PyTorch, # TensorFlow, and # JAX to clearly separate the code snippets for each library.
 5.Code-Only Format: Only output code and comments in the required format, avoiding any additional text or Markdown syntax.
 6.Simplicity: Avoid creating custom functions or classes for code that is not reused multiple times.
+7.Correctness: Ensure the generated code does not contain syntax errors (e.g., SyntaxError, NameError) or invalid input errors (e.g., ValueError, InvalidArgumentError).
 """
 
 OUTPUT_EXAMPLE_PROMPT = """
@@ -156,7 +157,7 @@ Code:
 
 
 def generate_seeds(session, openai_client, cluster, seeds_num=5):
-    folder_path = f'seeds/unverified_seeds/{cluster.id}'
+    folder_path = f'seeds/unverified_seeds/few-shot/{cluster.id}'
     # 在folder_path下创建一个新的文件夹, 文件夹名为cluster.id
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
@@ -197,13 +198,17 @@ def generate_seeds(session, openai_client, cluster, seeds_num=5):
             torch_error_trigger_examples = weighted_sampling(torch_error_triggers_dict, target[0])
             tf_error_trigger_examples = weighted_sampling(tf_error_triggers_dict, target[1])
             jax_error_trigger_examples = weighted_sampling(jax_error_triggers_dict, target[2])
-            error_trigger_examples_prompt = construct_error_trigger_examples_prompt(torch_error_trigger_examples,tf_error_trigger_examples,jax_error_trigger_examples)
+            error_trigger_examples_prompt = construct_error_trigger_examples_prompt(torch_error_trigger_examples,
+                                                                                    tf_error_trigger_examples,
+                                                                                    jax_error_trigger_examples)
             prompt = f"""
 Objective:
 Generate code snippets that can be used to differentially test API combinations from PyTorch (v{TORCH_VERSION}), TensorFlow (v{TF_VERSION}), and JAX (v{JAX_VERSION}), which have identical functionalities. The goal is to identify potential crashes or inconsistencies across these libraries.
 
 Background:
-API combinations from the PyTorch {torch_apis}, TensorFlow {tf_apis}, and JAX {jax_apis} all have identical functionalities. The code examples below are intended to trigger crashes or reveal discrepancies in these deep learning libraries.
+API combinations from the PyTorch {torch_apis}, TensorFlow {tf_apis}, and JAX {jax_apis} all have identical functionalities. The definition of "Identical Functionality" is as follows:
+1.Consistency in Input Transformation: When these APIs have no return value, applying them to inputs with the same structure or element values (such as tensors) should result in consistent transformations or changes to the original input.
+2.Consistency in Output: When these APIs have return values, they should produce the same output values when given the same input values.
 
 Steps:
 {STEPS_PROMPT}
@@ -212,6 +217,7 @@ Requirements:
 {REQUIREMENTS_PROMPT}
 
 Example of triggering crashes in deep learning libraries:
+The code examples below are intended to trigger crashes or reveal discrepancies in these deep learning libraries.
 {error_trigger_examples_prompt}
 
 Output Format Example:
@@ -224,7 +230,8 @@ Output Format Example:
                     response = openai_client.chat.completions.create(
                         model="gpt-4o-mini",  # gpt-4o-mini  gpt-3.5-turbo
                         messages=[
-                            {"role": "system", "content": "You're an AI assistant adept at using multiple deep learning libraries"},
+                            {"role": "system",
+                             "content": "You're an AI assistant adept at using multiple deep learning libraries"},
                             {"role": "user", "content": prompt}
                         ],
                         temperature=1,
@@ -248,7 +255,8 @@ Output Format Example:
                 jax_combination_id=multi_lib_combinations[2].id if multi_lib_combinations[2] else None,
                 code=response_data,
                 unverified_file_path=f'{folder_path}/{seed_folder_name}/seed_{i}.py',
-                verified_file_path=f'{folder_path}/{seed_folder_name}/seed_{i}.py'.replace("unverified_seeds","verified_seeds")
+                verified_file_path=f'{folder_path}/{seed_folder_name}/seed_{i}.py'.replace("unverified_seeds",
+                                                                                           "verified_seeds")
             )
             session.add(new_seed)
             session.commit()

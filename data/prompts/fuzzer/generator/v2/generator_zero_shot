@@ -5,10 +5,9 @@ Background:
 API combinations from the PyTorch {torch_apis}, TensorFlow {tf_apis}, and JAX {jax_apis} all have identical functionalities. The definition of "Identical Functionality" is as follows:
 1.Consistency in Input Transformation: When these APIs have no return value, applying them to inputs with the same structure or element values (such as tensors) should result in consistent transformations or changes to the original input.
 2.Consistency in Output: When these APIs have return values, they should produce the same output values when given the same input values.
-The code examples below are intended to trigger crashes or reveal discrepancies in these deep learning libraries.
 
 Steps:
-1.Review Examples: Analyze the provided code examples that caused crashes in deep learning libraries to understand which operations or input values might lead to errors.
+1.Consider: For given APIs, think about which edge cases and combinations of API calls may expose potential vulnerabilities in the API.
 2.Generate Differential Testing Code: Create code snippets for differential testing using the identified API combinations from PyTorch, TensorFlow, and JAX.
 Step 1: Define common variable values that will be used across all three libraries.
 Step 2: Write code for PyTorch using the provided API combination ({torch_apis}).
@@ -23,38 +22,6 @@ Requirements:
 5.Code-Only Format: Only output code and comments in the required format, avoiding any additional text or Markdown syntax.
 6.Simplicity: Avoid creating custom functions or classes for code that is not reused multiple times.
 7.Correctness: Ensure the generated code does not contain syntax errors (e.g., SyntaxError, NameError) or invalid input errors (e.g., ValueError, InvalidArgumentError).
-
-Example of triggering crashes in deep learning libraries:
-The code examples below are intended to trigger crashes or reveal discrepancies in these deep learning libraries.
-Example1:
-Title:
-Description:
-Code:
-
-Example2:
-Title:
-Description:
-Code:
-
-Example3:
-Title:
-Description:
-Code:
-
-Example4:
-Title:
-Description:
-Code:
-
-Example5:
-Title:
-Description:
-Code:
-
-Example6:
-Title:
-Description:
-Code:
 
 Output Format Example:
 Known API combinations ["torch.tensor", "torch.nn.CrossEntropyLoss"] from the PyTorch library, ["tensorflow.constant", "tensorflow.nn.softmax_cross_entropy_with_logits"] from the TensorFlow library, and ["jax.numpy.array", "jax.nn.log_softmax", "jax.numpy.sum"] from the JAX library all have the same functionality. The code snippet for differential testing of these API combinations is as follows:

@@ -101,3 +101,10 @@ def run_flake8(file_path):
 file_path = 'fuzzer/seeds/unverified_seeds/1/1_1_1/seed_0.py'
 _, errors = run_flake8(file_path)
 print(errors)
+
+import tensorflow as tf
+
+# 使用dtype为float32的张量与int32的张量相乘
+a = tf.constant([1, 2, 3], dtype=tf.float32)
+b = tf.constant([4, 5, 6], dtype=tf.int32)
+tf.add(a, b)
