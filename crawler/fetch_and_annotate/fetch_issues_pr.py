@@ -12,7 +12,7 @@ def fetch_issues(repo_owner: str, repo_name: str, label: str='bug', num_results:
     while len(issues) < num_results:
         url =f'https://api.github.com/repos/{repo_owner}/{repo_name}/issues'
         params = {
-            'state': 'open',
+            'state': 'all',
             'labels': label,
             'page': page,
             'per_page': 100
@@ -43,27 +43,35 @@ def fetch_issues(repo_owner: str, repo_name: str, label: str='bug', num_results:
 def fetch_pull_requests(repo_owner: str, repo_name: str, state: str='open', num_results: int=100) -> list[dict]:
     pull_requests = []
     page = 1
+    headers = {'Authorization': os.getenv('GITHUB_TOKEN', '')}
+
     while len(pull_requests) < num_results:
-        url = f'https://github.com/{repo_owner}/{repo_name}/pulls?q=is%3Apr+is%3A{state}&page={page}&per_page=30'
-        response = requests.get(url)
+        url = f'https://api.github.com/repos/{repo_owner}/{repo_name}/pulls'
+        # url = f'https://github.com/{repo_owner}/{repo_name}/pulls?q=is%3Apr+is%3A{state}&page={page}&per_page=30'
+        params = {
+            'state': state,
+            'page': page,
+            'per_page': 100
+        }
+
+        response = requests.get(url, headers=headers, params=params)
         if response.status_code != 200:
             raise Exception(f"Failed to fetch pull requests: {response.status_code}")
 
-        soup = BeautifulSoup(response.text, 'html.parser')
-        pr_rows = soup.find_all('div', {'class': 'js-issue-row'})
-        if not pr_rows:
-            break  # Exit if no more pull requests are found
+        page_pull_requests = response.json()
+        if not page_pull_requests:
+            break
 
-        for pr in pr_rows:
-            title = pr.find('a', {'data-hovercard-type': 'pull_request'}).text.strip()
-            pr_url = 'https://github.com' + pr.find('a', {'data-hovercard-type': 'pull_request'})['href']
+        for pr in page_pull_requests:
+            title = pr.get('title')
+            pr_url = pr.get('html_url')
             content = fetch_pr_content(pr_url)
             pull_requests.append({'title': title, 'url': pr_url, 'content': content})
             if len(pull_requests) >= num_results:
                 break
         page += 1
-    
-    return pull_requests
+
+        return pull_requests
 
 
 def fetch_issue_content(issue_url: str) -> str:
