@@ -266,5 +266,21 @@ def run():
         print(f"Unclustered / Total: {unclustered_torch_apis_num} / {total_apis_num}")
 
 
+def run_remaining():
+    # 创建数据库连接
+    session = get_session()
+    openai_client = get_openai_client()
+
+    # 对未聚类的TensorflowAPI进行聚类
+    uncluttered_torch_apis = session.query(JaxAPI).filter_by(is_clustered=False).all()
+    for i, uncluttered_torch_api in enumerate(uncluttered_torch_apis):
+        print("----------------------------------------------------------------------------------")
+        # 选择一个未聚类的TensorflowAPI
+        clusterer = Clusterer(uncluttered_torch_api, session, openai_client)
+        clusterer.cluster_api()
+        print(f"Unclustered / Total: {len(uncluttered_torch_apis) - i - 1} / {len(uncluttered_torch_apis)}" + "\n")
+
+
 if __name__ == '__main__':
     run()
+    #run_remaining()

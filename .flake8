@@ -1,4 +1,4 @@
 [flake8]
-ignore = F811,F841
+ignore = F811,F841,F401
 select = F
 max-line-length = 1200
