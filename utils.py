@@ -1,11 +1,11 @@
 import importlib
 import inspect
+import os
 import warnings
 import httpx
-import yaml
 from openai import OpenAI
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from orm import *
 
 def get_session():
     with open('config.yml', 'r', encoding='utf-8') as file:  # 读取config.yml文件
@@ -47,6 +47,7 @@ def validate_api_existence(module_name, api_name):  # 验证API是否存在的�
     except (ModuleNotFoundError, AttributeError):
         return False
 
+
 def validate_api_availability(function):  # 验证API是否可用的函数
     """Check if the function is deprecated."""
     docstring = inspect.getdoc(function)
@@ -61,7 +62,6 @@ def validate_api_availability(function):  # 验证API是否可用的函数
         except Exception:
             pass
         return any(item.category == DeprecationWarning for item in w)
-
 
 
 def check_api_list(file_path):  # 检查每个API是否存在
@@ -100,3 +100,18 @@ def check_all_api_lists():
     api_check_results3, exists_count3, not_exists_count3 = check_api_list(file_path3)
     print(f"\nNumber of Tensorflow APIs that exist: {exists_count3}")
     print(f"Number of Tensorflow APIs that do not exist: {not_exists_count3}")
+
+
+def export_all_validated_seeds():  # 从数据库中将所有验证过的seed导出为Python文件
+    session = get_session()
+    # 获取所有is_verified == True的种子
+    seeds = session.query(ClusterTestSeed).filter(ClusterTestSeed.is_verified == True).all()
+    for seed in seeds:
+        print(f"Exporting validated seed: {seed.verified_file_path}")
+        if not os.path.exists(seed.verified_file_path):
+            os.makedirs(os.path.dirname(seed.verified_file_path), exist_ok=True)
+        with open(seed.verified_file_path, 'w') as f:
+            f.write(seed.code)
+
+if __name__ == '__main__':
+    export_all_validated_seeds()

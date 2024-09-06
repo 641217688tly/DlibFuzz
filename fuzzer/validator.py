@@ -1,6 +1,4 @@
-import os
 import subprocess
-from orm import *
 from utils import *
 
 
@@ -22,7 +20,7 @@ Requirements:
     return prompt
 
 
-def export_validated_seed(seed: ClusterTestSeed):
+def export_validated_seed(seed: ClusterTestSeed):  # 导出单个验证过的seed为Python文件
     print(f"Exporting validated seed: {seed.verified_file_path}")
     if seed.is_verified:
         if not os.path.exists(seed.verified_file_path):
@@ -87,11 +85,11 @@ class SeedValidator:
             return False, error_details
 
     def static_analysis(self, file_path):  # 静态分析Python代码, 如果发现错误, 则返回False和错误信息
-        #is_valid1, error_details1 = self.flake8_static_analysis(file_path)
-        #is_valid2, error_details2 = self.pylint_static_analysis(file_path)
-        #is_valid = is_valid1 and is_valid2
-        #error_details = error_details1 + error_details2
-        #return is_valid, error_details
+        # is_valid1, error_details1 = self.flake8_static_analysis(file_path)
+        # is_valid2, error_details2 = self.pylint_static_analysis(file_path)
+        # is_valid = is_valid1 and is_valid2
+        # error_details = error_details1 + error_details2
+        # return is_valid, error_details
         is_valid, error_details = self.flake8_static_analysis(file_path)
         return is_valid, error_details
 
@@ -153,7 +151,7 @@ class SeedValidator:
                 print(f"An unexpected error occurred: {e}")
 
 
-if __name__ == '__main__':
+def validate_all_seeds():
     session = get_session()
     openai_client = get_openai_client()
     validator = SeedValidator(session, openai_client)
@@ -170,3 +168,7 @@ if __name__ == '__main__':
         # 打印未校验的种子数量
         total_seeds_num = session.query(ClusterTestSeed).count()
         print(f"Unvalidated / Total: {len(unverified_seeds)} / {total_seeds_num}")
+
+
+if __name__ == '__main__':
+    validate_all_seeds()

@@ -2,6 +2,7 @@ from utils import *
 from tqdm.contrib import itertools
 import os
 from orm import *
+import threading
 
 ERROR_TRIGGER_TARGET = 6
 
@@ -58,7 +59,7 @@ print("JAX Loss:", output_jax)
 """
 
 
-def generate_seeds(session, openai_client, cluster, seeds_num=5):
+def generate_seeds4cluster(session, openai_client, cluster, seeds_num=5):
     folder_path = f'seeds/unverified_seeds/zero-shot/{cluster.id}'
     # 在folder_path下创建一个新的文件夹, 文件夹名为cluster.id
     if not os.path.exists(folder_path):
@@ -110,7 +111,8 @@ Output Format Example:
                     response = openai_client.chat.completions.create(
                         model="gpt-4o-mini",  # gpt-4o-mini  gpt-3.5-turbo
                         messages=[
-                            {"role": "system", "content": "You're an AI assistant adept at using multiple deep learning libraries"},
+                            {"role": "system",
+                             "content": "You're an AI assistant adept at using multiple deep learning libraries"},
                             {"role": "user", "content": prompt}
                         ],
                         temperature=1,
@@ -134,7 +136,8 @@ Output Format Example:
                 jax_combination_id=multi_lib_combinations[2].id if multi_lib_combinations[2] else None,
                 code=response_data,
                 unverified_file_path=f'{folder_path}/{seed_folder_name}/seed_{i}.py',
-                verified_file_path=f'{folder_path}/{seed_folder_name}/seed_{i}.py'.replace("unverified_seeds","verified_seeds")
+                verified_file_path=f'{folder_path}/{seed_folder_name}/seed_{i}.py'.replace("unverified_seeds",
+                                                                                           "verified_seeds")
             )
             session.add(new_seed)
             session.commit()
@@ -148,6 +151,39 @@ Output Format Example:
     session.commit()
 
 
+def generate_seeds4clusters(session, openai_client, clusters, seeds_num=5):
+    for cluster in clusters:
+        print(f"Processing cluster ID: {cluster.id}")
+        generate_seeds4cluster(session, openai_client, cluster, seeds_num)
+
+
+def multithreaded_run(thread_num=3):
+    sessions = []
+    openai_clients = []
+    for i in range(thread_num):
+        sessions.append(get_session())
+        openai_clients.append(get_openai_client())
+
+    untested_clusters = get_session().query(Cluster).filter(Cluster.is_tested == False).all()
+    print(f"Total clusters to process: {len(untested_clusters)}")
+
+    # 划分任务
+    split_clusters = [untested_clusters[i::thread_num] for i in range(
+        thread_num)]  # split_clusters = [[cluster1,cluster2,..],[cluster2000,cluster2001,...],[cluster4000,cluster40001,...]]
+
+    threads = []
+    for i, clusters in enumerate(split_clusters):
+        thread = threading.Thread(target=generate_seeds4clusters, args=(sessions[i], openai_clients[i], clusters))
+        threads.append(thread)
+        thread.start()
+
+    for thread in threads:
+        thread.join()
+
+    for session in sessions:
+        session.close()
+
+
 def run():
     session = get_session()
     openai_client = get_openai_client()
@@ -156,7 +192,7 @@ def run():
     untested_clusters = session.query(Cluster).filter(Cluster.is_tested == False).all()
     while untested_clusters:
         print("----------------------------------------------------------------------------------")
-        generate_seeds(session, openai_client, untested_clusters[0])
+        generate_seeds4cluster(session, openai_client, untested_clusters[0])
         untested_clusters = session.query(Cluster).filter(Cluster.is_tested == False).all()
         total_clusters_num = session.query(Cluster).count()
         untested_clusters_num = len(untested_clusters)
@@ -165,3 +201,4 @@ def run():
 
 if __name__ == '__main__':
     run()
+    #multithreaded_run()
