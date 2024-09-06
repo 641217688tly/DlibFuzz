@@ -34,21 +34,48 @@ class SeedValidator:
         self.session = session
         self.openai_client = openai_client
 
-    def eliminate_markdown(self, seed: ClusterTestSeed):  # 去除markdown语法
+    def sync_code(self, seed: ClusterTestSeed, seed_file_path):  # 更新数据库中的种子代码(会消除markdown语法并插入可能需要的导入语句)和指定py文件中的种子代码
+        # 同步py文件中的代码
+        if not os.path.exists(seed_file_path):
+            os.makedirs(os.path.dirname(seed_file_path), exist_ok=True)
+        with open(seed_file_path, 'w') as f:
+            f.write(seed.code)
+
+    def eliminate_markdown(self, seed: ClusterTestSeed):  # 去除seed.code中的markdown语法
         code = seed.code
         code_lines = code.split('\n')  # 将代码按行分割成列表
         # 过滤掉所有以"```"开头的行
         cleaned_lines = [line for line in code_lines if not line.strip().startswith("```")]
         cleaned_code = '\n'.join(cleaned_lines)  # 重新组合代码为单个字符串
-        # 1.更新数据库中的种子代码
+        # 更新数据库中的种子代码
         seed.code = cleaned_code
         self.session.commit()
-        # 2.更新对应的.py文件中的代码
-        if not os.path.exists(seed.unverified_file_path):
-            os.makedirs(os.path.dirname(seed.unverified_file_path), exist_ok=True)
-        with open(seed.unverified_file_path, 'w') as f:
-            f.write(cleaned_code)
-        return cleaned_code
+        # 同步unverified_file_path下的py文件中的种子代码
+        self.sync_code(seed, seed.unverified_file_path)
+
+    def insert_possible_imports(self, seed: ClusterTestSeed):  # 向seed.code中插入可能的导入语句
+        code = seed.code
+        possible_imports = [
+            "import torch",
+            "import tensorflow",
+            "import jax"
+        ]
+        code_lines = code.split('\n')
+
+        # 检查代码中是否已包含了可能的导入语句
+        imports_to_add = []
+        for import_statement in possible_imports:
+            if not import_statement in code_lines:  # 如果代码中没有包含该导入语句, 则将其添加到imports_to_add列表中
+                imports_to_add.append(import_statement)
+
+        # 如果有需要添加的导入语句，将它们插入到代码的开头
+        if imports_to_add:
+            updated_code = '\n'.join(imports_to_add) + '\n' + code
+            seed.code = updated_code  # 更新seed中的代码
+            self.session.commit()
+
+        # 同步unverified_file_path下的py文件中的种子代码
+        self.sync_code(seed, seed.unverified_file_path)
 
     def pylint_static_analysis(self, file_path):  # 使用静态分析工具pylint分析Python代码, 如果发现错误, 则返回False和错误信息
         # TODO 该静态分析工具存在误报问题, 暂时放弃使用
@@ -93,26 +120,17 @@ class SeedValidator:
         is_valid, error_details = self.flake8_static_analysis(file_path)
         return is_valid, error_details
 
-    def update_seed(self, seed: ClusterTestSeed, seed_path, verified_code: str):  # 更新种子代码
-        # 更新数据库中的种子代码
-        seed.code = verified_code
-        self.session.commit()
-        # 更新对应的.py文件中的代码
-        if not os.path.exists(seed_path):
-            os.makedirs(os.path.dirname(seed_path), exist_ok=True)
-        with open(seed_path, 'w') as f:
-            f.write(verified_code)
-        self.eliminate_markdown(seed)  # 去除markdown语法
-
     def validate(self, seed: ClusterTestSeed, max_attempt_limit=5):  # 修复代码中的错误
-        self.eliminate_markdown(seed)  # 去除markdown语法
+        self.eliminate_markdown(seed)  # 去除seed.code和unverified_file_path中的markdown语法
+        self.insert_possible_imports(seed)  # 向seed.code和unverified_file_path中插入可能的导入语句
         is_valid, error_details = self.static_analysis(seed.unverified_file_path)
 
         if is_valid:  # 如果代码没有错误, 则直接标记为已验证然后结束修复
             seed.is_verified = True
-            self.update_seed(seed, seed.verified_file_path, seed.code)
+            self.sync_code(seed, seed.verified_file_path)
             self.session.commit()
             return
+
         print(f"\nError Details:\n {error_details}")
 
         prompt = construct_prompt(seed.code, error_details)
@@ -131,13 +149,16 @@ class SeedValidator:
                 )
                 verified_code = response.choices[0].message.content
                 messages.append({"role": "system", "content": verified_code})
-                self.update_seed(seed, seed.unverified_file_path, verified_code)  # 更新数据库和py文件中的种子代码
+                seed.code = verified_code  # 更新seed.code
+                self.session.commit()
+                self.eliminate_markdown(seed)  # 去除seed.code和unverified_file_path中的markdown语法
+                self.insert_possible_imports(seed)  # 向seed.code和unverified_file_path中插入可能的导入语句
                 print(f"Verified Code:\n {verified_code}")
 
                 is_valid, error_details = self.static_analysis(seed.unverified_file_path)
                 if is_valid:
                     seed.is_verified = True
-                    self.update_seed(seed, seed.verified_file_path, verified_code)
+                    self.sync_code(seed, seed.verified_file_path)
                     self.session.commit()
                     return
                 else:

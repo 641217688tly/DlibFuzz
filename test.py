@@ -19,6 +19,8 @@
 # )
 # data = response.choices[0].message.content
 # print(data)
+from orm import ClusterTestSeed
+from utils import get_session
 
 
 # import torch
@@ -56,55 +58,84 @@
 # output_jax = -jnp.sum(labels_jax * log_softmax)
 # print("JAX Loss:", output_jax)
 
-import subprocess
+# import subprocess
+#
+# file_path = 'fuzzer/seeds/unverified_seeds/1/1_1_1/seed_0.py'
+#
+#
+# def static_analysis(file_path):  # 静态分析Python代码, 如果发现错误, 则返回False和错误信息
+#    errors2check = [
+#        'syntax-error',  # 语法错误
+#        'import-error',  # 导入错误
+#        'undefined-variable'  # 未定义变量
+#    ]
+#    enable_param = ','.join(errors2check)
+#    result = subprocess.run(
+#        ['pylint', file_path, '--disable=all', f'--enable={enable_param}', '--score=no'],
+#        capture_output=True, text=True
+#    )
+#    errors = result.stdout
+#    if errors == "":
+#        return True, errors
+#    else:
+#        errors_lines = errors.split('\n')
+#        if errors_lines[0].startswith("*************"):
+#            errors_cleaned = "\n".join(errors_lines[1:]).strip()
+#        else:
+#            errors_cleaned = errors.strip()
+#        return False, errors_cleaned
+# _, errors = static_analysis(file_path)
+# print(errors)
+#
+# import subprocess
+#
+# def run_flake8(file_path):
+#     result = subprocess.run(
+#         ['flake8', file_path, '--select=F'],
+#         capture_output=True, text=True
+#     )
+#     errors = result.stdout
+#     if errors == "":
+#         return True, errors
+#     else:
+#         return False, errors
+#
+# file_path = 'fuzzer/seeds/unverified_seeds/1/1_1_1/seed_0.py'
+# _, errors = run_flake8(file_path)
+# print(errors)
+#
+# import tensorflow as tf
+#
+# # 使用dtype为float32的张量与int32的张量相乘
+# a = tf.constant([1, 2, 3], dtype=tf.float32)
+# b = tf.constant([4, 5, 6], dtype=tf.int32)
+# tf.add(a, b)
 
-file_path = 'fuzzer/seeds/unverified_seeds/1/1_1_1/seed_0.py'
 
+def insert_possible_imports(code):  # 向seed.code中插入可能的导入语句
+    print(code)
+    possible_imports = [
+        "import torch",
+        "import tensorflow",
+        "import jax"
+    ]
+    code_lines = code.split('\n')
 
-def static_analysis(file_path):  # 静态分析Python代码, 如果发现错误, 则返回False和错误信息
-   errors2check = [
-       'syntax-error',  # 语法错误
-       'import-error',  # 导入错误
-       'undefined-variable'  # 未定义变量
-   ]
-   enable_param = ','.join(errors2check)
-   result = subprocess.run(
-       ['pylint', file_path, '--disable=all', f'--enable={enable_param}', '--score=no'],
-       capture_output=True, text=True
-   )
-   errors = result.stdout
-   if errors == "":
-       return True, errors
-   else:
-       errors_lines = errors.split('\n')
-       if errors_lines[0].startswith("*************"):
-           errors_cleaned = "\n".join(errors_lines[1:]).strip()
-       else:
-           errors_cleaned = errors.strip()
-       return False, errors_cleaned
-_, errors = static_analysis(file_path)
-print(errors)
+    # 检查代码中是否已包含了可能的导入语句
+    imports_to_add = []
+    for import_statement in possible_imports:
+        if not import_statement in code_lines:  # 如果代码中没有包含该导入语句, 则将其添加到imports_to_add列表中
+            imports_to_add.append(import_statement)
 
-import subprocess
+    # 如果有需要添加的导入语句，将它们插入到代码的开头
+    if imports_to_add:
+        updated_code = '\n'.join(imports_to_add) + '\n' + code
+        print("=" * 10)
+        print(updated_code)
 
-def run_flake8(file_path):
-    result = subprocess.run(
-        ['flake8', file_path, '--select=F'],
-        capture_output=True, text=True
-    )
-    errors = result.stdout
-    if errors == "":
-        return True, errors
-    else:
-        return False, errors
+# 读取fuzzer/seeds/unverified_seeds/zero-shot/1/1_1_1/seed_0.py中的代码
+file_path = 'fuzzer/seeds/unverified_seeds/zero-shot/1/1_1_1/seed_0.py'
+with open(file_path, 'r') as file:
+    code = file.read()
+    insert_possible_imports(code)
 
-file_path = 'fuzzer/seeds/unverified_seeds/1/1_1_1/seed_0.py'
-_, errors = run_flake8(file_path)
-print(errors)
-
-import tensorflow as tf
-
-# 使用dtype为float32的张量与int32的张量相乘
-a = tf.constant([1, 2, 3], dtype=tf.float32)
-b = tf.constant([4, 5, 6], dtype=tf.int32)
-tf.add(a, b)
