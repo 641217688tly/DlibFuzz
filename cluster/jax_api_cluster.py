@@ -122,7 +122,6 @@ Example 2:
         except Exception as e:
             self.errors.append(str(e))
             return False
-
     def validate_apis(self, response):
         """
         验证JSON中API的格式是完整函数名(完整函数名 = 模块名.API名)而非函数签名
@@ -217,7 +216,8 @@ Example 2:
             接收并处理clusterer的响应结果, 创建cluster聚类和关联的API组合
         """
         try:
-            self.api.is_clustered = True
+            self.api.\
+                is_clustered = True
             # 1. 解析返回的JSON数据并检查Pytorch,Tensorflow和Jax中的所有API名,如果PytorchAPI表或TensorflowAPI表或JAX表中没有对应的API,则先在对应表中创建对应的数据
             torch_apis_combination_objects = self.supplement_apis(json_data['Pytorch'], PytorchAPI)
             tf_apis_combination_objects = self.supplement_apis(json_data['Tensorflow'], TensorflowAPI)
