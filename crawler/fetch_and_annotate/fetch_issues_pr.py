@@ -1,7 +1,24 @@
 import datetime
 import os
 import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
+
+
+def create_session_with_retries():
+    session = requests.Session()
+    retry = Retry(
+        total=5,  # Retry up to 5 times
+        backoff_factor=1,  # Wait 1 second between retries, then 2, 4, etc.
+        status_forcelist=[429, 500, 502, 503, 504]  # Retry on these HTTP statuses
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    return session
+
+session = create_session_with_retries()
 
 
 def fetch_issues(repo_owner: str, repo_name: str, label: str='bug', num_results: int=100) -> list[dict]:
@@ -75,7 +92,7 @@ def fetch_pull_requests(repo_owner: str, repo_name: str, state: str='open', num_
 
 
 def fetch_issue_content(issue_url: str) -> str:
-    response = requests.get(issue_url)
+    response = session.get(issue_url)
     if response.status_code != 200:
         return 'Failed to fetch issue content.'
     
@@ -86,7 +103,7 @@ def fetch_issue_content(issue_url: str) -> str:
 
 
 def fetch_pr_content(pr_url: str) -> str:
-    response = requests.get(pr_url)
+    response = session.get(pr_url)
     if response.status_code != 200:
         return 'Failed to fetch pull request content.'
     
@@ -118,7 +135,7 @@ if __name__ == "__main__":
 
     # fetch issues and pull requests from PyTorch
     print('Fetching issues from PyTorch...')
-    issues_torch = fetch_issues('pytorch', 'pytorch', num_results=100)
+    issues_torch = fetch_issues('pytorch', 'pytorch', num_results=1000)
 
     print('Saving the results to "pytorch_issue"...')
     index_pytorch_issues = 0
@@ -127,7 +144,7 @@ if __name__ == "__main__":
         index_pytorch_issues += 1
     
     print('Fetching pull requests from PyTorch...')
-    pr_torch = fetch_pull_requests('pytorch', 'pytorch', num_results=100)
+    pr_torch = fetch_pull_requests('pytorch', 'pytorch', num_results=1000)
 
     print('Saving the results to "pytorch_pr"...')
     index_pytorch_pr = 0
@@ -137,7 +154,7 @@ if __name__ == "__main__":
     
     # fetch issues and pull requests from TensorFlow
     print('Fetching issues from TensorFlow...')
-    issues_tf = fetch_issues('tensorflow', 'tensorflow', label='type:bug', num_results=100)
+    issues_tf = fetch_issues('tensorflow', 'tensorflow', label='type:bug', num_results=1000)
 
     print('Saving the results to "tensorflow_issue"...')
     index_tf_issues = 0
@@ -146,7 +163,7 @@ if __name__ == "__main__":
         index_tf_issues += 1
     
     print('Fetching pull requests from TensorFlow...')
-    pr_tf = fetch_pull_requests('tensorflow', 'tensorflow', num_results=100)
+    pr_tf = fetch_pull_requests('tensorflow', 'tensorflow', num_results=1000)
 
     print('Saving the results to "tensorflow_pr"...')
     index_tf_pr = 0
@@ -156,7 +173,7 @@ if __name__ == "__main__":
     
     # fetch issues and pull requests from JAX
     print('Fetching issues from JAX...')
-    issues_jax = fetch_issues('google', 'jax', num_results=100)
+    issues_jax = fetch_issues('google', 'jax', num_results=1000)
 
     print('Saving the results to "jax_issue"...')
     index_jax_issues = 0
@@ -165,7 +182,7 @@ if __name__ == "__main__":
         index_jax_issues += 1
     
     print('Fetching pull requests from JAX...')
-    pr_jax = fetch_pull_requests('google', 'jax', num_results=100)
+    pr_jax = fetch_pull_requests('google', 'jax', num_results=1000)
 
     print('Saving the results to "jax_pr"...')
     index_jax_pr = 0
