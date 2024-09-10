@@ -7,6 +7,7 @@ from openai import OpenAI
 from sqlalchemy.orm import sessionmaker
 from orm import *
 
+
 def get_session():
     with open('config.yml', 'r', encoding='utf-8') as file:  # 读取config.yml文件
         config = yaml.safe_load(file)
@@ -113,5 +114,31 @@ def export_all_validated_seeds():  # 从数据库中将所有验证过的seed导
         with open(seed.verified_file_path, 'w') as f:
             f.write(seed.code)
 
+
+def get_cluster_api_combinations(cluster_id: int):
+    session = get_session()
+    cluster = session.query(Cluster).filter(Cluster.id == cluster_id).first()
+    pytorch_combinations = cluster.pytorch_combinations
+    tensorflow_combinations = cluster.tensorflow_combinations
+    jax_combinations = cluster.jax_combinations
+
+    def print_combinations(combinations, api_type):
+        print("\n" + "*" * 100)
+        print(f"{api_type} API combinations:")
+        for combination in combinations:
+            print("=" * 80)
+            print(f"{api_type} API combination ID: {combination.id}")
+            # 获得Pytorch API组合中的所有API
+            apis = combination.apis
+            for api in apis:
+                print("-" * 60)
+                print(f"{api_type} API ID: {api.id}, Full name: {api.full_name}")
+
+    print_combinations(pytorch_combinations, "Pytorch")
+    print_combinations(tensorflow_combinations, "Tensorflow")
+    print_combinations(jax_combinations, "JAX")
+
+
 if __name__ == '__main__':
-    export_all_validated_seeds()
+    # export_all_validated_seeds()
+    get_cluster_api_combinations(2)
