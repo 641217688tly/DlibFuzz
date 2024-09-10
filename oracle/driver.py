@@ -1,6 +1,8 @@
 import os
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import torch
 import numpy as np
 import time
@@ -10,11 +12,9 @@ import multiprocessing
 import traceback
 
 
-def execute_code_snippets(file_path: str):
-    with open(file_path, 'r') as f:
-        code_lines = f.readlines()
-
+def execute_code_snippets(file_path: str, code_lines: list):
     # 分离公共部分和各库的代码片段
+    print(f"Executing code snippets in {file_path}")
     common_code = []
     pytorch_code = []
     tensorflow_code = []
@@ -73,14 +73,56 @@ def execute_code_snippets(file_path: str):
 
     return results
 
+def traverse_and_execute_seeds(base_dir):
+    """
+    并行化处理文件，并执行其中的代码片段
+    """
+    results = []
+    file_paths = []
+
+    # 获取所有待处理的文件路径
+    for root, dirs, files in os.walk(base_dir):
+        for file in files:
+            if file.endswith(".py"):
+                file_path = os.path.join(root, file)
+                with open(file_path, 'r') as f:
+                    content = f.readlines()
+                file_paths.append((file_path, content))
+
+    # 使用 ThreadPoolExecutor 处理并发
+    with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+        futures = {executor.submit(execute_code_snippets, path, content): path for path, content in file_paths}
+        for future in as_completed(futures):
+            try:
+                results.append(future.result())
+            except Exception as e:
+                print(f"Error executing {futures[future]}: {str(e)}")
+
+    return results
+
+
+# def traverse_and_execute_seeds(base_dir):
+#     """
+#     遍历Python 文件，并执行其中的代码片段
+#     """
+#     results = []
+#     for root, dirs, files in os.walk(base_dir):
+#         for file in files:
+#             if file.endswith(".py"):
+#                 file_path = os.path.join(root, file)
+#                 print(f"Executing seed file: {file_path}")
+#                 result = execute_code_snippets(file_path)
+#                 results.append(result)
+#     return results
+
 
 def run_pytorch_code(common_code, pytorch_code):
     code = "\n".join(common_code + pytorch_code)
-    exec_globals = globals().copy()
-    exec(code, exec_globals)
+    exec_locals = {}
+    exec(code, {}, exec_locals)
 
     # 尝试获取多个可能的输出变量
-    output = exec_globals.get('output_pt')
+    output = exec_locals.get('output_pt')
 
     if output is None:
         return None
@@ -97,15 +139,14 @@ def run_pytorch_code(common_code, pytorch_code):
             return f"Unserializable output of type {type(output).__name__}"
 
 
-def run_tensorflow_code_in_subprocess(common_code, tensorflow_code):
+def run_tensorflow_code(common_code, tensorflow_code):
     def target(return_dict):
         try:
             code = "\n".join(common_code + tensorflow_code)
-            exec_globals = globals().copy()
-            exec(code, exec_globals)
+            exec_locals = {}
+            exec(code, {}, exec_locals)
 
-            # 尝试获取多个可能的输出变量
-            output = exec_globals.get('output_tf')
+            output = exec_locals.get('output_tf')
 
             if output is None:
                 return_dict["result"] = None
@@ -151,10 +192,6 @@ def run_tensorflow_code_in_subprocess(common_code, tensorflow_code):
     return return_dict.get("result", None)
 
 
-def run_tensorflow_code(common_code, tensorflow_code):
-    return run_tensorflow_code_in_subprocess(common_code, tensorflow_code)
-
-
 # def run_tensorflow_code(common_code, tensorflow_code):
 #     code = "\n".join(common_code + tensorflow_code)
 #     exec_globals = globals().copy()
@@ -182,11 +219,10 @@ def run_tensorflow_code(common_code, tensorflow_code):
 
 def run_jax_code(common_code, jax_code):
     code = "\n".join(common_code + jax_code)
-    exec_globals = globals().copy()
-    exec(code, exec_globals)
+    exec_locals = {}
+    exec(code, {}, exec_locals)
 
-    # 尝试获取多个可能的输出变量
-    output = exec_globals.get('output_jax')
+    output = exec_locals.get('output_jax')
 
     if output is None:
         return None
@@ -205,21 +241,6 @@ def run_jax_code(common_code, jax_code):
         except TypeError:
             # 如果不可序列化，返回错误信息
             return f"Unserializable output of type {type(output).__name__}"
-
-
-def traverse_and_execute_seeds(base_dir):
-    """
-    遍历Python 文件，并执行其中的代码片段
-    """
-    results = []
-    for root, dirs, files in os.walk(base_dir):
-        for file in files:
-            if file.endswith(".py"):
-                file_path = os.path.join(root, file)
-                print(f"Executing seed file: {file_path}")
-                result = execute_code_snippets(file_path)
-                results.append(result)
-    return results
 
 
 def convert_ndarray_to_list(obj):
@@ -337,7 +358,7 @@ def convert_to_hashable(item):
 
 def get_next_available_filename(directory, base_name, extension):
     """
-    生成新的文件
+    生成新的文件名
     """
     files = os.listdir(directory)
     existing_files = [f for f in files if re.match(rf'{base_name}_(\d+){re.escape(extension)}', f)]
