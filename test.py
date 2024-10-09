@@ -152,22 +152,28 @@ input_tensor = [[1.0, 2.0, 3.0]]
 kernel = [[0.5, 0.5], [0.5, 0.5]]
 
 # PyTorch
-#input_pt = torch.tensor(input_tensor)
-#kernel_pt = torch.tensor(kernel)
-#output_pt = F.conv2d(input_pt.unsqueeze(0).unsqueeze(0), kernel_pt.unsqueeze(0).unsqueeze(0), stride=1)
-#print("PyTorch Output:", output_pt)
+# input_pt = torch.tensor(input_tensor)
+# kernel_pt = torch.tensor(kernel)
+# output_pt = F.conv2d(input_pt.unsqueeze(0).unsqueeze(0), kernel_pt.unsqueeze(0).unsqueeze(0), stride=1)
+# print("PyTorch Output:", output_pt)
 
 # TensorFlow
+# input_tf = tf.constant(input_tensor, dtype=tf.float32)
+# kernel_tf = tf.constant(kernel, dtype=tf.float32)
+# output_tf = tf.nn.conv2d(tf.expand_dims(input_tf, axis=0), tf.expand_dims(kernel_tf, axis=0), strides=[1, 1, 1, 1], padding='VALID')
+# print("TensorFlow Output:", output_tf.numpy())
+
 input_tf = tf.constant(input_tensor, dtype=tf.float32)
 kernel_tf = tf.constant(kernel, dtype=tf.float32)
-output_tf = tf.nn.conv2d(tf.expand_dims(input_tf, axis=0), tf.expand_dims(kernel_tf, axis=0), strides=[1, 1, 1, 1], padding='VALID')
+output_tf = tf.nn.conv2d(input_tf, kernel_tf, strides=[1, 1, 1, 1], padding='VALID')
 print("TensorFlow Output:", output_tf.numpy())
 
+
 # JAX
-#input_jax = jnp.array(input_tensor)
-#kernel_jax = jnp.array(kernel)
-#output_jax = jax.lax.conv_general_dilated(jnp.expand_dims(input_jax, axis=0).reshape(1, 1, 1, 3),
+# input_jax = jnp.array(input_tensor)
+# kernel_jax = jnp.array(kernel)
+# output_jax = jax.lax.conv_general_dilated(jnp.expand_dims(input_jax, axis=0).reshape(1, 1, 1, 3),
 #                                           jnp.expand_dims(kernel_jax, axis=0).reshape(1, 1, 2, 2),
 #                                           (1, 1),
 #                                           'VALID')
-#print("JAX Output:", output_jax)
+# print("JAX Output:", output_jax)
