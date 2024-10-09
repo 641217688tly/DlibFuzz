@@ -143,14 +143,14 @@ if __name__ == "__main__":
         save_to_file(save_directory, 'pytorch_issue', str(index_pytorch_issues), issue)
         index_pytorch_issues += 1
     
-    print('Fetching pull requests from PyTorch...')
-    pr_torch = fetch_pull_requests('pytorch', 'pytorch', num_results=1000)
+    # print('Fetching pull requests from PyTorch...')
+    # pr_torch = fetch_pull_requests('pytorch', 'pytorch', num_results=1000)
 
-    print('Saving the results to "pytorch_pr"...')
-    index_pytorch_pr = 0
-    for pr in pr_torch:
-        save_to_file(save_directory, 'pytorch_pr', str(index_pytorch_pr), pr)
-        index_pytorch_pr += 1
+    # print('Saving the results to "pytorch_pr"...')
+    # index_pytorch_pr = 0
+    # for pr in pr_torch:
+    #     save_to_file(save_directory, 'pytorch_pr', str(index_pytorch_pr), pr)
+    #     index_pytorch_pr += 1
     
     # fetch issues and pull requests from TensorFlow
     print('Fetching issues from TensorFlow...')
@@ -162,14 +162,14 @@ if __name__ == "__main__":
         save_to_file(save_directory, 'tensorflow_issue', str(index_tf_issues), issue)
         index_tf_issues += 1
     
-    print('Fetching pull requests from TensorFlow...')
-    pr_tf = fetch_pull_requests('tensorflow', 'tensorflow', num_results=1000)
+    # print('Fetching pull requests from TensorFlow...')
+    # pr_tf = fetch_pull_requests('tensorflow', 'tensorflow', num_results=1000)
 
-    print('Saving the results to "tensorflow_pr"...')
-    index_tf_pr = 0
-    for pr in pr_tf:
-        save_to_file(save_directory, 'tensorflow_pr', str(index_tf_pr), pr)
-        index_tf_pr += 1
+    # print('Saving the results to "tensorflow_pr"...')
+    # index_tf_pr = 0
+    # for pr in pr_tf:
+    #     save_to_file(save_directory, 'tensorflow_pr', str(index_tf_pr), pr)
+    #     index_tf_pr += 1
     
     # fetch issues and pull requests from JAX
     print('Fetching issues from JAX...')
@@ -181,13 +181,13 @@ if __name__ == "__main__":
         save_to_file(save_directory, 'jax_issue', str(index_jax_issues), issue)
         index_jax_issues += 1
     
-    print('Fetching pull requests from JAX...')
-    pr_jax = fetch_pull_requests('google', 'jax', num_results=1000)
+    # print('Fetching pull requests from JAX...')
+    # pr_jax = fetch_pull_requests('google', 'jax', num_results=1000)
 
-    print('Saving the results to "jax_pr"...')
-    index_jax_pr = 0
-    for pr in pr_jax:
-        save_to_file(save_directory, 'jax_pr', str(index_jax_pr), pr)
-        index_jax_pr += 1
+    # print('Saving the results to "jax_pr"...')
+    # index_jax_pr = 0
+    # for pr in pr_jax:
+    #     save_to_file(save_directory, 'jax_pr', str(index_jax_pr), pr)
+    #     index_jax_pr += 1
 
     print('Done!')

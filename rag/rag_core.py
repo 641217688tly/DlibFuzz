@@ -13,7 +13,7 @@ from langchain.prompts import PromptTemplate
 from embeddings import OllamaEmbeddings
 from llm import CodeQwenLLM
 
-# Step 1: Load HTML files
+# Step 1: 加载文档
 def load_html_files(directory):
     documents = []
     for filename in os.listdir(directory):
@@ -25,21 +25,21 @@ def load_html_files(directory):
                 documents.append(text)
     return documents
 
-# Step 2: Process documents
+# Step 2: 预处理文档
 docs = load_html_files('demo_docs')
 text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
 split_docs = text_splitter.split_documents([Document(page_content=doc) for doc in docs])
 
-# Step 3: Initialize the custom Ollama embeddings
+# Step 3: 初始化向量嵌入
 embeddings = OllamaEmbeddings(model="llama3.1")
 
 # Create a FAISS vector store from the documents and their embeddings
 vector_store = FAISS.from_documents(split_docs, embeddings)
 
-# Step 4: Initialize the custom LLM
+# Step 4: 初始化LLM
 llm = CodeQwenLLM()
 
-# Step 5: Build the Retrieval-Augmented Generation pipeline
+# Step 5: 建立RAG管道
 prompt_template = """
 You are an AI assistant specialized in generating code based on user requirements.
 
@@ -61,13 +61,13 @@ prompt = PromptTemplate(
 
 qa_chain = RetrievalQA.from_chain_type(
     llm=llm,
-    chain_type="stuff",
+    # chain_type="stuff",
     retriever=vector_store.as_retriever(),
-    prompt=prompt
+    # prompt=prompt
 )
 
-# Step 6: Interactive interface
-def main():
+
+if __name__ == "__main__":
     print("Welcome to the Code Generation RAG System!")
     print("Type 'exit' or 'quit' to terminate the program.\n")
 
@@ -78,13 +78,10 @@ def main():
             break
 
         try:
-            answer = qa_chain.run(query)
+            answer = qa_chain.invoke(query)
             print("\nGenerated Code:\n")
             print(answer)
             print("\n" + "-"*50 + "\n")
         except Exception as e:
             print(f"An error occurred: {e}")
             print("\n" + "-"*50 + "\n")
-
-if __name__ == "__main__":
-    main()
