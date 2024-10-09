@@ -5,24 +5,45 @@ import aiohttp
 from aiohttp import ClientSession
 from bs4 import BeautifulSoup
 import datetime
+from dotenv import load_dotenv
 
 
 async def create_session_with_retries():
-    timeout = aiohttp.ClientTimeout(total=60)
+    timeout = aiohttp.ClientTimeout(total=120)
     connector = aiohttp.TCPConnector(limit=10)  # limit concurrent connections
     session = aiohttp.ClientSession(timeout=timeout, connector=connector)
     return session
 
 
-# Check and handle rate limiting
+import time
+
 async def handle_rate_limiting(response):
-    if response.status == 403 and 'X-RateLimit-Remaining' in response.headers:
+    # Check for rate limit status and handle accordingly
+    if response.status in {429, 403} or 'X-RateLimit-Remaining' in response.headers:
+        # Retrieve the remaining requests count
         rate_limit_remaining = int(response.headers.get('X-RateLimit-Remaining', 0))
+        
+        # If remaining requests are 0, we need to wait until reset time
         if rate_limit_remaining == 0:
-            reset_time = int(response.headers.get('X-RateLimit-Reset', 0))
-            sleep_time = reset_time - int(time.time()) + 1
+            reset_time = int(response.headers.get('X-RateLimit-Reset', time.time()))
+            sleep_time = reset_time - int(time.time()) + 1  # Calculate remaining time until reset
             print(f"Rate limit reached. Sleeping for {sleep_time} seconds.")
             await asyncio.sleep(sleep_time)
+        else:
+            print(f"Remaining requests: {rate_limit_remaining}")
+    else:
+        print("No rate limiting headers found, proceeding without delay.")
+
+
+# # Check and handle rate limiting
+# async def handle_rate_limiting(response):
+#     if response.status == 403 and 'X-RateLimit-Remaining' in response.headers:
+#         rate_limit_remaining = int(response.headers.get('X-RateLimit-Remaining', 0))
+#         if rate_limit_remaining == 0:
+#             reset_time = int(response.headers.get('X-RateLimit-Reset', 0))
+#             sleep_time = reset_time - int(time.time()) + 1
+#             print(f"Rate limit reached. Sleeping for {sleep_time} seconds.")
+#             await asyncio.sleep(sleep_time)
 
 
 async def fetch_issues(repo_owner: str, repo_name: str, label: str='bug', num_results: int=100, session: ClientSession=None) -> list[dict]:
@@ -110,32 +131,51 @@ async def fetch_pull_requests(repo_owner: str, repo_name: str, state: str='open'
     return pull_requests
 
 
-async def fetch_issue_content(issue_url: str, session: ClientSession) -> str:
-    async with session.get(issue_url) as response:
-        await handle_rate_limiting(response)
+async def fetch_issue_content(issue_url: str, session: ClientSession, retries: int = 3) -> str:
+    for attempt in range(retries):
+        try:
+            async with session.get(issue_url) as response:
+                await handle_rate_limiting(response)
 
-        if response.status != 200:
-            return 'Failed to fetch issue content.'
-        
-        text = await response.text()
-        soup = BeautifulSoup(text, 'html.parser')
-        content_div = soup.find('div', {'class': 'edit-comment-hide'})
-        content = content_div.text.strip() if content_div else 'No content found...'
-        return content
+                if response.status != 200:
+                    return 'Failed to fetch issue content.'
+                
+                text = await response.text()
+                soup = BeautifulSoup(text, 'html.parser')
+                content_div = soup.find('div', {'class': 'edit-comment-hide'})
+                content = content_div.text.strip() if content_div else 'No content found...'
+                return content
+        except asyncio.TimeoutError:
+            if attempt < retries - 1:
+                backoff = (2 ** attempt)
+                print(f"Timeout occurred. Retrying in {backoff} seconds...")
+                await asyncio.sleep(backoff)
+            else:
+                return 'Timeout occurred.'
 
 
-async def fetch_pr_content(pr_url: str, session: ClientSession) -> str:
-    async with session.get(pr_url) as response:
-        await handle_rate_limiting(response)
+async def fetch_pr_content(pr_url: str, session: ClientSession, retries: int = 3) -> str:
+    for attempt in range(retries):
+        try:
+            async with session.get(pr_url) as response:
+                await handle_rate_limiting(response)
 
-        if response.status != 200:
-            return 'Failed to fetch pull request content.'
-        
-        text = await response.text()
-        soup = BeautifulSoup(text, 'html.parser')
-        content_div = soup.find('div', {'class': 'comment-body'})
-        content = content_div.text.strip() if content_div else 'No content found...'
-        return content
+                if response.status != 200:
+                    return 'Failed to fetch pull request content.'
+                
+                text = await response.text()
+                soup = BeautifulSoup(text, 'html.parser')
+                content_div = soup.find('div', {'class': 'comment-body'})
+                content = content_div.text.strip() if content_div else 'No content found...'
+                return content
+        except asyncio.TimeoutError:
+            if attempt < retries - 1:
+                backoff = (2 ** attempt)
+                print(f"Timeout occurred. Retrying in {backoff} seconds...")
+                await asyncio.sleep(backoff)
+            else:
+                return 'Timeout occurred.'
+
 
 
 def save_to_file(directory: str, prefix: str, title: str, item: dict):
@@ -153,6 +193,7 @@ def save_to_file(directory: str, prefix: str, title: str, item: dict):
 
 
 async def main():
+    load_dotenv()
     current_time = datetime.datetime.now()
     current_time_in_str = current_time.strftime('%m%d%H%M%S')
     save_directory = f'results_{current_time_in_str}'
@@ -163,12 +204,12 @@ async def main():
         print('Fetching issues and pull requests from the target repositories...')
 
         # fetch issues and PRs concurrently for each repository
-        issues_torch_task = fetch_issues('pytorch', 'pytorch', num_results=100, session=session)
-        pr_torch_task = fetch_pull_requests('pytorch', 'pytorch', num_results=100, session=session)
-        issues_tf_task = fetch_issues('tensorflow', 'tensorflow', label='type:bug', num_results=100, session=session)
-        pr_tf_task = fetch_pull_requests('tensorflow', 'tensorflow', num_results=100, session=session)
-        issues_jax_task = fetch_issues('google', 'jax', num_results=100, session=session)
-        pr_jax_task = fetch_pull_requests('google', 'jax', num_results=100, session=session)
+        issues_torch_task = fetch_issues('pytorch', 'pytorch', num_results=1000, session=session)
+        pr_torch_task = fetch_pull_requests('pytorch', 'pytorch', num_results=1000, session=session)
+        issues_tf_task = fetch_issues('tensorflow', 'tensorflow', label='type:bug', num_results=1000, session=session)
+        pr_tf_task = fetch_pull_requests('tensorflow', 'tensorflow', num_results=1000, session=session)
+        issues_jax_task = fetch_issues('google', 'jax', num_results=1000, session=session)
+        pr_jax_task = fetch_pull_requests('google', 'jax', num_results=1000, session=session)
 
         issues_torch, pr_torch, issues_tf, pr_tf, issues_jax, pr_jax = await asyncio.gather(
             issues_torch_task, pr_torch_task,
