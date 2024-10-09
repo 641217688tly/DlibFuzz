@@ -3,7 +3,7 @@ import requests
 from bs4 import BeautifulSoup
 from typing import List
 from langchain.text_splitter import CharacterTextSplitter
-from langchain.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS
 from langchain.embeddings.base import Embeddings
 from langchain.llms.base import LLM
 from llama_cpp import Llama
@@ -31,7 +31,7 @@ text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
 split_docs = text_splitter.split_documents([Document(page_content=doc) for doc in docs])
 
 # Step 3: Initialize the custom Ollama embeddings
-embeddings = OllamaEmbeddings(model="llama3")
+embeddings = OllamaEmbeddings(model="llama3.1")
 
 # Create a FAISS vector store from the documents and their embeddings
 vector_store = FAISS.from_documents(split_docs, embeddings)

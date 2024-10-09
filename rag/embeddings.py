@@ -43,6 +43,5 @@ class OllamaEmbeddings(Embeddings):
     def embedding_dimension(self) -> int:
         """
         Return the dimension of the embeddings.
-        Adjust this based on the model you are using.
         """
-        return 768  # Example dimension; replace with actual if different
+        return 768

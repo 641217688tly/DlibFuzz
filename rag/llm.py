@@ -1,12 +1,15 @@
+from typing import ClassVar
+from pydantic import PrivateAttr
 from langchain.llms.base import LLM
 from llama_cpp import Llama
 
-# Define the custom LLM
 class CodeQwenLLM(LLM):
-    model_path = "path/to/codeqwen-1_5-7b-chat-q2_k.gguf"  # Update this path
+    model_path: ClassVar[str] = "models/codeqwen-1_5-7b-chat-q8_0.gguf"  # Annotated as ClassVar
+    _llm: Llama = PrivateAttr()  # Define as a private attribute
 
     def __init__(self, **kwargs):
-        self.llm = Llama(
+        super().__init__(**kwargs)  # Initialize the superclass
+        self._llm = Llama(
             model_path=self.model_path,
             n_ctx=2048,
             n_parts=-1,
@@ -14,7 +17,7 @@ class CodeQwenLLM(LLM):
             f16_kv=False,
             logits_all=False,
             vocab_only=False,
-            use_mlock=True,
+            use_mlock=False,  # Set to False to avoid memory locking issues
             embedding=False,
             **kwargs
         )
@@ -24,7 +27,7 @@ class CodeQwenLLM(LLM):
         return "llama_cpp"
 
     def _call(self, prompt, stop=None):
-        response = self.llm.create_chat_completion(
+        response = self._llm.create_chat_completion(
             messages=[
                 {
                     "role": "user",
