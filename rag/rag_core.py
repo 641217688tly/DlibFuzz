@@ -1,101 +1,90 @@
-from langchain_community.document_loaders import TextLoader
-from langchain_community.document_loaders import BSHTMLLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+import os
+import requests
+from bs4 import BeautifulSoup
+from typing import List
+from langchain.text_splitter import CharacterTextSplitter
+from langchain.vectorstores import FAISS
+from langchain.embeddings.base import Embeddings
+from langchain.llms.base import LLM
 from llama_cpp import Llama
-from sentence_transformers import SentenceTransformer
-from transformers.utils import is_torch_cuda_available, is_torch_mps_available
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
-from langchain.prompts import ChatPromptTemplate
+from langchain.schema import Document
+from langchain.chains import RetrievalQA
+from langchain.prompts import PromptTemplate
+from embeddings import OllamaEmbeddings
+from llm import CodeQwenLLM
 
-def get_model():
-    codeqwen_llm = Llama.from_pretrained(
-        repo_id="Qwen/CodeQwen1.5-7B-Chat-GGUF",
-        filename="codeqwen-1_5-7b-chat-q2_k.gguf",
-    )
+# Step 1: Load HTML files
+def load_html_files(directory):
+    documents = []
+    for filename in os.listdir(directory):
+        if filename.endswith('.html') or filename.endswith('.htm'):
+            filepath = os.path.join(directory, filename)
+            with open(filepath, 'r', encoding='utf-8') as file:
+                soup = BeautifulSoup(file, 'html.parser')
+                text = soup.get_text(separator='\n')
+                documents.append(text)
+    return documents
 
-    return codeqwen_llm
+# Step 2: Process documents
+docs = load_html_files('demo_docs')
+text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+split_docs = text_splitter.split_documents([Document(page_content=doc) for doc in docs])
 
+# Step 3: Initialize the custom Ollama embeddings
+embeddings = OllamaEmbeddings(model="llama3")
 
-def get_docs(directory):
-    loader = BSHTMLLoader(directory)
-    documents = loader.load()
+# Create a FAISS vector store from the documents and their embeddings
+vector_store = FAISS.from_documents(split_docs, embeddings)
 
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200,
-        length_function=len
-    )
+# Step 4: Initialize the custom LLM
+llm = CodeQwenLLM()
 
-    docs = text_splitter.split_documents(documents)
+# Step 5: Build the Retrieval-Augmented Generation pipeline
+prompt_template = """
+You are an AI assistant specialized in generating code based on user requirements.
 
-    return docs
+Use the following retrieved documents to inform your code generation. If the documents are not relevant, rely on your training data.
 
+Retrieved Documents:
+{context}
 
-def preprocess(docs):
-    model_name = "moka-ai/m3e-base"
-    local_model_dir = "/mnt/workspace/m3e-base"
+User Query:
+{question}
 
-    # 词嵌入模型
-    EMBEDDING_DEVICE = "cuda" if is_torch_cuda_available() else "mps" if is_torch_mps_available() else "cpu"
-    embeddings_model = HuggingFaceEmbeddings(
-         model_name='model\m3e-base', 
-         model_kwargs={'device': EMBEDDING_DEVICE}
-    )
+Generate the appropriate code in response to the user's query.
+"""
 
-    # vectorstore = FAISS.from_documents(documents=docs, embedding=embeddings_model)
+prompt = PromptTemplate(
+    template=prompt_template,
+    input_variables=["context", "question"]
+)
 
-    # 指定保存的路径
-    save_path = "./faiss_index"
+qa_chain = RetrievalQA.from_chain_type(
+    llm=llm,
+    chain_type="stuff",
+    retriever=vector_store.as_retriever(),
+    prompt=prompt
+)
 
-    # 加载向量数据库
-    vectorstore = FAISS.load_local(save_path, embeddings_model, allow_dangerous_deserialization=True)
-    return vectorstore
+# Step 6: Interactive interface
+def main():
+    print("Welcome to the Code Generation RAG System!")
+    print("Type 'exit' or 'quit' to terminate the program.\n")
 
+    while True:
+        query = input("Enter your code-related query: ")
+        if query.lower() in ['exit', 'quit']:
+            print("Goodbye!")
+            break
 
-def get_metadata(vectorstore):
-    return vectorstore.docstore._dict.values()
-
-
-def retrieve_docs(query, vectorstore):
-    #向量检索
-    retriever = vectorstore.as_retriever()
-    docs = retriever.get_relevant_documents(query)
-    
-    return retriever, docs
-
-
-def get_llm_response(question):
-    unprocessed_docs = get_docs("demo_docs/demo.html") # TODO: Change to a more general form
-    vectorstore = preprocess(unprocessed_docs) # TODO: 预加载向量数据库
-    llm = get_model()
-
-
-    retriever, docs = retrieve_docs(question, vectorstore)
-
-    system_template = "You are an experienced programmer with profound knowledge in deep learning."
-    human_template = "Please answer my question based on the following documents: \n\n{docs}\n\nQuestion: {question}"
-
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_template),
-        ("human" , human_template)
-    ])
-
-    output_parser = StrOutputParser()
-
-    docs = retriever.get_relevant_documents(question)
-    formatted_prompt = prompt.format(docs=docs, question=question)
-
-    llm_response = llm(formatted_prompt)
-    parsed_response = output_parser.parse(llm_response)
-
-    return parsed_response, docs
-
+        try:
+            answer = qa_chain.run(query)
+            print("\nGenerated Code:\n")
+            print(answer)
+            print("\n" + "-"*50 + "\n")
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            print("\n" + "-"*50 + "\n")
 
 if __name__ == "__main__":
-    question = ""
-    response, docs = get_llm_response(question)
-    print(response)
-    print(docs)
+    main()
