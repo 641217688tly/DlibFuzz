@@ -1,5 +1,5 @@
 import yaml
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Text, Table, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Text, Table, Boolean, Enum
 from sqlalchemy.orm import relationship, declarative_base
 
 # 读取config.yml文件
@@ -17,19 +17,20 @@ db_url = f"mysql+pymysql://{user}:{password}@{host}/{database}"  # 创建数据�
 # 创建数据库连接
 Base = declarative_base()
 
-pytorch_api_combination_association = Table('pytorch_api_combination_association', Base.metadata,
-                                            Column('api_combination_id', Integer,
-                                                   ForeignKey('pytorch_api_combination.id')),
-                                            Column('api_id', Integer, ForeignKey('pytorch_api.id')))
+pytorch_api_cluster_association = Table('pytorch_api_cluster_association', Base.metadata,
+                                        Column('cluster_id', Integer, ForeignKey('cluster.id')),
+                                        Column('pytorch_api_id', Integer, ForeignKey('pytorch_api.id'))
+                                        )
 
-tensorflow_api_combination_association = Table('tensorflow_api_combination_association', Base.metadata,
-                                               Column('api_combination_id', Integer,
-                                                      ForeignKey('tensorflow_api_combination.id')),
-                                               Column('api_id', Integer, ForeignKey('tensorflow_api.id')))
+tensorflow_api_cluster_association = Table('tensorflow_api_cluster_association', Base.metadata,
+                                           Column('cluster_id', Integer, ForeignKey('cluster.id')),
+                                           Column('tensorflow_api_id', Integer, ForeignKey('tensorflow_api.id'))
+                                           )
 
-jax_api_combination_association = Table('jax_api_combination_association', Base.metadata,
-                                        Column('api_combination_id', Integer, ForeignKey('jax_api_combination.id')),
-                                        Column('api_id', Integer, ForeignKey('jax_api.id')))
+jax_api_cluster_association = Table('jax_api_cluster_association', Base.metadata,
+                                    Column('cluster_id', Integer, ForeignKey('cluster.id')),
+                                    Column('jax_api_id', Integer, ForeignKey('jax_api.id'))
+                                    )
 
 
 # ----------------------------------Pytorch----------------------------------
@@ -44,26 +45,19 @@ class PytorchAPI(Base):
     version = Column(String(255), nullable=True)  # API的版本
     embedding = Column(Text, nullable=True)  # 该API的嵌入向量, 包括函数名和功能描述
     is_clustered = Column(Boolean, default=False)  # 该API是否已经被聚类
-    error_triggers = relationship('PytorchErrorTriggerCode', back_populates='api')  # 一个API可能有多个触发bug的代码片段
+    clusters = relationship('Cluster', secondary=pytorch_api_cluster_association, back_populates='pytorch_apis')
+    error_triggers = relationship('PytorchErrorTrigger', back_populates='api')  # 一个API可能有多个触发bug的代码片段
+    seeds = relationship('ClusterTestSeed', back_populates='pytorch_api')
 
 
-class PytorchErrorTriggerCode(Base):
-    __tablename__ = 'pytorch_error_trigger_code'
+class PytorchErrorTrigger(Base):
+    __tablename__ = 'pytorch_error_trigger'
     id = Column(Integer, primary_key=True)
     api_id = Column(Integer, ForeignKey('pytorch_api.id'))
     api = relationship('PytorchAPI', back_populates='error_triggers')
     title = Column(Text, nullable=False)  # 触发error的Issue标题
     code = Column(Text, nullable=False)  # 触发error的代码片段
     description = Column(Text, nullable=True)  # 描述该代码片段是怎么触发bug的
-
-
-class PytorchAPICombination(Base):
-    __tablename__ = 'pytorch_api_combination'
-    id = Column(Integer, primary_key=True)
-    apis = relationship('PytorchAPI', secondary=pytorch_api_combination_association)
-    test_seeds = relationship('ClusterTestSeed', back_populates='pytorch_combination')
-    cluster_id = Column(Integer, ForeignKey('cluster.id'))
-    cluster = relationship('Cluster', back_populates='pytorch_combinations')
 
 
 # ----------------------------------Tensorflow----------------------------------
@@ -79,11 +73,13 @@ class TensorflowAPI(Base):
     version = Column(String(255), nullable=True)  # API的版本
     embedding = Column(Text, nullable=True)  # 该API的嵌入向量, 包括函数名和功能描述
     is_clustered = Column(Boolean, default=False)  # 该API是否已经被聚类
-    error_triggers = relationship('TensorflowErrorTriggerCode', back_populates='api')  # 一个API可能有多个触发bug的代码片段
+    clusters = relationship('Cluster', secondary=tensorflow_api_cluster_association, back_populates='tensorflow_apis')
+    error_triggers = relationship('TensorflowErrorTrigger', back_populates='api')  # 一个API可能有多个触发bug的代码片段
+    seeds = relationship('ClusterTestSeed', back_populates='tensorflow_api')
 
 
-class TensorflowErrorTriggerCode(Base):
-    __tablename__ = 'tensorflow_error_trigger_code'
+class TensorflowErrorTrigger(Base):
+    __tablename__ = 'tensorflow_error_trigger'
     id = Column(Integer, primary_key=True)
     api_id = Column(Integer, ForeignKey('tensorflow_api.id'))
     api = relationship('TensorflowAPI', back_populates='error_triggers')
@@ -92,18 +88,9 @@ class TensorflowErrorTriggerCode(Base):
     description = Column(Text, nullable=True)  # 描述该代码片段是怎么触发bug的
 
 
-class TensorflowAPICombination(Base):
-    __tablename__ = 'tensorflow_api_combination'
-    id = Column(Integer, primary_key=True)
-    apis = relationship('TensorflowAPI', secondary=tensorflow_api_combination_association)
-    test_seeds = relationship('ClusterTestSeed', back_populates='tensorflow_combination')
-    cluster_id = Column(Integer, ForeignKey('cluster.id'))
-    cluster = relationship('Cluster', back_populates='tensorflow_combinations')
+# ----------------------------------JAX----------------------------------
 
-
-# ----------------------------------Jax----------------------------------
-
-class JaxAPI(Base):
+class JAXAPI(Base):
     __tablename__ = 'jax_api'
     id = Column(Integer, primary_key=True)
     name = Column(String(255), nullable=False)  # API名
@@ -114,26 +101,19 @@ class JaxAPI(Base):
     version = Column(String(255), nullable=True)  # API的版本
     embedding = Column(Text, nullable=True)  # 该API的嵌入向量, 包括函数名和功能描述
     is_clustered = Column(Boolean, default=False)  # 该API是否已经被聚类
-    error_triggers = relationship('JaxErrorTriggerCode', back_populates='api')  # 一个API可能有多个触发bug的代码片段
+    clusters = relationship('Cluster', secondary=jax_api_cluster_association, back_populates='jax_apis')
+    error_triggers = relationship('JAXErrorTrigger', back_populates='api')  # 一个API可能有多个触发bug的代码片段
+    seeds = relationship('ClusterTestSeed', back_populates='jax_api')
 
 
-class JaxErrorTriggerCode(Base):
-    __tablename__ = 'jax_error_trigger_code'
+class JAXErrorTrigger(Base):
+    __tablename__ = 'jax_error_trigger'
     id = Column(Integer, primary_key=True)
     api_id = Column(Integer, ForeignKey('jax_api.id'))
-    api = relationship('JaxAPI', back_populates='error_triggers')
+    api = relationship('JAXAPI', back_populates='error_triggers')
     title = Column(Text, nullable=False)  # 触发error的Issue标题
     code = Column(Text, nullable=False)  # 触发error的代码片段
     description = Column(Text, nullable=True)  # 描述该代码片段是怎么触发bug的
-
-
-class JaxAPICombination(Base):
-    __tablename__ = 'jax_api_combination'
-    id = Column(Integer, primary_key=True)
-    apis = relationship('JaxAPI', secondary=jax_api_combination_association)
-    test_seeds = relationship('ClusterTestSeed', back_populates='jax_combination')
-    cluster_id = Column(Integer, ForeignKey('cluster.id'))
-    cluster = relationship('Cluster', back_populates='jax_combinations')
 
 
 # ----------------------------------Cluster----------------------------------
@@ -143,31 +123,42 @@ class Cluster(Base):
     id = Column(Integer, primary_key=True)
     description = Column(Text, nullable=True)
     energy = Column(Integer, default=5)
+    base = Column(Enum('Pytorch', 'JAX', 'Tensorflow', name='base_type'), nullable=False)  # 添加枚举列
+    pytorch_apis = relationship('PytorchAPI', secondary=pytorch_api_cluster_association, back_populates='clusters')
+    tensorflow_apis = relationship('TensorflowAPI', secondary=tensorflow_api_cluster_association,
+                                   back_populates='clusters')
+    jax_apis = relationship('JAXAPI', secondary=jax_api_cluster_association, back_populates='clusters')
     is_tested = Column(Boolean, default=False)  # 该API是否已经生成过了种子
-    pytorch_combinations = relationship('PytorchAPICombination', back_populates='cluster')
-    tensorflow_combinations = relationship('TensorflowAPICombination', back_populates='cluster')
-    jax_combinations = relationship('JaxAPICombination', back_populates='cluster')
-    test_seeds = relationship('ClusterTestSeed', back_populates='cluster')
+    seeds = relationship('ClusterTestSeed', back_populates='cluster')
 
 
 class ClusterTestSeed(Base):
     __tablename__ = 'seed'
     id = Column(Integer, primary_key=True)
+
     cluster_id = Column(Integer, ForeignKey('cluster.id'))
-    cluster = relationship('Cluster', back_populates='test_seeds')
-    pytorch_combination_id = Column(Integer, ForeignKey('pytorch_api_combination.id'))
-    pytorch_combination = relationship('PytorchAPICombination', back_populates='test_seeds')
-    tensorflow_combination_id = Column(Integer, ForeignKey('tensorflow_api_combination.id'))
-    tensorflow_combination = relationship('TensorflowAPICombination', back_populates='test_seeds')
-    jax_combination_id = Column(Integer, ForeignKey('jax_api_combination.id'))
-    jax_combination = relationship('JaxAPICombination', back_populates='test_seeds')
-    code = Column(Text, nullable=True)  # pytorch_code + tensorflow_code + jax_code
-    pytorch_code = Column(Text, nullable=True)
-    tensorflow_code = Column(Text, nullable=True)
-    jax_code = Column(Text, nullable=True)
-    unverified_file_path = Column(Text, nullable=True)  # 该种子的文件路径
-    verified_file_path = Column(Text, nullable=True)  # 该种子的文件路径
-    is_verified = Column(Boolean, default=False)  # 该种子是否已经验证过了
+    cluster = relationship('Cluster', back_populates='seeds')
+
+    pytorch_api_id = Column(Integer, ForeignKey('pytorch_api.id'), nullable=True)
+    pytorch_api = relationship('PytorchAPI', back_populates='seeds')
+
+    tensorflow_api_id = Column(Integer, ForeignKey('tensorflow_api.id'), nullable=True)
+    tensorflow_api = relationship('TensorflowAPI', back_populates='seeds')
+
+    jax_api_id = Column(Integer, ForeignKey('jax_api.id'), nullable=True)
+    jax_api = relationship('JAXAPI', back_populates='seeds')
+
+    raw_pytorch_code = Column(Text, nullable=True)
+    raw_tensorflow_code = Column(Text, nullable=True)
+    raw_jax_code = Column(Text, nullable=True)
+
+    valid_pytorch_code = Column(Text, nullable=True)
+    valid_tensorflow_code = Column(Text, nullable=True)
+    valid_jax_code = Column(Text, nullable=True)
+
+    raw_folder_path = Column(Text, nullable=True)  # 该种子的文件路径
+    valid_folder_path = Column(Text, nullable=True)  # 该种子的文件路径
+    is_validated = Column(Boolean, default=False)  # 该种子是否已经修复过了
 
 
 # 创建表

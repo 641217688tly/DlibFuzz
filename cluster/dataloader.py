@@ -4,7 +4,7 @@ from orm import *
 import utils
 
 
-def add_apis_from_txt(session):
+def add_apis_from_txt(session, torch_version="1.12", tf_version="2.10", jax_version="0.4.13"):
     if not session.query(PytorchAPI).first():  # 从文件读取Pytorch APIs并添加到数据库
         try:
             with open('apis/pytorch/torch_valid_apis.txt', 'r', encoding='utf-8') as file:
@@ -18,7 +18,7 @@ def add_apis_from_txt(session):
                                 name=api_name,
                                 module=module_name,
                                 full_name=full_api_name,
-                                version="1.12"
+                                version=torch_version
                             )
                             session.add(pytorch_api)
                 session.commit()
@@ -42,7 +42,7 @@ def add_apis_from_txt(session):
                                 name=api_name,
                                 module=module_name,
                                 full_name=full_api_name,
-                                version="2.10"
+                                version=tf_version
                             )
                             session.add(tensorflow_api)
                 session.commit()
@@ -53,49 +53,49 @@ def add_apis_from_txt(session):
             session.close()
             print("Tensorflow API data loaded successfully!")
 
-    # if not session.query(JaxAPI).first():  # JAX APIs并添加到数据库
+    # if not session.query(JAXAPI).first():  # JAX APIs并添加到数据库
     #     try:
     #         with open('apis/jax/jax_valid_apis.txt', 'r', encoding='utf-8') as file:
     #             for line in file:
     #                 full_api_name = line.strip()
     #                 if full_api_name:  # 确保不是空行
     #                     module_name, api_name = full_api_name.rsplit('.', 1)
-    #                     is_valid = utils.validate_api(module_name, api_name)
+    #                     is_valid = utils.validate_api_existence(module_name, api_name)
     #                     if is_valid:
-    #                         jax_api = JaxAPI(
+    #                         jax_api = JAXAPI(
     #                             name=api_name,
     #                             module=module_name,
     #                             full_name=full_api_name,
-    #                             version="0.4.13"
+    #                             version=jax_version
     #                         )
     #                         session.add(jax_api)
     #             session.commit()
     #     except Exception as e:
     #         session.rollback()
-    #         print(f"Error processing Jax APIs file: {e}")
+    #         print(f"Error processing JAX APIs file: {e}")
     #     finally:
     #         session.close()
-    #         print("Jax API data loaded successfully!")
+    #         print("JAX API data loaded successfully!")
 
 
-def add_apis_from_json(session):
-    if not session.query(JaxAPI).first():  # 从JSON文件读取Jax APIs并添加到数据库
+def add_apis_from_json(session, torch_version="1.12", tf_version="2.10", jax_version="0.4.13"):
+    if not session.query(JAXAPI).first():  # 从JSON文件读取JAX APIs并添加到数据库
         try:
             with open('apis/jax/jax_apis.json', 'r', encoding='utf-8') as file:
                 torch_apis = json.load(file)
                 for api_id, api_info in torch_apis.items():
                     # 检查数据库中是否已存在该API
                     is_valid = utils.validate_api_existence(api_info['module'], api_info['name'])
-                    api_exists = session.query(JaxAPI).filter_by(name=api_info['name']).first()
+                    api_exists = session.query(JAXAPI).filter_by(name=api_info['name']).first()
                     if not (api_exists and is_valid):
-                        # 创建JaxAPI实例并添加到session
-                        new_api = JaxAPI(
+                        # 创建JAXAPI实例并添加到session
+                        new_api = JAXAPI(
                             name=api_info['name'],
                             module=api_info['module'],
                             full_name=api_info['fullName'],
                             signature=api_info['signature'],
                             description=api_info['description'],
-                            version="0.4.13"
+                            version=jax_version
                         )
                         session.add(new_api)
                 session.commit()
@@ -122,7 +122,7 @@ def add_apis_from_json(session):
                             full_name=api_info['fullName'],
                             signature=api_info['signature'],
                             description=api_info['description'],
-                            version="1.12"
+                            version=torch_version
                         )
                         session.add(new_api)
                 session.commit()
@@ -149,7 +149,7 @@ def add_apis_from_json(session):
                             full_name=api_info['fullName'],
                             signature=api_info['signature'],
                             description=api_info['description'],
-                            version="2.10"
+                            version=tf_version
                         )
                         session.add(new_api)
                 session.commit()
@@ -222,13 +222,15 @@ def attach_error_trigger_code(api_class, error_trigger_class, dir_path, session)
 
 if __name__ == '__main__':
     session = utils.get_session()
-    # 如果JAX/Tensorflow/Pytorch数据库中为空，添加数据
-    add_apis_from_txt(session)
-    add_apis_from_json(session)
 
+    # 如果JAX/Tensorflow/Pytorch数据库中为空则添加数据
+    add_apis_from_txt(session, torch_version="1.12", tf_version="2.10", jax_version="0.4.13")
+    add_apis_from_json(session, torch_version="1.12", tf_version="2.10", jax_version="0.4.13")
+
+    # 将错误触发代码附加到Pytorch/Tensorflow/JAX API下
     torch_dir = '../data/error_triggers/pytorch_issue'
     tf_dir = '../data/error_triggers/tensorflow_issue'
     jax_dir = '../data/error_triggers/jax_issue'
-    #attach_error_trigger_code(PytorchAPI, PytorchErrorTriggerCode, torch_dir, session)
-    #attach_error_trigger_code(TensorflowAPI, TensorflowErrorTriggerCode, tf_dir, session)
-    #attach_error_trigger_code(JaxAPI, JaxErrorTriggerCode, jax_dir, session)
+    # attach_error_trigger_code(PytorchAPI, PytorchErrorTrigger, torch_dir, session)
+    # attach_error_trigger_code(TensorflowAPI, TensorflowErrorTrigger, tf_dir, session)
+    # attach_error_trigger_code(JAXAPI, JAXErrorTrigger, jax_dir, session)
