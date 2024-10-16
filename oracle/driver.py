@@ -14,6 +14,14 @@ import multiprocessing
 import traceback
 
 
+# 设置随机种子函数
+def set_seed(seed=42):
+    torch.manual_seed(seed)
+    tf.random.set_seed(seed)
+    jax_key = jax.random.PRNGKey(seed)
+    return jax_key
+
+
 def traverse_and_execute_seeds(seed_dir):
     """
     并行化处理文件，并执行其中的代码片段
@@ -115,11 +123,138 @@ def execute_code_snippets(file_path: str, code_lines: list):
     return results
 
 
+def run_pytorch_code(common_code, pytorch_code):
+    # 设置随机种子，确保每次运行一致
+    set_seed(42)
+    # 先对 PyTorch 代码进行 print 提取和修改
+    modified_pytorch_code, output_vars = extract_and_modify_print_statements(pytorch_code, "output_pt")
+    code = "\n".join(common_code + modified_pytorch_code)
+    exec_locals = {}
+
+    try:
+        # 执行代码并打印调试信息
+        print("Executing PyTorch code...")
+        exec(code, {}, exec_locals)
+        print("Execution completed.")
+
+        outputs = {}
+        for var in output_vars:
+            if var in exec_locals:
+                try:
+                    output = exec_locals[var]
+                    if isinstance(output, torch.Tensor):
+                        outputs[var] = output.tolist()  # 转为列表
+                    elif isinstance(output, np.ndarray):
+                        outputs[var] = output.tolist()  # 转为列表
+                    else:
+                        json.dumps(output)  # 测试是否可序列化
+                        outputs[var] = output
+                except Exception as e:
+                    outputs[var] = f"Unserializable output of type {type(output).__name__}: {str(e)}"
+        return outputs if outputs else {"error": "No valid output found"}
+    except Exception as e:
+        return {"error": f"PyTorch code execution failed: {str(e)}"}
+
+
+def run_tensorflow_code(common_code, tensorflow_code):
+    def target(return_dict):
+        try:
+            # 设置随机种子，确保每次运行一致
+            set_seed(42)
+            # 先对 TensorFlow 代码进行 print 提取和修改
+            modified_tensorflow_code, output_vars = extract_and_modify_print_statements(tensorflow_code, "output_tf")
+            code = "\n".join(common_code + modified_tensorflow_code)
+            exec_locals = {}
+
+            # 执行代码并打印调试信息
+            print("Executing TensorFlow code...")
+            exec(code, {}, exec_locals)
+            print("Execution completed.")
+
+            outputs = {}
+            for var in output_vars:
+                if var in exec_locals:
+                    try:
+                        output = exec_locals[var]
+                        # 检查类型并进行转换
+                        if isinstance(output, tf.Tensor):
+                            outputs[var] = output.numpy().tolist()  # 将 TensorFlow 张量转为列表
+                        elif isinstance(output, np.ndarray):
+                            outputs[var] = output.tolist()  # 将 NumPy 数组转为列表
+                        elif isinstance(output, list):
+                            outputs[var] = output  # 已经是标准 Python 列表，直接使用
+                        elif isinstance(output, (np.float32, tf.float32, tf.float64, np.float64)):
+                            outputs[var] = float(output)  # 转换为 Python 的 float 类型
+                        else:
+                            try:
+                                json.dumps(output)  # 测试是否可以序列化
+                                outputs[var] = output
+                            except TypeError as e:
+                                outputs[var] = f"Unserializable output of type {type(output).__name__}: {str(e)}"
+                    except Exception as e:
+                        print(f"Failed to process output: {str(e)}")
+                        outputs[var] = f"Unserializable output of type {type(output).__name__}: {str(e)}"
+
+            return_dict["result"] = outputs if outputs else {"error": "No valid output found"}
+        except Exception as e:
+            return_dict["error"] = f"TensorFlow execution failed: {traceback.format_exc()}"
+
+    # 使用共享字典来获取子进程的结果
+    manager = multiprocessing.Manager()
+    return_dict = manager.dict()
+
+    # 启动子进程
+    p = multiprocessing.Process(target=target, args=(return_dict,))
+    p.start()
+
+    # 设置超时时间
+    p.join(timeout=32)
+    if p.is_alive():
+        p.terminate()
+        p.join()
+        return {"error": "TensorFlow execution timed out"}
+
+    if "error" in return_dict:
+        return {"error": return_dict["error"]}
+    return return_dict.get("result", None)
+
+
+def run_jax_code(common_code, jax_code):
+    # 设置随机种子，确保每次运行一致
+    set_seed(42)
+    # 先对 JAX 代码进行 print 提取和修改
+    modified_jax_code, output_vars = extract_and_modify_print_statements(jax_code, "output_jax")
+    code = "\n".join(common_code + modified_jax_code)
+    exec_locals = {}
+
+    try:
+        # 执行代码并打印调试信息
+        print("Executing JAX code...")
+        exec(code, {}, exec_locals)
+        print("Execution completed.")
+
+        outputs = {}
+        for var in output_vars:
+            if var in exec_locals:
+                try:
+                    output = exec_locals[var]
+                    if isinstance(output, jnp.ndarray):
+                        outputs[var] = output.tolist()
+                    elif isinstance(output, np.ndarray):
+                        outputs[var] = output.tolist()
+                    else:
+                        json.dumps(output)
+                        outputs[var] = output
+                except Exception as e:
+                    outputs[var] = f"Unserializable output of type {type(output).__name__}: {str(e)}"
+        return outputs if outputs else {"error": "No valid output found"}
+    except Exception as e:
+        return {"error": f"JAX code execution failed: {str(e)}"}
+
+
 def extract_and_modify_print_statements(code_lines, prefix):
     """
     从代码中提取 `print` 语句中的变量和表达式。返回修改后的代码和有效输出变量列表。
-    如：print("PyTorch Output:", output_pt.detach().numpy(), "Modified Output:", output_pt_mod.detach().numpy())
-    得：output_pt_1 = output_pt.detach().numpy(), output_pt_2 = output_pt_mod.detach().numpy()
     """
     modified_code_lines = []
     output_vars = []
@@ -164,110 +299,6 @@ def extract_and_modify_print_statements(code_lines, prefix):
     return modified_code_lines, output_vars
 
 
-def run_pytorch_code(common_code, pytorch_code):
-    # 先对 PyTorch 代码进行 print 提取和修改
-    modified_pytorch_code, output_vars = extract_and_modify_print_statements(pytorch_code, "output_pt")
-    code = "\n".join(common_code + modified_pytorch_code)
-    exec_locals = {}
-
-    try:
-        # 执行代码
-        exec(code, {}, exec_locals)
-        outputs = {}
-        for var in output_vars:
-            if var in exec_locals:
-                try:
-                    output = exec_locals[var]
-                    if isinstance(output, torch.Tensor):
-                        outputs[var] = output.tolist()  # 转为列表
-                    elif isinstance(output, np.ndarray):
-                        outputs[var] = output.tolist()  # 转为列表
-                    else:
-                        json.dumps(output)  # 测试是否可序列化
-                        outputs[var] = output
-                except Exception as e:
-                    outputs[var] = f"Unserializable output of type {type(output).__name__}: {str(e)}"
-        return outputs if outputs else {"error": "No valid output found"}
-    except Exception as e:
-        return {"error": f"PyTorch code execution failed: {str(e)}"}
-
-
-def run_tensorflow_code(common_code, tensorflow_code):
-    def target(return_dict):
-        try:
-            # 先对 TensorFlow 代码进行 print 提取和修改
-            modified_tensorflow_code, output_vars = extract_and_modify_print_statements(tensorflow_code, "output_tf")
-            code = "\n".join(common_code + modified_tensorflow_code)
-            exec_locals = {}
-
-            # 执行代码
-            exec(code, {}, exec_locals)
-            outputs = {}
-            for var in output_vars:
-                if var in exec_locals:
-                    try:
-                        output = exec_locals[var]
-                        if isinstance(output, tf.Tensor):
-                            outputs[var] = output.numpy().tolist()  # 将 TensorFlow 张量转为列表
-                        elif isinstance(output, np.ndarray):
-                            outputs[var] = output.tolist()  # 将 NumPy 数组转为列表
-                        else:
-                            json.dumps(output)
-                            outputs[var] = output
-                    except Exception as e:
-                        outputs[var] = f"Unserializable output of type {type(output).__name__}: {str(e)}"
-            return_dict["result"] = outputs if outputs else {"error": "No valid output found"}
-        except Exception as e:
-            return_dict["error"] = f"TensorFlow execution failed: {traceback.format_exc()}"
-
-    # 使用共享字典来获取子进程的结果
-    manager = multiprocessing.Manager()
-    return_dict = manager.dict()
-
-    # 启动子进程
-    p = multiprocessing.Process(target=target, args=(return_dict,))
-    p.start()
-
-    # 设置超时时间
-    p.join(timeout=6)
-    if p.is_alive():
-        p.terminate()
-        p.join()
-        return {"error": "TensorFlow execution timed out"}
-
-    if "error" in return_dict:
-        return {"error": return_dict["error"]}
-    return return_dict.get("result", None)
-
-
-def run_jax_code(common_code, jax_code):
-    # 先对 JAX 代码进行 print 提取和修改
-    modified_jax_code, output_vars = extract_and_modify_print_statements(jax_code, "output_jax")
-    code = "\n".join(common_code + modified_jax_code)
-    exec_locals = {}
-
-    try:
-        # 执行代码
-        exec(code, {}, exec_locals)
-        outputs = {}
-        for var in output_vars:
-            if var in exec_locals:
-                try:
-                    output = exec_locals[var]
-                    if isinstance(output, jnp.ndarray):
-                        outputs[var] = output.tolist()
-                    elif isinstance(output, np.ndarray):
-                        outputs[var] = output.tolist()
-                    else:
-                        json.dumps(output)
-                        outputs[var] = output
-                except Exception as e:
-                    outputs[var] = f"Unserializable output of type {type(output).__name__}: {str(e)}"
-        return outputs if outputs else {"error": "No valid output found"}
-    except Exception as e:
-        return {"error": f"JAX code execution failed: {str(e)}"}
-
-
 def convert_ndarray_to_list(obj):
     # 将 TensorFlow Tensor 转换为列表
     if isinstance(obj, tf.Tensor):
@@ -281,13 +312,16 @@ def convert_ndarray_to_list(obj):
     # 处理 NumPy 数组
     elif isinstance(obj, np.ndarray):
         return obj.tolist()
-    # 处理 TensorFlow 数据类型 (如 tf.float32)
-    elif isinstance(obj, (tf.dtypes.DType, np.generic, np.float32)):
+    # 处理 TensorFlow 数据类型 (如 tf.float32, tf.float64, tf.int32)
+    elif isinstance(obj, (tf.dtypes.DType, np.float32, np.float64, np.int32, np.int64)):
+        # 转换为 Python 的基本类型
         return float(obj)
-    # 处理字典
+    elif isinstance(obj, tf.Variable):
+        return obj.numpy().tolist()  # 处理 tf.Variable
+    # 处理字典类型
     elif isinstance(obj, dict):
         return {k: convert_ndarray_to_list(v) for k, v in obj.items()}
-    # 处理列表
+    # 处理列表类型
     elif isinstance(obj, list):
         return [convert_ndarray_to_list(item) for item in obj]
     # 对于其他类型，直接返回
@@ -300,6 +334,7 @@ def analyze_results(all_results):
         "approximate_results": [],
         "divergent_results": [],
         "error_results": [],
+        "timeout_results": [],  # 新增timeout分类
         "none_outputs": []
     }
 
@@ -324,63 +359,52 @@ def analyze_results(all_results):
 
         # 递归地比较数值、列表、字典是否相近
         if isinstance(result1, (int, float)) and isinstance(result2, (int, float)):
-            close = abs(result1 - result2) < tolerance
-            if not close:
-                print(f"Values are not close: {result1} vs {result2} (tolerance: {tolerance})")
-            return close
+            return abs(result1 - result2) < tolerance
         elif isinstance(result1, list) and isinstance(result2, list):
-            if len(result1) != len(result2):
-                print(f"List lengths differ: {len(result1)} vs {len(result2)}")
-                return False
-            results = [are_results_close(r1, r2, tolerance) for r1, r2 in zip(result1, result2)]
-            if not all(results):
-                print(f"List elements differ at: {result1} vs {result2}")
-            return all(results)
+            return len(result1) == len(result2) and all(
+                are_results_close(r1, r2, tolerance) for r1, r2 in zip(result1, result2))
         elif isinstance(result1, dict) and isinstance(result2, dict):
-            # 只比较字典的值
             result1_values = list(result1.values())
             result2_values = list(result2.values())
             return are_results_close(result1_values, result2_values, tolerance)
-        equal = result1 == result2
-        if not equal:
-            print(f"Results differ: {result1} vs {result2}")
-        return equal
+        return result1 == result2
 
     def are_results_exactly_equal(result1, result2):
         result1 = convert_to_comparable_format(result1)
         result2 = convert_to_comparable_format(result2)
 
-        # 严格检查数值、列表、字典是否完全一致，递归比较
         if isinstance(result1, (int, float)) and isinstance(result2, (int, float)):
-            equal = result1 == result2
-            if not equal:
-                print(f"Exact values differ: {result1} vs {result2}")
-            return equal
+            return result1 == result2
         elif isinstance(result1, list) and isinstance(result2, list):
-            if len(result1) != len(result2):
-                print(f"List lengths differ: {len(result1)} vs {len(result2)}")
-                return False
-            results = [are_results_exactly_equal(r1, r2) for r1, r2 in zip(result1, result2)]
-            if not all(results):
-                print(f"List elements differ at: {result1} vs {result2}")
-            return all(results)
+            return len(result1) == len(result2) and all(
+                are_results_exactly_equal(r1, r2) for r1, r2 in zip(result1, result2))
         elif isinstance(result1, dict) and isinstance(result2, dict):
-            # 只比较字典的值
             result1_values = list(result1.values())
             result2_values = list(result2.values())
             return are_results_exactly_equal(result1_values, result2_values)
-        else:
-            equal = result1 == result2
-            if not equal:
-                print(f"Exact results differ: {result1} vs {result2}")
-            return equal
+        return result1 == result2
 
     for result in all_results:
         try:
             file_path = result["file"]
             results = result["results"]
 
-            # 检查是否存在错误
+            # 分离 timeout 错误
+            timeout_found = False
+            for res in results:
+                if "error" in res and "TensorFlow execution timed out" in res["error"]:
+                    analysis["timeout_results"].append({
+                        "file": file_path,
+                        "error": "TensorFlow execution timed out",
+                        "details": results
+                    })
+                    timeout_found = True
+                    break
+
+            if timeout_found:
+                continue
+
+            # 检查是否存在其他错误
             if any("error" in r for r in results):
                 analysis["error_results"].append({
                     "file": file_path,
@@ -430,13 +454,11 @@ def analyze_results(all_results):
                     "file": file_path,
                     "result": normalized_outputs[0]
                 })
-            # 检查输出是否近似一致
             elif approximate:
                 analysis["approximate_results"].append({
                     "file": file_path,
                     "results": normalized_outputs
                 })
-            # 结果不一致
             else:
                 analysis["divergent_results"].append({
                     "file": file_path,
@@ -448,6 +470,7 @@ def analyze_results(all_results):
                 "file": file_path if 'file_path' in locals() else "Unknown file",
                 "error": f"Failed during analysis: {str(e)}"
             })
+
     return analysis
 
 
@@ -533,6 +556,7 @@ if __name__ == "__main__":
     # seeds_dir = os.path.join(project_root, 'fuzzer/seeds/test_seeds/test')  # 测试换文件夹用
     seeds_dir = os.path.join(project_root, 'fuzzer/seeds/test_seeds/zero-shot')
     output_dir = os.path.join(project_root, 'oracle/outputs')
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # 屏蔽 INFO 和 WARNING 消息
 
     results_file = get_next_available_filename(output_dir, "results", ".json")
     analysis_file = get_next_available_filename(output_dir, "analysis", ".json")
