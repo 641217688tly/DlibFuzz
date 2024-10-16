@@ -1,17 +1,15 @@
+import datetime
 import os
-import requests
 from bs4 import BeautifulSoup
-from typing import List
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain.embeddings.base import Embeddings
-from langchain.llms.base import LLM
-from llama_cpp import Llama
 from langchain.schema import Document
-from langchain.chains import RetrievalQA
-from langchain.prompts import PromptTemplate
 from embeddings import OllamaEmbeddings
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_core.prompts import ChatPromptTemplate
 from llm import CodeQwenLLM
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.output_parsers import StrOutputParser
 
 # Step 1: 加载文档
 def load_html_files(directory):
@@ -36,7 +34,7 @@ embeddings = OllamaEmbeddings(model="llama3.1")
 # Create a FAISS vector store from the documents and their embeddings
 vector_store = FAISS.from_documents(split_docs, embeddings)
 
-# Step 4: 初始化LLM
+# Step 4: 初始化LLM 
 llm = CodeQwenLLM()
 
 # Step 5: 建立RAG管道
@@ -54,17 +52,38 @@ User Query:
 Generate the appropriate code in response to the user's query.
 """
 
-prompt = PromptTemplate(
-    template=prompt_template,
-    input_variables=["context", "question"]
+
+prompt = ChatPromptTemplate.from_messages(
+    [
+        ("system", prompt_template)
+    ]
 )
 
-qa_chain = RetrievalQA.from_chain_type(
+def format_docs(docs):
+    return "\n\n".join(doc.page_content for doc in docs)
+
+
+# Create a stuff chain with the custom prompt
+combine_documents_chain = create_stuff_documents_chain(
     llm=llm,
-    # chain_type="stuff",
-    retriever=vector_store.as_retriever(),
-    # prompt=prompt
+    prompt=prompt,
 )
+
+
+qa_chain = (
+    {
+        "context": vector_store.as_retriever() | format_docs,
+        "question": RunnablePassthrough(),
+    } 
+    | prompt 
+    | llm 
+    | StrOutputParser()
+)
+
+
+def rag_generate(query: str) -> str:
+    answer = qa_chain.invoke(query)
+    return answer
 
 
 if __name__ == "__main__":
@@ -78,10 +97,28 @@ if __name__ == "__main__":
             break
 
         try:
+            retrieved_docs = vector_store.as_retriever().invoke(query)
+
             answer = qa_chain.invoke(query)
+
             print("\nGenerated Code:\n")
             print(answer)
-            print("\n" + "-"*50 + "\n")
+            print("\n" + "=" * 50 + "\n")
+
+            current_time = datetime.datetime.now().strftime('%m%d%H%M%S')
+            with open(f'generated_code_{current_time}.txt', 'w', encoding='utf-8') as file:
+                file.write(f"User Query: {query}\n")
+
+                file.write("\nRetrieved Documents:\n")
+
+                for idx, doc in enumerate(retrieved_docs, 1):
+                    file.write(f"\nDocument {idx}:\n")
+                    file.write(doc.page_content)
+                    file.write("\n" + "-" * 40 + "\n")
+
+                file.write("\nGenerated Code:\n")
+                file.write(answer)
+                file.write("\n" + "=" * 50 + "\n")
         except Exception as e:
             print(f"An error occurred: {e}")
-            print("\n" + "-"*50 + "\n")
+            print("\n" + "=" * 50 + "\n")
