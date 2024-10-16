@@ -3,6 +3,7 @@ import os
 import json
 import re
 import time
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import jax
@@ -11,7 +12,6 @@ import numpy as np
 import tensorflow as tf
 import jax.numpy as jnp
 import multiprocessing
-import traceback
 
 
 # 设置随机种子函数
@@ -60,7 +60,7 @@ def execute_code_snippets(file_path: str, code_lines: list):
     tensorflow_code = []
     jax_code = []
 
-    current_section = None
+    current_section = "common"
 
     results = {
         "file": file_path,
@@ -68,7 +68,9 @@ def execute_code_snippets(file_path: str, code_lines: list):
     }
 
     for line in code_lines:
-        if re.search(r'#\s*pytorch', line, re.IGNORECASE):
+        if re.search(r'#\s*import', line, re.IGNORECASE) or re.search(r'#\s*from', line, re.IGNORECASE):
+            current_section = "common"
+        elif re.search(r'#\s*pytorch', line, re.IGNORECASE):
             current_section = "pytorch"
             continue
         elif re.search(r'#\s*tensorflow', line, re.IGNORECASE):
@@ -134,7 +136,7 @@ def run_pytorch_code(common_code, pytorch_code):
     try:
         # 执行代码并打印调试信息
         print("Executing PyTorch code...")
-        exec(code, {}, exec_locals)
+        exec(code, globals(), exec_locals)
         print("Execution completed.")
 
         outputs = {}
@@ -153,7 +155,9 @@ def run_pytorch_code(common_code, pytorch_code):
                     outputs[var] = f"Unserializable output of type {type(output).__name__}: {str(e)}"
         return outputs if outputs else {"error": "No valid output found"}
     except Exception as e:
-        return {"error": f"PyTorch code execution failed: {str(e)}"}
+        # 只捕获错误消息的简短形式，而非完整的堆栈信息
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        return {"error": f"Pytorch code execution failed: {exc_type.__name__}: {exc_value}"}
 
 
 def run_tensorflow_code(common_code, tensorflow_code):
@@ -168,7 +172,7 @@ def run_tensorflow_code(common_code, tensorflow_code):
 
             # 执行代码并打印调试信息
             print("Executing TensorFlow code...")
-            exec(code, {}, exec_locals)
+            exec(code, globals(), exec_locals)
             print("Execution completed.")
 
             outputs = {}
@@ -197,7 +201,9 @@ def run_tensorflow_code(common_code, tensorflow_code):
 
             return_dict["result"] = outputs if outputs else {"error": "No valid output found"}
         except Exception as e:
-            return_dict["error"] = f"TensorFlow execution failed: {traceback.format_exc()}"
+            # 只捕获错误消息的简短形式，而非完整的堆栈信息
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            return_dict["error"] = f"TensorFlow code execution failed: {exc_type.__name__}: {exc_value}"
 
     # 使用共享字典来获取子进程的结果
     manager = multiprocessing.Manager()
@@ -216,7 +222,8 @@ def run_tensorflow_code(common_code, tensorflow_code):
 
     if "error" in return_dict:
         return {"error": return_dict["error"]}
-    return return_dict.get("result", None)
+    return return_dict.get("result", {
+        "error": "TensorFlow code execution failed: NoValidOutput: This might be due to an internal error."})  # 未找到有效输出，可能发生了内部中断
 
 
 def run_jax_code(common_code, jax_code):
@@ -225,12 +232,13 @@ def run_jax_code(common_code, jax_code):
     # 先对 JAX 代码进行 print 提取和修改
     modified_jax_code, output_vars = extract_and_modify_print_statements(jax_code, "output_jax")
     code = "\n".join(common_code + modified_jax_code)
+    print("JAX code:", code)
     exec_locals = {}
 
     try:
         # 执行代码并打印调试信息
         print("Executing JAX code...")
-        exec(code, {}, exec_locals)
+        exec(code, globals(), exec_locals)
         print("Execution completed.")
 
         outputs = {}
@@ -249,7 +257,9 @@ def run_jax_code(common_code, jax_code):
                     outputs[var] = f"Unserializable output of type {type(output).__name__}: {str(e)}"
         return outputs if outputs else {"error": "No valid output found"}
     except Exception as e:
-        return {"error": f"JAX code execution failed: {str(e)}"}
+        # 只捕获错误消息的简短形式，而非完整的堆栈信息
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        return {"error": f"Jax code execution failed: {exc_type.__name__}: {exc_value}"}
 
 
 def extract_and_modify_print_statements(code_lines, prefix):
@@ -289,12 +299,12 @@ def extract_and_modify_print_statements(code_lines, prefix):
                     modified_code_lines.append(new_print_stmt)
                     break
             else:
-                # 非 print 语句，直接添加原代码
-                modified_code_lines.append(line.strip())
+                # 非 print 语句，直接添加原代码，保留缩进
+                modified_code_lines.append(line.rstrip('\n'))
 
         except SyntaxError as e:
             print(f"Syntax error while parsing line: {line.strip()} - {e}")
-            modified_code_lines.append(line.strip())
+            modified_code_lines.append(line.rstrip('\n'))
 
     return modified_code_lines, output_vars
 
@@ -556,7 +566,6 @@ if __name__ == "__main__":
     # seeds_dir = os.path.join(project_root, 'fuzzer/seeds/test_seeds/test')  # 测试换文件夹用
     seeds_dir = os.path.join(project_root, 'fuzzer/seeds/test_seeds/zero-shot')
     output_dir = os.path.join(project_root, 'oracle/outputs')
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # 屏蔽 INFO 和 WARNING 消息
 
     results_file = get_next_available_filename(output_dir, "results", ".json")
     analysis_file = get_next_available_filename(output_dir, "analysis", ".json")
