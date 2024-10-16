@@ -4,12 +4,12 @@ from bs4 import BeautifulSoup
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain.schema import Document
-from embeddings import OllamaEmbeddings
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
-from llm import CodeQwenLLM
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
+from llm import CodeQwenLLM
+from embeddings import OllamaEmbeddings
 
 # Step 1: 加载文档
 def load_html_files(directory):
@@ -53,11 +53,7 @@ Generate the appropriate code in response to the user's query.
 """
 
 
-prompt = ChatPromptTemplate.from_messages(
-    [
-        ("system", prompt_template)
-    ]
-)
+prompt = ChatPromptTemplate.from_template(prompt_template)
 
 def format_docs(docs):
     return "\n\n".join(doc.page_content for doc in docs)
