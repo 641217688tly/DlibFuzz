@@ -96,7 +96,7 @@ class APIChecker:
 if __name__ == "__main__":
     checker = APIChecker()
     root_path = './seeds/unverified_seeds'
-    output_path = './seeds/verified_seeds'
+    output_path = 'seeds/validated_seeds'
 
     for dirpath, dirname, files in os.walk(root_path):
         current_dir = dirpath

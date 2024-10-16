@@ -156,8 +156,6 @@ class ClusterTestSeed(Base):
     valid_tensorflow_code = Column(Text, nullable=True)
     valid_jax_code = Column(Text, nullable=True)
 
-    raw_folder_path = Column(Text, nullable=True)  # 该种子的文件路径
-    valid_folder_path = Column(Text, nullable=True)  # 该种子的文件路径
     is_validated = Column(Boolean, default=False)  # 该种子是否已经修复过了
 
 

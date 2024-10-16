@@ -130,7 +130,7 @@ Output Format Example:
                 code=response_data,
                 unverified_file_path=f'{folder_path}/{seed_folder_name}/seed_{i}.py',
                 verified_file_path=f'{folder_path}/{seed_folder_name}/seed_{i}.py'.replace("unverified_seeds",
-                                                                                           "verified_seeds")
+                                                                                           "validated_seeds")
             )
             session.add(new_seed)
             session.commit()
