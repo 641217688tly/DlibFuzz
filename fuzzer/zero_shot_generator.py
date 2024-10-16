@@ -71,11 +71,19 @@ class SeedGenerator:
         # 3.参考基底API的测试用例生成其他库中的孪生API的测试用例
         twin_apis = [api for api in combination if api != base_api]
         for twin_api in twin_apis:
-            self.generate_seed4twin(seed, twin_api, validated_base_code)
+            self.generate_seed4twin(seed, twin_api, base_api, validated_base_code)
 
     def generate_seed4base(self, seed: ClusterTestSeed, base_api):  # 生成基底API的测试用例
         prompt = f"""
-Generate test cases for the {base_api.full_name} in {base_api.__class__.__name__.replace("API", "")} (ver{base_api.version})     
+Tasks:
+1.Import Required Modules
+2.Call API Function: Use {base_api.full_name} in {base_api.__class__.__name__.replace("API", "")} (ver{base_api.version} to perform the necessary computations or actions. Ensure that this API call is done within the correct context.
+3.Generate Input Data: Generate input data that is likely to trigger an edge case or boundary condition (e.g., high values, nulls, extreme dimensions) and pass it to the API function.
+
+Requirements:
+1.Imports: Ensure that all necessary modules or APIs are imported.
+2.Code-Only Format: Only output code and comments in the required format, avoiding any additional text or Markdown syntax.
+3.Correctness: Ensure the generated code does not contain syntax errors (e.g., SyntaxError, NameError) or invalid input errors (e.g., ValueError, InvalidArgumentError).
 """
         base_seed_code = self.query_openai(prompt)
         if base_seed_code is None:
@@ -91,11 +99,18 @@ Generate test cases for the {base_api.full_name} in {base_api.__class__.__name__
         self.session.commit()
         return base_seed_code
 
-    def generate_seed4twin(self, seed: ClusterTestSeed, twin_api, base_seed):  # 生成孪生API的测试用例
+    def generate_seed4twin(self, seed: ClusterTestSeed, twin_api, base_api, base_seed):  # 生成孪生API的测试用例
         prompt = f"""
-Generate test cases for the {twin_api.full_name} in {twin_api.__class__.__name__.replace("API", "")} (ver{twin_api.version}) according to following code template:  
+Generate test cases for the {twin_api.full_name} in {twin_api.__class__.__name__.replace("API", "")} (ver{twin_api.version}) according to following code:  
 {base_seed}
-        """
+
+Requirements:
+1.Imports: Ensure that all necessary modules or APIs are imported.
+2.Consistency in Input: Use the same input data as {base_api.full_name} in the sample.
+3.Consistency in Output: The output result of {twin_api.full_name} in {twin_api.__class__.__name__.replace("API", "")} (ver{twin_api.version}) should be identical to the {base_api.full_name} in {base_api.__class__.__name__.replace("API", "")} (ver{base_api.version}).
+4.Code-Only Format: Only output code and comments in the required format, avoiding any additional text or Markdown syntax.
+5.Correctness: Ensure the generated code does not contain syntax errors (e.g., SyntaxError, NameError) or invalid input errors (e.g., ValueError, InvalidArgumentError).
+"""
         twin_seed_code = self.query_openai(prompt)
         if twin_seed_code is None:
             print(f"During generate seed for base API {twin_api.full_name}, some error occurred.")
