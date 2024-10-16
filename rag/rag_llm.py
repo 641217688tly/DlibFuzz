@@ -11,8 +11,8 @@ from langchain_core.output_parsers import StrOutputParser
 from llm import CodeQwenLLM
 from embeddings import OllamaEmbeddings
 
-# Step 1: 加载文档
-def load_html_files(directory):
+
+def load_html_files(directory: str):
     documents = []
     for filename in os.listdir(directory):
         if filename.endswith('.html') or filename.endswith('.htm'):
@@ -23,68 +23,78 @@ def load_html_files(directory):
                 documents.append(text)
     return documents
 
-# Step 2: 预处理文档
-docs = load_html_files('demo_docs')
-text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-split_docs = text_splitter.split_documents([Document(page_content=doc) for doc in docs])
 
-# Step 3: 初始化向量嵌入
-embeddings = OllamaEmbeddings(model="llama3.1")
+def initialize_rag_system(documents_dir: str):
+    # Step 1: Load documents
+    docs = load_html_files(documents_dir)
+    
+    # Step 2: Preprocess documents
+    text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+    split_docs = text_splitter.split_documents([Document(page_content=doc) for doc in docs])
+    
+    # Step 3: Initialize embeddings
+    embeddings = OllamaEmbeddings(model="llama3.1")
+    
+    # Create a FAISS vector store from the documents and their embeddings
+    vector_store = FAISS.from_documents(split_docs, embeddings)
+    
+    # Step 4: Initialize LLM
+    llm = CodeQwenLLM()
+    
+    # Step 5: Establish RAG pipeline
+    prompt_template = """
+    You are an AI assistant specialized in generating code based on user requirements.
+    
+    Use the following retrieved documents to inform your code generation. If the documents are not relevant, rely on your training data.
+    
+    Retrieved Documents:
+    {context}
+    
+    User Query:
+    {question}
+    
+    Generate the appropriate code in response to the user's query.
+    """
+    
+    prompt = ChatPromptTemplate.from_template(prompt_template)
+    
+    def format_docs(docs):
+        return "\n\n".join(doc.page_content for doc in docs)
+    
+    # # Create a stuff chain with the custom prompt
+    # combine_documents_chain = create_stuff_documents_chain(
+    #     llm=llm,
+    #     prompt=prompt,
+    # )
+    
+    qa_chain = (
+        {
+            "context": vector_store.as_retriever() | format_docs,
+            "question": RunnablePassthrough(),
+        } 
+        | prompt 
+        | llm 
+        | StrOutputParser()
+    )
+    
+    return qa_chain, vector_store
 
-# Create a FAISS vector store from the documents and their embeddings
-vector_store = FAISS.from_documents(split_docs, embeddings)
 
-# Step 4: 初始化LLM 
-llm = CodeQwenLLM()
-
-# Step 5: 建立RAG管道
-prompt_template = """
-You are an AI assistant specialized in generating code based on user requirements.
-
-Use the following retrieved documents to inform your code generation. If the documents are not relevant, rely on your training data.
-
-Retrieved Documents:
-{context}
-
-User Query:
-{question}
-
-Generate the appropriate code in response to the user's query.
-"""
-
-
-prompt = ChatPromptTemplate.from_template(prompt_template)
-
-def format_docs(docs):
-    return "\n\n".join(doc.page_content for doc in docs)
-
-
-# Create a stuff chain with the custom prompt
-combine_documents_chain = create_stuff_documents_chain(
-    llm=llm,
-    prompt=prompt,
-)
-
-
-qa_chain = (
-    {
-        "context": vector_store.as_retriever() | format_docs,
-        "question": RunnablePassthrough(),
-    } 
-    | prompt 
-    | llm 
-    | StrOutputParser()
-)
-
-
-def rag_generate(query: str) -> str:
+def rag_generate(query: str, qa_chain):
     answer = qa_chain.invoke(query)
     return answer
+
+
+def retrieve_documents(query: str, vector_store):
+    retrieved_docs = vector_store.as_retriever().invoke(query)
+    return retrieved_docs
 
 
 if __name__ == "__main__":
     print("Welcome to the Code Generation RAG System!")
     print("Type 'exit' or 'quit' to terminate the program.\n")
+
+    qa_chain, vector_store = initialize_rag_system("demo_docs")
 
     while True:
         query = input("Enter your code-related query: ")
