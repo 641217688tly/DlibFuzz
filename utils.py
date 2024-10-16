@@ -7,6 +7,10 @@ from openai import OpenAI
 from sqlalchemy.orm import sessionmaker
 from orm import *
 
+TORCH_VERSION = "1.12"
+TF_VERSION = "2.10"
+JAX_VERSION = "0.4.13"
+
 
 def get_session():
     with open('config.yml', 'r', encoding='utf-8') as file:  # 读取config.yml文件
@@ -37,6 +41,16 @@ def get_openai_client():
         return openai_client
 
 
+def get_library_version():
+    # 创建一个字典，用于存储各个库的版本
+    library_version = {
+        "pytorch": TORCH_VERSION,
+        "tensorflow": TF_VERSION,
+        "jax": JAX_VERSION
+    }
+    return library_version
+
+
 def validate_api_existence(module_name, api_name):  # 验证API是否存在的函数
     # module_name, api_name = full_api_name.rsplit('.', 1)
     try:
@@ -49,7 +63,7 @@ def validate_api_existence(module_name, api_name):  # 验证API是否存在的�
         return False
 
 
-def validate_api_availability(function):  # 验证API是否可用的函数
+def validate_api_availability(function):  # 验证API是否为被弃用的函数
     """Check if the function is deprecated."""
     docstring = inspect.getdoc(function)
     if docstring and ('deprecated' and 'removed') in docstring.lower():
@@ -105,40 +119,14 @@ def check_all_api_lists():
 
 def export_all_validated_seeds():  # 从数据库中将所有验证过的seed导出为Python文件
     session = get_session()
-    # 获取所有is_verified == True的种子
-    seeds = session.query(ClusterTestSeed).filter(ClusterTestSeed.is_verified == True).all()
+    # 获取所有is_validated == True的种子
+    seeds = session.query(ClusterTestSeed).filter(ClusterTestSeed.is_validated == True).all()
     for seed in seeds:
-        print(f"Exporting validated seed: {seed.verified_file_path}")
-        if not os.path.exists(seed.verified_file_path):
-            os.makedirs(os.path.dirname(seed.verified_file_path), exist_ok=True)
-        with open(seed.verified_file_path, 'w') as f:
-            f.write(seed.code)
-
-
-def get_cluster_api_combinations(cluster_id: int):
-    session = get_session()
-    cluster = session.query(Cluster).filter(Cluster.id == cluster_id).first()
-    pytorch_combinations = cluster.pytorch_combinations
-    tensorflow_combinations = cluster.tensorflow_combinations
-    jax_combinations = cluster.jax_combinations
-
-    def print_combinations(combinations, api_type):
-        print("\n" + "*" * 100)
-        print(f"{api_type} API combinations:")
-        for combination in combinations:
-            print("=" * 80)
-            print(f"{api_type} API combination ID: {combination.id}")
-            # 获得Pytorch API组合中的所有API
-            apis = combination.apis
-            for api in apis:
-                print("-" * 60)
-                print(f"{api_type} API ID: {api.id}, Full name: {api.full_name}")
-
-    print_combinations(pytorch_combinations, "Pytorch")
-    print_combinations(tensorflow_combinations, "Tensorflow")
-    print_combinations(jax_combinations, "JAX")
+        print(f"Exporting validated seed: {seed.valid_folder_path}")
+        if not os.path.exists(seed.valid_folder_path):
+            os.makedirs(os.path.dirname(seed.valid_folder_path), exist_ok=True)
+        # TODO 保存valid_code到该文件夹下
 
 
 if __name__ == '__main__':
-    # export_all_validated_seeds()
-    get_cluster_api_combinations(2)
+    export_all_validated_seeds()

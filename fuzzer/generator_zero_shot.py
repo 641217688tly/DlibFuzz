@@ -2,13 +2,6 @@ from utils import *
 from tqdm.contrib import itertools
 import os
 from orm import *
-import threading
-
-ERROR_TRIGGER_TARGET = 6
-
-TORCH_VERSION = "1.12"
-TF_VERSION = "2.10"
-JAX_VERSION = "0.4.13"
 
 STEPS_PROMPT = """
 1.Consider: For given APIs, think about which edge cases and combinations of API calls may expose potential vulnerabilities in the API.
@@ -155,34 +148,6 @@ def generate_seeds4clusters(session, openai_client, clusters, seeds_num=5):
     for cluster in clusters:
         print(f"Processing cluster ID: {cluster.id}")
         generate_seeds4cluster(session, openai_client, cluster, seeds_num)
-
-
-def multithreaded_run(thread_num=3):
-    sessions = []
-    openai_clients = []
-    for i in range(thread_num):
-        sessions.append(get_session())
-        openai_clients.append(get_openai_client())
-
-    untested_clusters = get_session().query(Cluster).filter(Cluster.is_tested == False).all()
-    print(f"Total clusters to process: {len(untested_clusters)}")
-
-    # 划分任务
-    split_clusters = [untested_clusters[i::thread_num] for i in range(
-        thread_num)]  # split_clusters = [[cluster1,cluster2,..],[cluster2000,cluster2001,...],[cluster4000,cluster40001,...]]
-
-    threads = []
-    for i, clusters in enumerate(split_clusters):
-        thread = threading.Thread(target=generate_seeds4clusters, args=(sessions[i], openai_clients[i], clusters))
-        threads.append(thread)
-        thread.start()
-
-    for thread in threads:
-        thread.join()
-
-    for session in sessions:
-        session.close()
-
 
 def run():
     session = get_session()

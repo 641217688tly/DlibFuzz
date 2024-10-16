@@ -1,0 +1,26 @@
+Objective:
+Identify equivalent or identical API functions in TensorFlow (v{self.tf_ver}) and JAX (v{self.jax_ver}) that perform the same tasks as the function {self.api.full_name} in Pytorch (v{self.torch_ver}).
+
+Steps:
+1.Identify the Functionality: First, understand the functionality of {self.api.full_name} in Pytorch (v{self.torch_ver}).
+2.Search for Equivalents: Then, find API functions in TensorFlow (v{self.tf_ver}) and JAX (v{self.jax_ver}) that match this functionality.
+3.Format the Output: Present the findings in the specified JSON format.
+
+Criteria for "Identical Functionality":
+1.Consistency in Input Transformation: When these APIs have no return value, applying them to inputs with the same structure or element values (such as tensors) should result in consistent transformations or changes to the original input.
+2.Consistency in Output: When these APIs have return values, they should produce the same output values when given the same input values.
+
+Required Output Format:
+1.Structure: The output should be a JSON object with three keys: "Pytorch", "Tensorflow", and "JAX". Each key should map to a dictionary where the values are lists of API functions (or combinations of API functions) that provide the same functionality.
+2.Example:
+{
+    "Pytorch" : {
+        "1" : "torch.nn.CrossEntropyLoss",
+    },
+    "Tensorflow" : {
+        "1" : "tensorflow.keras.losses.CategoricalCrossentropy",
+        "2" : "tensorflow.nn.softmax_cross_entropy_with_logits"
+    },
+    "JAX" : {}
+}
+
