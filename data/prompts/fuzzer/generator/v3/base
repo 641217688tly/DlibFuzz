@@ -1,0 +1,9 @@
+Tasks:
+1.Import Required Modules
+2.Call API Function: Use {api.full_name} in {Pytorch/Tensorflow/JAX} to perform the necessary computations or actions. Ensure that this API call is done within the correct context.
+3.Generate Input Data: Generate input data that is likely to trigger an edge case or boundary condition (e.g., high values, nulls, extreme dimensions) and pass it to the API function.
+
+Requirements:
+1.Imports: Ensure that all necessary modules or APIs are imported.
+2.Code-Only Format: Only output code and comments in the required format, avoiding any additional text or Markdown syntax.
+3.Correctness: Ensure the generated code does not contain syntax errors (e.g., SyntaxError, NameError) or invalid input errors (e.g., ValueError, InvalidArgumentError).
