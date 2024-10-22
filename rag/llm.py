@@ -14,6 +14,8 @@ class CodeQwenLLM(LLM):
             n_ctx=2048,
             n_parts=-1,
             seed=0,
+            n_gpu_layers=15000,
+            n_batch=512,
             f16_kv=False,
             logits_all=False,
             vocab_only=False,
