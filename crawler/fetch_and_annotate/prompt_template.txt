@@ -5,7 +5,8 @@ This may require your knowledge of {} and its common issues.
 For the API section, put the relevant APIs in an JSON array literal.
 For the code section you only need to put the relevant code snippet instead of the full issue. 
 If there is no code snippet provided in the issue, you should put an empty string "". 
-Then, summarize the title and other relevant content and put them in the description section. 
+Then, summarize the title and other content about how to reproduce the issue and put them in the description section. 
+The description should contain 3 parts: the environment where the issue took place, the user's operation and the consequence of that operation.
 Note that you should answer in JSON format. Do not add any Markdown syntax.
 
 The example is as follows:
