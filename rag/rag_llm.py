@@ -8,8 +8,9 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
-from llm import CodeQwenLLM
+from llm import CodeQwenLLM, CodeGemmaLLM
 from embeddings import OllamaEmbeddings
+from langchain.chains import RetrievalQA
 
 
 def load_html_files(directory: str):
@@ -39,7 +40,8 @@ def initialize_rag_system(documents_dir: str):
     vector_store = FAISS.from_documents(split_docs, embeddings)
     
     # Step 4: Initialize LLM
-    llm = CodeQwenLLM()
+    # llm = CodeQwenLLM()
+    llm = CodeGemmaLLM()
     
     # Step 5: Establish RAG pipeline
     prompt_template = """
@@ -53,8 +55,18 @@ def initialize_rag_system(documents_dir: str):
     User Query:
     {question}
     """
+
+    prompt = ChatPromptTemplate.from_template(prompt_template) # PROMPT?
+
+    qa_chain = RetrievalQA.from_chain_type(
+        llm=llm, 
+        chain_type="stuff", 
+        retriever=vector_store.as_retriever(), 
+        chain_type_kwargs={"prompt": prompt}
+    )
+
     
-    prompt = ChatPromptTemplate.from_template(prompt_template)
+    # prompt = ChatPromptTemplate.from_template(prompt_template)
     
     def format_docs(docs):
         return "\n\n".join(doc.page_content for doc in docs)
@@ -65,21 +77,21 @@ def initialize_rag_system(documents_dir: str):
     #     prompt=prompt,
     # )
     
-    qa_chain = (
-        {
-            "context": vector_store.as_retriever() | format_docs,
-            "question": RunnablePassthrough(),
-        } 
-        | prompt 
-        | llm 
-        | StrOutputParser()
-    )
+    # qa_chain = (
+    #     {
+    #         "context": vector_store.as_retriever() | format_docs,
+    #         "question": RunnablePassthrough(),
+    #     } 
+    #     | prompt 
+    #     | llm 
+    #     # | StrOutputParser()
+    # )
     
     return qa_chain, vector_store
 
 
 def rag_generate(query: str, qa_chain):
-    answer = qa_chain.invoke(query)
+    answer = qa_chain.run(query)
     return answer
 
 
@@ -89,7 +101,7 @@ def retrieve_documents(query: str, vector_store):
 
 
 if __name__ == "__main__":
-    print("Welcome to the Code Generation RAG System!")
+    print("Welcome to the RAG System!")
     print("Type 'exit' or 'quit' to terminate the program.\n")
 
     qa_chain, vector_store = initialize_rag_system("demo_docs")
@@ -103,7 +115,7 @@ if __name__ == "__main__":
         try:
             retrieved_docs = vector_store.as_retriever().invoke(query)
 
-            answer = qa_chain.invoke(query)
+            answer = qa_chain.run(query) #TODO 十分奇怪，CodeGemma在使用qa_chain.run时不会有问题，但在使用qa_chain.invoke时就会报错
 
             print("\nGenerated Code:\n")
             print(answer)
