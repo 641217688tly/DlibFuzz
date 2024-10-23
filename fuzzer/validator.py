@@ -190,17 +190,17 @@ def export_validated_seed(seed: ClusterTestSeed):  # 导出种子中各个库的
             os.makedirs(output_folder_path, exist_ok=True)
 
         # 随后在输出路径下导出各个库的测试用例
-        # 导出seed.valid_pytorch_code到output_path/torch.py
+        # 导出seed.valid_pytorch_code到output_path/torch_seed.py
         if seed.valid_pytorch_code:
-            with open(f'{output_folder_path}/torch.py', 'w') as f:
+            with open(f'{output_folder_path}/torch_seed.py', 'w') as f:
                 f.write(seed.valid_pytorch_code)
         # 导出seed.valid_tensorflow_code到output_path/tf.py
         if seed.valid_tensorflow_code:
-            with open(f'{output_folder_path}/tf.py', 'w') as f:
+            with open(f'{output_folder_path}/tf_seed.py', 'w') as f:
                 f.write(seed.valid_tensorflow_code)
         # 导出seed.valid_jax_code到output_path/jax.py
         if seed.valid_jax_code:
-            with open(f'{output_folder_path}/jax.py', 'w') as f:
+            with open(f'{output_folder_path}/jax_seed.py', 'w') as f:
                 f.write(seed.valid_jax_code)
 
 
@@ -236,9 +236,6 @@ def validate_all_seeds():
             session.commit()
             print(f"Seed({seed.id}) validated successfully.")
 
-        # 导出修复后的种子到py文件
-        export_validated_seed(seed)
-
         # 更新未校验的种子集
         unvalidated_seeds = session.query(ClusterTestSeed).filter(ClusterTestSeed.is_validated == False).all()
         # 打印未校验的种子数量
@@ -246,5 +243,14 @@ def validate_all_seeds():
         print(f"Unvalidated / Total: {len(unvalidated_seeds)} / {total_seeds_num}")
 
 
+def export_all_validated_seeds():
+    session = get_session()
+    # 查询所有已经验证的种子
+    validated_seeds = session.query(ClusterTestSeed).filter(ClusterTestSeed.is_validated == True).all()
+    for seed in validated_seeds:
+        export_validated_seed(seed)
+
+
 if __name__ == '__main__':
-    validate_all_seeds()
+    # validate_all_seeds()
+    export_all_validated_seeds()

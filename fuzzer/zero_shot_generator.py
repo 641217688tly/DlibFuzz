@@ -25,10 +25,13 @@ class SeedGenerator:
             print(
                 "+" * 40 + f"Generate Seeds for Combination(Pytorch[{pytorch_api.name if pytorch_api else 'Null'}]-Tensorflow[{tensorflow_api.name if tensorflow_api else 'Null'}]-JAX[{jax_api.name if jax_api else 'Null'}]) " + "+" * 40)
             # 先查询该组合已经生成了几个种子
-            seeds_num = self.session.query(ClusterTestSeed).filter_by(cluster_id=cluster.id,
-                                                                      pytorch_api_id=pytorch_api.id,
-                                                                      tensorflow_api_id=tensorflow_api.id,
-                                                                      jax_api_id=jax_api.id).count()
+            seeds_num = self.session.query(ClusterTestSeed).filter_by(
+                cluster_id=cluster.id,
+                pytorch_api_id=pytorch_api.id if pytorch_api else None,
+                tensorflow_api_id=tensorflow_api.id if tensorflow_api else None,
+                jax_api_id=jax_api.id if jax_api else None
+            ).count()
+
             remaining_energy = cluster.energy - seeds_num
             if remaining_energy <= 0:
                 continue
@@ -78,6 +81,8 @@ class SeedGenerator:
         twin_apis = [api for api in combination if api != base_api]
         twin_apis_seeds = []
         for twin_api in twin_apis:
+            if twin_api is None:
+                continue
             twin_api_seed = self.generate_seed4twin(seed, twin_api, base_api, validated_base_seed)
             twin_apis_seeds.append(twin_api_seed)
         return validated_base_seed, twin_apis_seeds
@@ -87,7 +92,7 @@ class SeedGenerator:
 Tasks:
 1.Import Required Modules
 2.Call {base_api.signature} in {base_api.__class__.__name__.replace("API", "")} (ver{base_api.version} to perform the necessary computations or actions.
-3.Generate input data that is likely to trigger an edge case or boundary condition and pass it to the API function.
+3.Generate input data that is likely to trigger an edge case or boundary condition (such as high values, nulls, extreme dimensions...) and pass it to the API function.
 4.4.If the ({base_api.signature}) has a return value, print its output. If it does not have a return value, print the value of the variables affected by ({base_api.signature}).
 
 Requirements:
@@ -188,6 +193,19 @@ def run_linearly():
         print("=" * 80 + f"Generates Seed for Cluster({untested_cluster.id})" + "=" * 80)
         SeedGenerator(session, openai_client).generate_seeds4cluster(untested_clusters[0])
         print(f"Untested / Total: {len(untested_clusters) - i - 1} / {len(untested_clusters)}" + "\n")
+
+
+def clear_cache():
+    session = get_session()
+    session.query(ClusterTestSeed).delete()
+    session.commit()
+    # 将所有cluster的is_tested字段设置为False
+    clusters = session.query(Cluster).all()
+    for cluster in clusters:
+        cluster.is_tested = False
+    # 将所有的ClusterTestSeed中的数据都删除
+    session.query(ClusterTestSeed).delete()
+    session.commit()
 
 
 if __name__ == '__main__':
