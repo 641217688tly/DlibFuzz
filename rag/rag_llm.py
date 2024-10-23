@@ -43,17 +43,15 @@ def initialize_rag_system(documents_dir: str):
     
     # Step 5: Establish RAG pipeline
     prompt_template = """
-    You are an AI assistant specialized in generating code based on user requirements.
-    
-    Use the following retrieved documents to inform your code generation. If the documents are not relevant, rely on your training data.
-    
+    Instructions:
+    You are an AI assistant specialized in processing deep learning code based on user requirements.
+    Answer the User Query using the following retrieved documents. If the documents are not relevant, rely on your training data.
+
     Retrieved Documents:
     {context}
     
     User Query:
     {question}
-    
-    Generate the appropriate code in response to the user's query.
     """
     
     prompt = ChatPromptTemplate.from_template(prompt_template)
