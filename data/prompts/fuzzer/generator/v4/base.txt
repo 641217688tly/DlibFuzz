@@ -1,0 +1,10 @@
+Tasks:
+1.Import Required Modules
+2.Call ({base_api.signature}) in {Pytorch/Tensorflow/JAX}(ver{base_api.version}) to perform the necessary computations or actions.
+3.Generate input data that is likely to trigger an edge case or boundary condition and pass it to the API function.
+4.If the ({base_api.signature}) has a return value, print its output. If it does not have a return value, print the value of the variables affected by ({base_api.signature}).
+
+Requirements:
+1.Imports: Ensure that all necessary modules or APIs are imported.
+2.Code-Only Format: Only output code and comments in the required format, avoiding any additional text or Markdown syntax.
+3.Correctness: Ensure the generated code does not contain syntax errors (e.g., SyntaxError, NameError) or invalid input errors (e.g., ValueError, InvalidArgumentError).
