@@ -1,0 +1,12 @@
+Task:
+It is known that the API ({twin_api.signature}) in {twin_api.__class__.__name__.replace("API", "")} (ver{twin_api.version}) has the same functionality as the API ({base_api.signature}) in {base_api.__class__.__name__.replace("API", "")} (ver{base_api.version}). Please imitate the logic of the usage of ({base_api.signature}) in {base_api.__class__.__name__.replace("API", "")} (ver{base_api.version}) shown in the code example below and generate an equivalent code snippet using the API ({twin_api.signature}) in {twin_api.__class__.__name__.replace("API", "")} (ver{twin_api.version}).
+```python
+{base_seed}
+```
+
+Requirements:
+1.Imports: Ensure that all necessary modules or APIs are imported.
+2.Consistency in Input: The input parameters for the API ({twin_api.signature}) in {twin_api.__class__.__name__.replace("API", "")} (ver{twin_api.version}) in your generated code should be the same as the input parameters for the API ({base_api.signature}) in {base_api.__class__.__name__.replace("API", "")} (ver{base_api.version}) in the sample code.
+3.Consistency in Output: The example code prints the return value or the affected variables from the call to ({base_api.signature}). Ensure that your generated code also prints the return value or the affected variables from the call to ({twin_api.signature}), and that this output is consistent with the output of the sample code. This requires that your invocation of ({twin_api.signature}) is consistent with the invocation of ({base_api.signature}).
+4.Code-Only Format: Only output code and comments in the required format, avoiding any additional text or Markdown syntax.
+5.Correctness: Ensure the generated code does not contain syntax errors (e.g., SyntaxError, NameError) or invalid input errors (e.g., ValueError, InvalidArgumentError).

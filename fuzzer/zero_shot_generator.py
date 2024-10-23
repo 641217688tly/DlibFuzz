@@ -77,8 +77,9 @@ class SeedGenerator:
         prompt = f"""
 Tasks:
 1.Import Required Modules
-2.Call API Function: Use {base_api.full_name} in {base_api.__class__.__name__.replace("API", "")} (ver{base_api.version} to perform the necessary computations or actions. Ensure that this API call is done within the correct context.
-3.Generate Input Data: Generate input data that is likely to trigger an edge case or boundary condition (e.g., high values, nulls, extreme dimensions) and pass it to the API function.
+2.Call {base_api.signature} in {base_api.__class__.__name__.replace("API", "")} (ver{base_api.version} to perform the necessary computations or actions.
+3.Generate input data that is likely to trigger an edge case or boundary condition and pass it to the API function.
+4.4.If the ({base_api.signature}) has a return value, print its output. If it does not have a return value, print the value of the variables affected by ({base_api.signature}).
 
 Requirements:
 1.Imports: Ensure that all necessary modules or APIs are imported.
@@ -101,13 +102,16 @@ Requirements:
 
     def generate_seed4twin(self, seed: ClusterTestSeed, twin_api, base_api, base_seed):  # 生成孪生API的测试用例
         prompt = f"""
-Generate test cases for the {twin_api.full_name} in {twin_api.__class__.__name__.replace("API", "")} (ver{twin_api.version}) according to following code:  
+Task:
+It is known that the API ({twin_api.signature}) in {twin_api.__class__.__name__.replace("API", "")} (ver{twin_api.version}) has the same functionality as the API ({base_api.signature}) in {base_api.__class__.__name__.replace("API", "")} (ver{base_api.version}). Please imitate the logic of the usage of ({base_api.signature}) in {base_api.__class__.__name__.replace("API", "")} (ver{base_api.version}) shown in the code example below and generate an equivalent code snippet using the API ({twin_api.signature}) in {twin_api.__class__.__name__.replace("API", "")} (ver{twin_api.version}).
+```python
 {base_seed}
+```
 
 Requirements:
 1.Imports: Ensure that all necessary modules or APIs are imported.
-2.Consistency in Input: Use the same input data as {base_api.full_name} in the sample.
-3.Consistency in Output: The output result of {twin_api.full_name} in {twin_api.__class__.__name__.replace("API", "")} (ver{twin_api.version}) should be identical to the {base_api.full_name} in {base_api.__class__.__name__.replace("API", "")} (ver{base_api.version}).
+2.Consistency in Input: The input parameters for the API ({twin_api.signature}) in {twin_api.__class__.__name__.replace("API", "")} (ver{twin_api.version}) in your generated code should be the same as the input parameters for the API ({base_api.signature}) in {base_api.__class__.__name__.replace("API", "")} (ver{base_api.version}) in the sample code.
+3.Consistency in Output: The example code prints the return value or the affected variables from the call to ({base_api.signature}). Ensure that your generated code also prints the return value or the affected variables from the call to ({twin_api.signature}), and that this output is consistent with the output of the sample code. This requires that your invocation of ({twin_api.signature}) is consistent with the invocation of ({base_api.signature}).
 4.Code-Only Format: Only output code and comments in the required format, avoiding any additional text or Markdown syntax.
 5.Correctness: Ensure the generated code does not contain syntax errors (e.g., SyntaxError, NameError) or invalid input errors (e.g., ValueError, InvalidArgumentError).
 """
@@ -163,6 +167,20 @@ def run():
         untested_clusters = session.query(Cluster).filter(Cluster.is_tested == False).all()
         total_clusters_num = session.query(Cluster).count()
         print(f"Untested / Total: {len(untested_clusters)} / {total_clusters_num}")
+
+
+def run_linearly():
+    # 创建数据库连接
+    session = get_session()
+    openai_client = get_openai_client()
+
+    # 对未聚类的TensorflowAPI进行聚类
+    untested_clusters = session.query(Cluster).filter(Cluster.is_tested == False).all()
+    for i, untested_cluster in enumerate(untested_clusters):
+        print("----------------------------------------------------------------------------------")
+        # 选择一个未聚类的TensorflowAPI
+        SeedGenerator(session, openai_client).generate_seeds4cluster(untested_clusters[0])
+        print(f"Untested / Total: {len(untested_clusters) - i - 1} / {len(untested_clusters)}" + "\n")
 
 
 if __name__ == '__main__':
