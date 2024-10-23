@@ -3,16 +3,46 @@ import random
 from json import JSONDecodeError
 from utils import *
 
-EXAMPLE = """json
+EXAMPLE1 = """json
 {
-    "Pytorch" : {
-        "1" : "torch.nn.CrossEntropyLoss",
+    "Pytorch": {
+        "1": "torch.nn.ReLU"
     },
-    "Tensorflow" : {
-        "1" : "tensorflow.keras.losses.CategoricalCrossentropy",
-        "2" : "tensorflow.nn.softmax_cross_entropy_with_logits"
+    "Tensorflow": {
+        "1": "tensorflow.nn.relu",
+        "2": "tensorflow.keras.layers.ReLU"
     },
-    "JAX" : {}
+    "JAX": {
+        "1": "jax.nn.relu"
+    }
+}
+"""
+
+EXAMPLE2 = """json
+{
+    "Pytorch": {
+        "1": "torch.nn.BatchNorm1d"
+    },
+    "Tensorflow": {
+        "1": "tensorflow.keras.layers.BatchNormalization"
+    },
+    "JAX": {
+        "1": "jax.example_libraries.stax.BatchNorm"
+    }
+}
+"""
+
+EXAMPLE3 = """json
+{
+    "Pytorch": {
+        "1": "torch.nn.CrossEntropyLoss"
+    },
+    "Tensorflow": {
+        "1": "tensorflow.keras.losses.CategoricalCrossentropy",
+        "2": "tensorflow.keras.losses.SparseCategoricalCrossentropy",
+        "3": "tensorflow.nn.softmax_cross_entropy_with_logits"
+    },
+    "JAX": {}
 }
 """
 
@@ -37,22 +67,24 @@ class Clusterer:
 
     def initialize_message(self):  # 构建clusterer的初始提词并返回对话消息
         clusterer_prompt = f"""
-Objective:
-Identify equivalent or identical API functions of functions in TensorFlow (v{self.tf_ver}) and PyTorch (v{self.torch_ver}) that perform the same tasks as the function {self.api.full_name} in JAX (v{self.jax_ver}).
-
-Steps:
-1.Identify the Functionality: First, understand the functionality of {self.api.full_name} in JAX (v{self.jax_ver}).
-2.Search for Equivalents: Then, find API functions in PyTorch (v{self.torch_ver}) and TensorFlow (v{self.tf_ver}) that match this functionality.
-3.Format the Output: Present the findings in the specified JSON format.
+Task:
+Identify equivalent or identical API functions in TensorFlow (ver{self.tf_ver}) and PyTorch (ver{self.torch_ver}) that perform the same tasks as the function ({self.api.signature}) in JAX (ver{self.jax_ver}).
 
 Criteria for "Identical Functionality":
 1.Consistency in Input Transformation: When these APIs have no return value, applying them to inputs with the same structure or element values (such as tensors) should result in consistent transformations or changes to the original input.
 2.Consistency in Output: When these APIs have return values, they should produce the same output values when given the same input values.
 
 Required Output Format:
-1.Structure: The output should be a JSON object with three keys: "Pytorch", "Tensorflow", and "JAX". Each key should map to a dictionary where the values are lists of API functions (or combinations of API functions) that provide the same functionality.
-2.Example:
-{EXAMPLE}
+1.The output should be a JSON object with three keys: "Pytorch", "Tensorflow", and "JAX". Each key should map to a dictionary where the values are key-value pairs representing numerical indices as keys (starting from "1") and the corresponding class or function name as values.
+2.The API function names must include both the module and the function name, i.e., "API_Module.API_Function".
+3.Ensure that the output JSON contains full module names for each API. Do not use abbreviations like "tf" for "tensorflow".
+4.The output format could follow the structure shown in the following examples:
+Example1:
+{EXAMPLE1}
+Example2:
+{EXAMPLE2}
+Example3:
+{EXAMPLE3}
 """
         messages = [
             {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
@@ -90,6 +122,9 @@ Required Output Format:
             #    self.errors.append(f"{full_api_name} is deprecated.")
             #    return False
             return True
+        except ModuleNotFoundError as e:
+            self.errors.append(f"Module {module_name} not found: {str(e)}")
+            return False
         except ImportError as e:
             self.errors.append(f"Module {module_name} not found: {str(e)}")
             return False
@@ -172,6 +207,7 @@ Required Output Format:
                     name=api_name,
                     module=module_name,
                     full_name=full_api_name,  # 根据api_class来设置version
+                    signature=get_api_signature(full_api_name),
                     version=self.torch_ver if api_class == PytorchAPI else self.tf_ver if api_class == TensorflowAPI else self.jax_ver
                 )
                 self.session.add(api)

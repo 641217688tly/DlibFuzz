@@ -69,5 +69,5 @@ apis = get_tf_full_api_names(tf, 'tf.')
 
 # 将 API 写入 JSON 文件
 apis_dict = {str(index + 1): api for index, api in enumerate(apis)}
-with open('tensorflow_api_list.json', 'w') as f:
+with open('tf_apis.json', 'w') as f:
     json.dump(apis_dict, f, indent=2)

@@ -6,6 +6,8 @@ import httpx
 from openai import OpenAI
 from sqlalchemy.orm import sessionmaker
 from orm import *
+import inspect
+import importlib
 
 TORCH_VERSION = "1.12"
 TF_VERSION = "2.10"
@@ -57,9 +59,13 @@ def validate_api_existence(module_name, api_name):  # 验证API是否存在的�
         # 先检查模块是否存在
         module = importlib.import_module(module_name)
         # 再检查API是否存在
-        getattr(module, api_name)
+        func = getattr(module, api_name, None)
+        if inspect.ismodule(func):
+            return False
+        if inspect.isclass(func):
+            return False
         return True
-    except (ModuleNotFoundError, AttributeError):
+    except (ModuleNotFoundError, AttributeError, ImportError, ValueError, Exception):
         return False
 
 
@@ -117,6 +123,63 @@ def check_all_api_lists():
     print(f"Number of Tensorflow APIs that do not exist: {not_exists_count3}")
 
 
+def get_api_signature(full_api_name):
+    """
+    根据 API 的全名获取其函数签名
+    :param full_name: API的全名（例如 'torch.nn.Conv2d'）
+    :return: 该API的函数签名或者当无法获取时返回错误信息
+    """
+
+    def process_signature(full_api_name, raw_signature):
+        # 将raw_signature按照最后一个'->'分割为输入参数和输出参数
+        parts = raw_signature.strip().rsplit('->', 1)
+        if len(parts) == 2:
+            input_params, output_params = parts
+            input_params = input_params.strip()
+            output_params = output_params.strip()
+            # 如果input_params没有被"()"包围，则为其添加括号
+            if not input_params.startswith('(') and not input_params.endswith(')'):
+                input_params = f"({input_params})"
+            # 如果output_params没有被"()"包围，则为其添加括号
+            if not output_params.startswith('(') and not output_params.endswith(')'):
+                output_params = f"({output_params})"
+            signature = f"{full_api_name}{input_params} -> {output_params}"
+            return signature
+        else:  # 如果函数没有输出值
+            input_params = raw_signature.strip()
+            output_params = "()"
+            # 如果signature没有被"()"包围，则添加括号
+            if not input_params.startswith('(') and not input_params.endswith(')'):
+                input_params = f"({input_params})"
+            signature = f"{full_api_name}{input_params} -> {output_params}"
+            return signature
+
+    try:
+        # 分割全名以获得模块和属性名
+        module_name, attribute_name = full_api_name.rsplit('.', 1)
+        # 动态导入模块
+        module = importlib.import_module(module_name)
+        # 获取属性（函数、类等）
+        attribute = getattr(module, attribute_name)
+        # 获取签名
+        raw_signature = str(inspect.signature(attribute))
+        # 处理签名
+        signature = process_signature(full_api_name, raw_signature)
+        return signature
+    except ImportError as e:
+        print(f"get_api_signature() encounters an ImportError: {e}")
+        return f"{full_api_name}()"
+    except AttributeError as e:
+        print(f"get_api_signature() encounters an AttributeError: {e}")
+        return f"{full_api_name}()"
+    except ValueError as e:
+        print(f"get_api_signature() encounters a ValueError: {e}")
+        return f"{full_api_name}()"
+    except Exception as e:
+        print(f"get_api_signature() encounters an unexpected error: {e}")
+        return f"{full_api_name}()"
+
+
 def export_all_validated_seeds():  # 从数据库中将所有验证过的seed导出为Python文件
     session = get_session()
     # 获取所有is_validated == True的种子
@@ -129,4 +192,7 @@ def export_all_validated_seeds():  # 从数据库中将所有验证过的seed导
 
 
 if __name__ == '__main__':
-    export_all_validated_seeds()
+    # export_all_validated_seeds()
+    # 示例使用
+    signature = get_api_signature("tensorflow.nn.softmax_cross_entropy_with_logits")
+    print(signature)

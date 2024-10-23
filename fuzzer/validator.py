@@ -106,7 +106,7 @@ class SeedValidator:
 
     def static_analysis(self, raw_code):  # 静态分析Python代码, 如果发现错误, 则返回False和错误信息
         # 创建一个临时的Python文件:
-        file_path = f'../../data/tmp/{self.seed.id}.py'
+        file_path = f'../data/tmp/{self.seed.id}.py'
         with open(file_path, 'w') as f:
             f.write(raw_code)
         # 使用静态分析工具对代码文件进行分析
@@ -180,14 +180,14 @@ def export_validated_seed(seed: ClusterTestSeed):  # 导出种子中各个库的
         # 先构建输出路径
         seed_folder_name = ''
         if seed.pytorch_api_id:
-            seed_folder_name = seed_folder_name + f'Pytorch({seed.pytorch_api.api_name})'
+            seed_folder_name = seed_folder_name + f'Pytorch({seed.pytorch_api.name})'
         if seed.tensorflow_api_id:
-            seed_folder_name = seed_folder_name + f'Tensorflow({seed.tensorflow_api.api_name})'
+            seed_folder_name = seed_folder_name + f'Tensorflow({seed.tensorflow_api.name})'
         if seed.jax_api_id:
-            seed_folder_name = seed_folder_name + f'JAX({seed.jax_api.api_name})'
+            seed_folder_name = seed_folder_name + f'JAX({seed.jax_api.name})'
         output_folder_path = f'seeds/validated_seeds/zero-shot/{seed.cluster_id}/' + seed_folder_name
         if not os.path.exists(output_folder_path):
-            os.makedirs(os.path.dirname(output_folder_path), exist_ok=True)
+            os.makedirs(output_folder_path, exist_ok=True)
 
         # 随后在输出路径下导出各个库的测试用例
         # 导出seed.valid_pytorch_code到output_path/torch.py

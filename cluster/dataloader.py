@@ -53,47 +53,72 @@ def add_apis_from_txt(session, torch_version="1.12", tf_version="2.10", jax_vers
             session.close()
             print("Tensorflow API data loaded successfully!")
 
-    # if not session.query(JAXAPI).first():  # JAX APIs并添加到数据库
-    #     try:
-    #         with open('apis/jax/jax_valid_apis.txt', 'r', encoding='utf-8') as file:
-    #             for line in file:
-    #                 full_api_name = line.strip()
-    #                 if full_api_name:  # 确保不是空行
-    #                     module_name, api_name = full_api_name.rsplit('.', 1)
-    #                     is_valid = utils.validate_api_existence(module_name, api_name)
-    #                     if is_valid:
-    #                         jax_api = JAXAPI(
-    #                             name=api_name,
-    #                             module=module_name,
-    #                             full_name=full_api_name,
-    #                             version=jax_version
-    #                         )
-    #                         session.add(jax_api)
-    #             session.commit()
-    #     except Exception as e:
-    #         session.rollback()
-    #         print(f"Error processing JAX APIs file: {e}")
-    #     finally:
-    #         session.close()
-    #         print("JAX API data loaded successfully!")
+    if not session.query(JAXAPI).first():  # JAX APIs并添加到数据库
+        try:
+            with open('apis/jax/jax_valid_apis.txt', 'r', encoding='utf-8') as file:
+                for line in file:
+                    full_api_name = line.strip()
+                    if full_api_name:  # 确保不是空行
+                        module_name, api_name = full_api_name.rsplit('.', 1)
+                        is_valid = utils.validate_api_existence(module_name, api_name)
+                        if is_valid:
+                            jax_api = JAXAPI(
+                                name=api_name,
+                                module=module_name,
+                                full_name=full_api_name,
+                                version=jax_version
+                            )
+                            session.add(jax_api)
+                session.commit()
+        except Exception as e:
+            session.rollback()
+            print(f"Error processing JAX APIs file: {e}")
+        finally:
+            session.close()
+            print("JAX API data loaded successfully!")
+
+
+def process_signature(full_api_name, raw_signature):
+    # 将raw_signature按照最后一个'->'分割为输入参数和输出参数
+    parts = raw_signature.strip().rsplit('->', 1)
+    if len(parts) == 2:
+        input_params, output_params = parts
+        input_params = input_params.strip()
+        output_params = output_params.strip()
+        # 如果input_params没有被"()"包围，则为其添加括号
+        if not input_params.startswith('(') and not input_params.endswith(')'):
+            input_params = f"({input_params})"
+        # 如果output_params没有被"()"包围，则为其添加括号
+        if not output_params.startswith('(') and not output_params.endswith(')'):
+            output_params = f"({output_params})"
+        signature = f"{full_api_name}{input_params} -> {output_params}"
+        return signature
+    else:  # 如果函数没有输出值
+        input_params = raw_signature.strip()
+        output_params = "()"
+        # 如果signature没有被"()"包围，则添加括号
+        if not input_params.startswith('(') and not input_params.endswith(')'):
+            input_params = f"({input_params})"
+        signature = f"{full_api_name}{input_params} -> {output_params}"
+        return signature
 
 
 def add_apis_from_json(session, torch_version="1.12", tf_version="2.10", jax_version="0.4.13"):
     if not session.query(JAXAPI).first():  # 从JSON文件读取JAX APIs并添加到数据库
         try:
             with open('apis/jax/jax_apis.json', 'r', encoding='utf-8') as file:
-                torch_apis = json.load(file)
-                for api_id, api_info in torch_apis.items():
+                tf_apis = json.load(file)
+                for api_id, api_info in tf_apis.items():
                     # 检查数据库中是否已存在该API
+                    api_exists = session.query(JAXAPI).filter_by(full_name=api_info['fullName']).first()
                     is_valid = utils.validate_api_existence(api_info['module'], api_info['name'])
-                    api_exists = session.query(JAXAPI).filter_by(name=api_info['name']).first()
-                    if not (api_exists and is_valid):
+                    if api_exists is None and is_valid:  # 如果API不存在且API是有效的:
                         # 创建JAXAPI实例并添加到session
                         new_api = JAXAPI(
                             name=api_info['name'],
                             module=api_info['module'],
                             full_name=api_info['fullName'],
-                            signature=api_info['signature'],
+                            signature=process_signature(api_info['fullName'], api_info['signature']),
                             description=api_info['description'],
                             version=jax_version
                         )
@@ -109,18 +134,18 @@ def add_apis_from_json(session, torch_version="1.12", tf_version="2.10", jax_ver
     if not session.query(PytorchAPI).first():  # 从JSON文件读取Pytorch APIs并添加到数据库
         try:
             with open('apis/pytorch/torch_apis.json', 'r', encoding='utf-8') as file:
-                torch_apis = json.load(file)
-                for api_id, api_info in torch_apis.items():
+                tf_apis = json.load(file)
+                for api_id, api_info in tf_apis.items():
                     # 检查数据库中是否已存在该API
                     is_valid = utils.validate_api_existence(api_info['module'], api_info['name'])
-                    api_exists = session.query(PytorchAPI).filter_by(name=api_info['name']).first()
-                    if not (api_exists and is_valid):
+                    api_exists = session.query(PytorchAPI).filter_by(full_name=api_info['fullName']).first()
+                    if api_exists is None and is_valid:  # 如果API不存在且API是有效的:
                         # 创建PytorchAPI实例并添加到session
                         new_api = PytorchAPI(
                             name=api_info['name'],
                             module=api_info['module'],
                             full_name=api_info['fullName'],
-                            signature=api_info['signature'],
+                            signature=process_signature(api_info['fullName'], api_info['signature']),
                             description=api_info['description'],
                             version=torch_version
                         )
@@ -136,18 +161,24 @@ def add_apis_from_json(session, torch_version="1.12", tf_version="2.10", jax_ver
     if not session.query(TensorflowAPI).first():  # 从JSON文件读取Tensorflow APIs并添加到数据库
         try:
             with open('apis/tensorflow/tf_apis.json', 'r', encoding='utf-8') as file:
-                torch_apis = json.load(file)
-                for api_id, api_info in torch_apis.items():
+                tf_apis = json.load(file)
+                for api_id, api_info in tf_apis.items():
+                    module = api_info['module']
+                    full_api_name = api_info['fullName']
+                    if module.startswith("tf"):  # 如果module以"tf"开头，则将str中的第一个"tf"替换为"tensorflow"
+                        module = module.replace("tf", "tensorflow", 1)
+                    if full_api_name.startswith("tf"):  # 如果full_api_name以"tf"开头，则将str中的第一个"tf"替换为"tensorflow"
+                        full_api_name = full_api_name.replace("tf", "tensorflow", 1)
                     # 检查数据库中是否已存在该API
-                    is_valid = utils.validate_api_existence(api_info['module'], api_info['name'])
-                    api_exists = session.query(TensorflowAPI).filter_by(name=api_info['name']).first()
-                    if not (api_exists and is_valid):
+                    is_valid = utils.validate_api_existence(module, api_info['name'])
+                    api_exists = session.query(TensorflowAPI).filter_by(full_name=full_api_name).first()
+                    if api_exists is None and is_valid:  # 如果API不存在且API是有效的:
                         # 创建TensorflowAPI实例并添加到session
                         new_api = TensorflowAPI(
                             name=api_info['name'],
-                            module=api_info['module'],
-                            full_name=api_info['fullName'],
-                            signature=api_info['signature'],
+                            module=module,
+                            full_name=full_api_name,
+                            signature=process_signature(full_api_name, api_info['signature']),
                             description=api_info['description'],
                             version=tf_version
                         )
@@ -224,7 +255,7 @@ if __name__ == '__main__':
     session = utils.get_session()
 
     # 如果JAX/Tensorflow/Pytorch数据库中为空则添加数据
-    add_apis_from_txt(session, torch_version="1.12", tf_version="2.10", jax_version="0.4.13")
+    # add_apis_from_txt(session, torch_version="1.12", tf_version="2.10", jax_version="0.4.13")
     add_apis_from_json(session, torch_version="1.12", tf_version="2.10", jax_version="0.4.13")
 
     # 将错误触发代码附加到Pytorch/Tensorflow/JAX API下

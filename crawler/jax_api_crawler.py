@@ -75,5 +75,5 @@ print(f"Total APIs collected: {len(apis)}")
 
 # 将 API 写入 JSON 文件
 apis_dict = {str(index + 1): api for index, api in enumerate(apis)}
-with open('jax_api_list.json', 'w') as f:
+with open('jax_apis.json', 'w') as f:
     json.dump(apis_dict, f, indent=2)
