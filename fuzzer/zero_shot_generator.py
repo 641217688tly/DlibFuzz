@@ -22,6 +22,8 @@ class SeedGenerator:
             pytorch_api = combination[0] if combination[0] else None
             tensorflow_api = combination[1] if combination[1] else None
             jax_api = combination[2] if combination[2] else None
+            print(
+                "+" * 40 + f"Generate Seeds for Combination(Pytorch[{pytorch_api.name if pytorch_api else 'Null'}]-Tensorflow[{tensorflow_api.name if tensorflow_api else 'Null'}]-JAX[{jax_api.name if jax_api else 'Null'}]) " + "+" * 40)
             # 先查询该组合已经生成了几个种子
             seeds_num = self.session.query(ClusterTestSeed).filter_by(cluster_id=cluster.id,
                                                                       pytorch_api_id=pytorch_api.id,
@@ -34,7 +36,11 @@ class SeedGenerator:
             # 为当前组合生成remaining_energy个种子, 种子的序号为[1, energy]
             for i in range(cluster.energy - remaining_energy + 1, cluster.energy + 1):
                 try:
-                    self.generate_seed4combination(cluster, combination)
+                    print("*" * 30 + f"Generate Seed{i}" + "*" * 30)
+                    base_api_seed, twin_apis_seeds = self.generate_seed4combination(cluster, combination)
+                    print("-" * 20 + f"Base API Seed" + "-" * 20 + f"\n{base_api_seed}")
+                    for twin_apis_seed in twin_apis_seeds:
+                        print("-" * 20 + f"Twin API Seed" + "-" * 20 + f"\n{twin_apis_seed}")
                 except Exception as e:
                     print(f"Error in generating seed for cluster {cluster.id}: {e}")
                     self.session.rollback()
@@ -61,17 +67,20 @@ class SeedGenerator:
 
         # 1.先为基底API生成测试用例
         base_api = pytorch_api if cluster.base == 'Pytorch' else tensorflow_api if cluster.base == 'Tensorflow' else jax_api
-        base_seed_code = self.generate_seed4base(seed, base_api)
+        base_seed = self.generate_seed4base(seed, base_api)
         # 2.随后尝试对基底API进行修复
-        base_seed_validator = SeedValidator(self.session, self.openai_client, seed, base_seed_code, cluster.base)
-        validated_base_code = base_seed_validator.validate()
-        if validated_base_code is None:
+        base_seed_validator = SeedValidator(self.session, self.openai_client, seed, base_seed, cluster.base)
+        validated_base_seed = base_seed_validator.validate()
+        if validated_base_seed is None:
             # 如果修复失败, 依旧使用修复前的代码
-            validated_base_code = base_seed_code
+            validated_base_seed = base_seed
         # 3.参考基底API的测试用例生成其他库中的孪生API的测试用例
         twin_apis = [api for api in combination if api != base_api]
+        twin_apis_seeds = []
         for twin_api in twin_apis:
-            self.generate_seed4twin(seed, twin_api, base_api, validated_base_code)
+            twin_api_seed = self.generate_seed4twin(seed, twin_api, base_api, validated_base_seed)
+            twin_apis_seeds.append(twin_api_seed)
+        return validated_base_seed, twin_apis_seeds
 
     def generate_seed4base(self, seed: ClusterTestSeed, base_api):  # 生成基底API的测试用例
         prompt = f"""
@@ -143,7 +152,6 @@ Requirements:
                     temperature=1,
                 )
                 response_data = response.choices[0].message.content
-                print(response_data)
                 return response_data
             except Exception as e:
                 print(f"Failed to get response due to: \n{e} \nRetrying(Current attempt: {attempt_num + 1})...")
@@ -161,7 +169,7 @@ def run():
     # 获得所有的cluster未测试的cluster
     untested_clusters = session.query(Cluster).filter(Cluster.is_tested == False).all()
     while untested_clusters:
-        print("----------------------------------------------------------------------------------")
+        print("=" * 80 + f"Generate Seeds for Cluster({untested_clusters[0].id})" + "=" * 80)
         SeedGenerator(session, openai_client).generate_seeds4cluster(untested_clusters[0])
 
         untested_clusters = session.query(Cluster).filter(Cluster.is_tested == False).all()
@@ -177,8 +185,7 @@ def run_linearly():
     # 对未聚类的TensorflowAPI进行聚类
     untested_clusters = session.query(Cluster).filter(Cluster.is_tested == False).all()
     for i, untested_cluster in enumerate(untested_clusters):
-        print("----------------------------------------------------------------------------------")
-        # 选择一个未聚类的TensorflowAPI
+        print("=" * 80 + f"Generates Seed for Cluster({untested_cluster.id})" + "=" * 80)
         SeedGenerator(session, openai_client).generate_seeds4cluster(untested_clusters[0])
         print(f"Untested / Total: {len(untested_clusters) - i - 1} / {len(untested_clusters)}" + "\n")
 
