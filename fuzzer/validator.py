@@ -185,10 +185,13 @@ def export_validated_seed(seed: ClusterTestSeed):  # 导出种子中各个库的
             seed_folder_name = seed_folder_name + f'Tensorflow({seed.tensorflow_api.name})'
         if seed.jax_api_id:
             seed_folder_name = seed_folder_name + f'JAX({seed.jax_api.name})'
-        output_folder_path = f'seeds/validated_seeds/zero-shot/{seed.cluster_id}/' + seed_folder_name
-        if not os.path.exists(output_folder_path):
+        output_combination_folder_path = f'seeds/validated_seeds/zero-shot/{seed.cluster_id}/' + seed_folder_name
+        if not os.path.exists(output_combination_folder_path):  # 创建API组合的文件夹
+            os.makedirs(output_combination_folder_path, exist_ok=True)
+        # 创建一个新的输出文件夹
+        output_folder_path = f"{output_combination_folder_path}/seed_{len(os.listdir(output_combination_folder_path)) + 1}"
+        if not os.path.exists(output_folder_path):  # 创建API组合的文件夹
             os.makedirs(output_folder_path, exist_ok=True)
-
         # 随后在输出路径下导出各个库的测试用例
         # 导出seed.valid_pytorch_code到output_path/torch_seed.py
         if seed.valid_pytorch_code:
@@ -252,5 +255,5 @@ def export_all_validated_seeds():
 
 
 if __name__ == '__main__':
-    # validate_all_seeds()
+    #validate_all_seeds()
     export_all_validated_seeds()
