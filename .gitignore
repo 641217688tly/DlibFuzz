@@ -167,3 +167,7 @@ cython_debug/
 
 # VS Code
 .vscode/
+
+results_*/
+seeds/
+generated_code_*
