@@ -1,5 +1,6 @@
 import datetime
 import os
+import time
 from bs4 import BeautifulSoup
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.vectorstores import FAISS
@@ -113,13 +114,20 @@ if __name__ == "__main__":
             break
 
         try:
+            start_time = time.time()
             retrieved_docs = vector_store.as_retriever().invoke(query)
 
             answer = qa_chain.run(query) #TODO 十分奇怪，CodeGemma在使用qa_chain.run时不会有问题，但在使用qa_chain.invoke时就会报错
 
+            end_time = time.time()
+
+            total_time = end_time - start_time
+
             print("\nGenerated Code:\n")
             print(answer)
             print("\n" + "=" * 50 + "\n")
+
+            print(f"total time: {total_time}")
 
             current_time = datetime.datetime.now().strftime('%m%d%H%M%S')
             with open(f'generated_code_{current_time}.txt', 'w', encoding='utf-8') as file:

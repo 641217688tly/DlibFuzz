@@ -69,8 +69,14 @@ class CodeGemmaLLM(LLM):
             self._llm = Llama(
                 model_path=self.model_path,
                 n_ctx=2048,
-                n_gpu_layers=20,
                 use_fp16=True,
+                n_parts=-1,
+                seed=0,
+                n_gpu_layers=15000,
+                n_batch=512,
+                logits_all=False,
+                vocab_only=False,
+                use_mlock=False,  # Set to False to avoid memory locking issues
                 **kwargs
             )
             logger.info("CodeGemmaLLM initialized successfully with GPU support.")
