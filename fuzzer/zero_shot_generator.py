@@ -64,6 +64,7 @@ class SeedGenerator:
             pytorch_api_id=pytorch_api.id if pytorch_api else None,
             tensorflow_api_id=tensorflow_api.id if tensorflow_api else None,
             jax_api_id=jax_api.id if jax_api else None,
+            start_test=datetime.utcnow()
         )
         self.session.add(seed)
         self.session.commit()
@@ -85,6 +86,7 @@ class SeedGenerator:
                 continue
             twin_api_seed = self.generate_seed4twin(seed, twin_api, base_api, validated_base_seed)
             twin_apis_seeds.append(twin_api_seed)
+        seed.end_test = datetime.utcnow()
         return validated_base_seed, twin_apis_seeds
 
     def generate_seed4base(self, seed: ClusterTestSeed, base_api):  # 生成基底API的测试用例
@@ -99,6 +101,7 @@ Requirements:
 1.Imports: Ensure that all necessary modules or APIs are imported.
 2.Code-Only Format: Only output code and comments in the required format, avoiding any additional text or Markdown syntax.
 3.Correctness: Ensure the generated code does not contain syntax errors (e.g., SyntaxError, NameError) or invalid input errors (e.g., ValueError, InvalidArgumentError).
+4.Besides the return value of ({base_api.signature}) or the variables affected by it, do not print anything else. Ensure the print statements can be executed reliably and avoid placing them in try-catch and if-else blocks.
 """
         base_seed_code = self.query_openai(prompt)
         if base_seed_code is None:
@@ -128,6 +131,7 @@ Requirements:
 3.Consistency in Output: The example code prints the return value or the affected variables from the call to ({base_api.signature}). Ensure that your generated code also prints the return value or the affected variables from the call to ({twin_api.signature}), and that this output is consistent with the output of the sample code. This requires that your invocation of ({twin_api.signature}) is consistent with the invocation of ({base_api.signature}).
 4.Code-Only Format: Only output code and comments in the required format, avoiding any additional text or Markdown syntax.
 5.Correctness: Ensure the generated code does not contain syntax errors (e.g., SyntaxError, NameError) or invalid input errors (e.g., ValueError, InvalidArgumentError).
+6.Besides the return value of ({twin_api.signature}) or the variables affected by it, do not print anything else. Ensure the print statements can be executed reliably and avoid placing them in try-catch and if-else blocks.
 """
         twin_seed_code = self.query_openai(prompt)
         if twin_seed_code is None:
@@ -209,4 +213,5 @@ def clear_cache():
 
 
 if __name__ == '__main__':
+    # clear_cache()
     run()

@@ -8,3 +8,4 @@ Requirements:
 1.Imports: Ensure that all necessary modules or APIs are imported.
 2.Code-Only Format: Only output code and comments in the required format, avoiding any additional text or Markdown syntax.
 3.Correctness: Ensure the generated code does not contain syntax errors (e.g., SyntaxError, NameError) or invalid input errors (e.g., ValueError, InvalidArgumentError).
+4.Besides the return value of ({base_api.signature}) or the variables affected by it, do not print anything else. Ensure the print statements can be executed reliably and avoid placing them in try-catch and if-else blocks.

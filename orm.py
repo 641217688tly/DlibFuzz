@@ -1,6 +1,8 @@
 import yaml
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Text, Table, Boolean, Enum
 from sqlalchemy.orm import relationship, declarative_base
+from datetime import datetime
+from sqlalchemy import DateTime
 
 # 读取config.yml文件
 with open('config.yml', 'r', encoding='utf-8') as file:
@@ -157,6 +159,8 @@ class ClusterTestSeed(Base):
     valid_jax_code = Column(Text, nullable=True)
 
     is_validated = Column(Boolean, default=False)  # 该种子是否已经修复过了
+    start_test = Column(DateTime, default=datetime.utcnow)  # 设置为该种子的创建时间
+    end_test = Column(DateTime, nullable=True)  # 设置为该种子结束测试用例生成的时间
 
 
 # 创建表
