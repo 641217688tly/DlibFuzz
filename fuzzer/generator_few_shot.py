@@ -180,14 +180,14 @@ def generate_seeds(session, openai_client, cluster, seeds_num=5):
         # 分别获取PytorchAPICombination, TensorFlowAPICombination和JaxAPICombination内所有的API
         torch_apis = multi_lib_combinations[0].apis if multi_lib_combinations[0] else []
         torch_error_triggers_dict = get_apis_error_triggers(torch_apis,
-                                                            PytorchErrorTriggerCode,
+                                                            PytorchErrorTrigger,
                                                             session)
         tf_apis = multi_lib_combinations[1].apis if multi_lib_combinations[1] else []
         tf_error_triggers_dict = get_apis_error_triggers(tf_apis,
-                                                         TensorflowErrorTriggerCode,
+                                                         TensorflowErrorTrigger,
                                                          session)
         jax_apis = multi_lib_combinations[2].apis if multi_lib_combinations[2] else []
-        jax_error_triggers_dict = get_apis_error_triggers(jax_apis, JaxErrorTriggerCode,
+        jax_error_triggers_dict = get_apis_error_triggers(jax_apis, JAXErrorTrigger,
                                                           session)
         target = [round(ERROR_TRIGGER_TARGET * len(torch_apis) / (len(torch_apis) + len(tf_apis) + len(jax_apis))),
                   round(ERROR_TRIGGER_TARGET * len(tf_apis) / (len(torch_apis) + len(tf_apis) + len(jax_apis))),

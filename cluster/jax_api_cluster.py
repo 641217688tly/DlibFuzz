@@ -4,33 +4,48 @@ from json import JSONDecodeError
 from orm import *
 from utils import *
 
-TORCH_VERSION = "1.12"
-TF_VERSION = "2.10"
-JAX_VERSION = "0.4.13"
-
 EXAMPLE1 = """json
-{   
-    "Pytorch" : {
-        "1" : ["torch.tensor", "torch.nn.CrossEntropyLoss"],
+{
+    "Pytorch": {
+        "1": ["torch.nn.CrossEntropyLoss"]
     },
-    "Tensorflow" : {
-        "1" : ["tensorflow.keras.losses.CategoricalCrossentropy"], // tensorflow.keras.losses.CategoricalCrossentropy internal will automatically array into Tensorflow tensor, so there is no need to be used with tensorflow.constant
-        "2" : ["tensorflow.constant", "tensorflow.nn.softmax_cross_entropy_with_logits"] // Before using tensorflow.nn.softmax_cross_entropy_with_logits, it needs to use tensorflow.constant to convert the input value into a tensor
+    "Tensorflow": {
+        "1": ["tensorflow.keras.losses.CategoricalCrossentropy"],
+        "2": ["tensorflow.keras.losses.SparseCategoricalCrossentropy"],
+        "3": ["tensorflow.nn.softmax_cross_entropy_with_logits"]
     },
-    "JAX" : {
-        "1" : ["jax.numpy.array", "jax.nn.log_softmax", "jax.numpy.sum"] // Before using jax.nn.softmax_cross_entropy, it needs to use jax.numpy.array to convert the input value into a tensor. After using jax.nn.softmax_cross_entropy, it needs to use jax.numpy.sum to calculate the sum of the cross entropy loss
+    "JAX": {
+        "1": ["jax.nn.log_softmax", "jax.numpy.sum", "jax.numpy.mean"]
     }
 }
 """
 
 EXAMPLE2 = """json
-{   
-    // Output an empty dictionary when no combination output from the TensorFlow API or Pytorch API has the same value as the JAX API
-    "Pytorch" : {
-        "1" : ["torch.tensor", "torch.nn.CrossEntropyLoss"],
-    }, 
-    "Tensorflow" : {}, 
-    "JAX" : {}
+{
+    "Pytorch": {
+        "1": ["torch.nn.ReLU"]
+    },
+    "Tensorflow": {
+        "1": ["tensorflow.nn.relu"],
+        "2": ["tensorflow.keras.layers.ReLU"]
+    },
+    "JAX": {
+        "1": ["jax.nn.relu"]
+    }
+}
+"""
+
+EXAMPLE3 = """json
+{
+    "Pytorch": {
+        "1": ["torch.nn.BatchNorm1d"]
+    },
+    "Tensorflow": {
+        "1": ["tensorflow.keras.layers.BatchNormalization"]
+    },
+    "JAX": {
+        "1": ["jax.example_libraries.stax.BatchNorm"]
+    }
 }
 """
 
@@ -41,9 +56,9 @@ class Clusterer:
         self.api = api
         self.session = session
         self.openai_client = openai_client
-        self.torch_ver = TORCH_VERSION
-        self.tf_ver = TF_VERSION
-        self.jax_ver = JAX_VERSION
+        self.torch_ver = get_library_version()['pytorch']
+        self.tf_ver = get_library_version()['tensorflow']
+        self.jax_ver = get_library_version()['jax']
         self.messages = self.initialize_message()
         self.responses = []
         self.errors = []
@@ -54,8 +69,6 @@ class Clusterer:
         }
 
     def initialize_message(self):  # 构建clusterer的初始提词并返回对话消息
-        # TODO 后续可能会从将Prompt中的Example存入JSON以避免硬编码
-
         clusterer_prompt = f"""
 Objective:
 Identify equivalent or identical API functions or combinations of functions in TensorFlow (v{self.tf_ver}) and PyTorch (v{self.torch_ver}) that perform the same tasks as the function {self.api.full_name} in JAX (v{self.jax_ver}).
@@ -113,6 +126,9 @@ Example 2:
             #    self.errors.append(f"{full_api_name} is deprecated.")
             #    return False
             return True
+        except ModuleNotFoundError as e:
+            self.errors.append(f"Module {module_name} not found: {str(e)}")
+            return False
         except ImportError as e:
             self.errors.append(f"Module {module_name} not found: {str(e)}")
             return False
@@ -159,7 +175,7 @@ Example 2:
                 self.messages.append({"role": "assistant", "content": response})
                 print(f"Clustered Pytorch API: {self.api.name}\nResponse:\n{response}")
                 # 在此处需要检查: 1.响应的数据是否遵循JSON格式; 2.返回的是API的完整函数名(完整函数名 = 模块名.API名)而非函数签名 3.所有的API函数名必须有效(不是虚构的, 也不是被弃用的)
-                if self.validate_apis(response):
+                if self.validate_apis(response):  # 经验证证明返回的数据是有效的
                     self.errors = []  # 清空错误列表
                     return json.loads(response)
                 else:
@@ -188,8 +204,8 @@ Example 2:
         api_class = Tensorflow
         """
         api_combination_objects = {}
-        for api_id, api_combination in api_combinations.items():  # 逐个访问每个API组合
-            api_combination_objects[api_id] = []  # api_combination_objects = { "1" : [], "2" : [] }
+        for api_count, api_combination in api_combinations.items():  # 逐个访问每个API组合
+            api_combination_objects[api_count] = []  # api_combination_objects = { "1" : [], "2" : [] }
             for full_api_name in api_combination:  # 获取某个API组合中的每个API
                 api = self.session.query(api_class).filter_by(full_name=full_api_name).first()
                 if not api:
@@ -198,11 +214,12 @@ Example 2:
                         name=api_name,
                         module=module_name,
                         full_name=full_api_name,  # 根据api_class来设置version
+                        signature=get_api_signature(full_api_name),
                         version=self.torch_ver if api_class == PytorchAPI else self.tf_ver if api_class == TensorflowAPI else self.jax_ver
                     )
                     self.session.add(api)
                     self.session.commit()
-                api_combination_objects[api_id].append(
+                api_combination_objects[api_count].append(
                     api)  # { "1" : [CategoricalCrossentropy], "2" : [constant, softmax_cross_entropy_with_logits] }
         return api_combination_objects
 
@@ -221,19 +238,21 @@ Example 2:
             # 1. 解析返回的JSON数据并检查Pytorch,Tensorflow和Jax中的所有API名,如果PytorchAPI表或TensorflowAPI表或JAX表中没有对应的API,则先在对应表中创建对应的数据
             torch_apis_combination_objects = self.supplement_apis(json_data['Pytorch'], PytorchAPI)
             tf_apis_combination_objects = self.supplement_apis(json_data['Tensorflow'], TensorflowAPI)
-            jax_apis_combination_objects = self.supplement_apis(json_data['JAX'], JaxAPI)
+            jax_apis_combination_objects = self.supplement_apis(json_data['JAX'], JAXAPI)
+            # 2. 如果tf_apis_combination_objects和torch_apis_combination_objects有一个不为空则创建Cluster对象:
+            if tf_apis_combination_objects or torch_apis_combination_objects:
+                new_cluster = Cluster(
+                    energy=5,
+                )
+                self.session.add(new_cluster)
+                self.session.commit()
 
-            # 2. 创建Cluster对象
-            new_cluster = Cluster()
-            self.session.add(new_cluster)
-            self.session.commit()
-
-            # 3. 为Pytorch, Tensorflow和Jax的每个API组合创建对应的PytorchAPICombination, TensorflowAPICombination和JaxAPICombination对象, 之后将它们与新创建的Cluster对象关联
-            self.associate_api_combinations_to_cluster(new_cluster, torch_apis_combination_objects,
-                                                       PytorchAPICombination)
-            self.associate_api_combinations_to_cluster(new_cluster, tf_apis_combination_objects,
-                                                       TensorflowAPICombination)
-            self.associate_api_combinations_to_cluster(new_cluster, jax_apis_combination_objects, JaxAPICombination)
+                # 3. 为Pytorch, Tensorflow和Jax的每个API组合创建对应的PytorchAPICombination, TensorflowAPICombination和JaxAPICombination对象, 之后将它们与新创建的Cluster对象关联
+                self.associate_api_combinations_to_cluster(new_cluster, torch_apis_combination_objects,
+                                                           PytorchAPICombination)
+                self.associate_api_combinations_to_cluster(new_cluster, tf_apis_combination_objects,
+                                                           TensorflowAPICombination)
+                self.associate_api_combinations_to_cluster(new_cluster, jax_apis_combination_objects, JAXAPICombination)
             self.session.commit()
         except Exception as e:
             self.session.rollback()  # 回滚在异常中的任何数据库更改
@@ -246,41 +265,41 @@ Example 2:
             self.save_cluster(json_data)
 
 
-def run():
+def run_randomly():  # 随机挑选未聚类的JAXAPI进行聚类
     # 创建数据库连接
     session = get_session()
     openai_client = get_openai_client()
 
-    # 对未聚类的JaxAPI进行聚类
-    uncluttered_torch_apis = session.query(JaxAPI).filter_by(is_clustered=False).all()
+    # 对未聚类的JAXAPI进行聚类
+    uncluttered_torch_apis = session.query(JAXAPI).filter_by(is_clustered=False).all()
     while uncluttered_torch_apis:
         print("----------------------------------------------------------------------------------")
-        # 随机选择一个未聚类的JaxAPI
+        # 随机选择一个未聚类的JAXAPI
         uncluttered_torch_api = random.choice(uncluttered_torch_apis)
         clusterer = Clusterer(uncluttered_torch_api, session, openai_client)
         clusterer.cluster_api()
 
-        uncluttered_torch_apis = session.query(JaxAPI).filter_by(is_clustered=False).all()
-        total_apis_num = session.query(JaxAPI).count()
+        uncluttered_torch_apis = session.query(JAXAPI).filter_by(is_clustered=False).all()
+        total_apis_num = session.query(JAXAPI).count()
         unclustered_torch_apis_num = len(uncluttered_torch_apis)
         print(f"Unclustered / Total: {unclustered_torch_apis_num} / {total_apis_num}")
 
 
-def run_remaining():
+def run_linearly():  # 线性地对未聚类的JAXAPI进行聚类
     # 创建数据库连接
     session = get_session()
     openai_client = get_openai_client()
 
-    # 对未聚类的TensorflowAPI进行聚类
-    uncluttered_torch_apis = session.query(JaxAPI).filter_by(is_clustered=False).all()
+    # 对未聚类的JAXAPI进行聚类
+    uncluttered_torch_apis = session.query(JAXAPI).filter_by(is_clustered=False).all()
     for i, uncluttered_torch_api in enumerate(uncluttered_torch_apis):
         print("----------------------------------------------------------------------------------")
-        # 选择一个未聚类的TensorflowAPI
+        # 选择一个未聚类的JAXAPI
         clusterer = Clusterer(uncluttered_torch_api, session, openai_client)
         clusterer.cluster_api()
         print(f"Unclustered / Total: {len(uncluttered_torch_apis) - i - 1} / {len(uncluttered_torch_apis)}" + "\n")
 
 
 if __name__ == '__main__':
-    run()
-    # run_remaining()
+    # run_randomly()
+    run_linearly()

@@ -530,8 +530,8 @@ if __name__ == "__main__":
     start_time = time.time()
 
     project_root = os.path.dirname(os.path.dirname(__file__))
-    # seeds_dir = os.path.join(project_root, 'fuzzer/seeds/test_seeds/test')  # 测试换文件夹用
-    seeds_dir = os.path.join(project_root, 'fuzzer/seeds/test_seeds/zero-shot')
+    # seeds_dir = os.path.join(project_root, 'fuzzer/seeds/seeds/test')  # 测试换文件夹用
+    seeds_dir = os.path.join(project_root, 'fuzzer/seeds/seeds/zero-shot')
     output_dir = os.path.join(project_root, 'oracle/outputs')
 
     results_file = get_next_available_filename(output_dir, "results", ".json")
