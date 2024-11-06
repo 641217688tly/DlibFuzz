@@ -179,20 +179,38 @@ def get_api_signature(full_api_name):
         print(f"get_api_signature() encounters an unexpected error: {e}")
         return f"{full_api_name}()"
 
-
-def export_all_validated_seeds():  # 从数据库中将所有验证过的seed导出为Python文件
+def count_fuzz_time():
     session = get_session()
-    # 获取所有is_validated == True的种子
-    seeds = session.query(ClusterTestSeed).filter(ClusterTestSeed.is_validated == True).all()
-    for seed in seeds:
-        print(f"Exporting validated seed: {seed.valid_folder_path}")
-        if not os.path.exists(seed.valid_folder_path):
-            os.makedirs(os.path.dirname(seed.valid_folder_path), exist_ok=True)
-        # TODO 保存valid_code到该文件夹下
+    try:
+        seeds = session.query(ClusterTestSeed).filter(
+            ClusterTestSeed.start_test != None,
+            ClusterTestSeed.end_test != None
+        ).all()
+
+        total_duration = sum((seed.end_test - seed.start_test).total_seconds() for seed in seeds if seed.end_test and seed.start_test)
+        total_seeds = len(seeds)
+
+        if total_seeds > 0:
+            average_duration = total_duration / total_seeds
+            formatted_total_duration = format(total_duration, ".3f")
+            formatted_average_duration = format(average_duration, ".3f")
+        else:
+            formatted_total_duration = "0.000"
+            formatted_average_duration = "0.000"
+
+        print(f"Total time spent on generating {total_seeds} seeds: {formatted_total_duration} seconds")
+        print(f"Average time per seed: {formatted_average_duration} seconds")
+
+    except Exception as e:
+        print(f"An error occurred while calculating fuzzing times: {str(e)}")
+    finally:
+        session.close()
+
 
 
 if __name__ == '__main__':
     # export_all_validated_seeds()
     # 示例使用
-    signature = get_api_signature("tensorflow.nn.softmax_cross_entropy_with_logits")
-    print(signature)
+    #signature = get_api_signature("tensorflow.nn.softmax_cross_entropy_with_logits")
+    #print(signature)
+    count_fuzz_time()
