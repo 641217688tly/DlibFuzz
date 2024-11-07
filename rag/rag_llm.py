@@ -97,6 +97,10 @@ def rag_generate(query: str, qa_chain):
     answer = qa_chain.run(query)
     return answer
 
+def bare_llm_generate(query: str, llm):
+    answer = llm.run(query)
+    return answer
+
 
 def retrieve_documents(query: str, vector_store):
     retrieved_docs = vector_store.as_retriever().invoke(query)

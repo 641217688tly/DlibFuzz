@@ -7,7 +7,6 @@ from llama_cpp import Llama
 from langchain.schema import BaseMessage, AIMessage, HumanMessage, SystemMessage, ChatMessage
 
 
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -70,6 +69,7 @@ class CodeGemmaLLM(LLM):
                 model_path=self.model_path,
                 n_ctx=2048,
                 use_fp16=True,
+                fp16_kv=True,
                 n_parts=-1,
                 seed=0,
                 n_gpu_layers=15000,
