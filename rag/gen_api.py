@@ -5,7 +5,7 @@ Start the server by running `uvicorn rag.gen_api:app --reload` in the terminal.
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from rag_llm import initialize_rag_system, rag_generate, retrieve_documents
+from rag_llm import initialize_rag_system, rag_generate, retrieve_documents, bare_llm_generate
 
 
 app = FastAPI()
@@ -31,6 +31,20 @@ def generate_code(request: QueryRequest):
     try:
         retrieved_docs = retrieve_documents(query, vector_store)
         answer = rag_generate(query, qa_chain)
+        return QueryResponse(answer=answer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/generate_without_rag", response_model=QueryResponse)
+def generate_code(request: QueryRequest):
+    query = request.query
+    if not query:
+        raise HTTPException(status_code=400, detail="Query cannot be empty.")
+    
+    try:
+        retrieved_docs = retrieve_documents(query, vector_store)
+        answer = bare_llm_generate(query, qa_chain)
         return QueryResponse(answer=answer)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
