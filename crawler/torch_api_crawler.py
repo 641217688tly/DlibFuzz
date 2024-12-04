@@ -4,8 +4,7 @@ from typing import _UnionGenericAlias
 import torch
 import inspect
 
-# 定义严格的模块名称，包括 torch 顶层
-strict_modules = [
+modules_to_include = [
     'torch',
     'torch.nn',
     'torch.nn.functional',
@@ -30,7 +29,7 @@ strict_modules = [
 ]
 
 
-def get_full_api_names(module, prefix=''):
+def get_torch_full_api_names(module, prefix=''):
     apis = []
     stack = [(module, prefix)]
     visited = set()
@@ -58,7 +57,7 @@ def get_full_api_names(module, prefix=''):
                     continue
                 # 确保 torch 顶层 API 被捕捉
                 if full_name == 'torch' or any(
-                        mod == full_name or full_name.startswith(mod + '.') for mod in strict_modules):
+                        mod == full_name or full_name.startswith(mod + '.') for mod in modules_to_include):
                     stack.append((member, full_name))
             elif name.startswith('_') or isinstance(member, type):
                 continue
@@ -97,7 +96,7 @@ def get_full_api_names(module, prefix=''):
 
 
 # 获取 PyTorch 的 API，包括 torch 顶层的 API
-apis = get_full_api_names(torch, 'torch')
+apis = get_torch_full_api_names(torch, 'torch')
 
 # 打印收集到的 API 数量
 print(f"Total APIs collected: {len(apis)}")
