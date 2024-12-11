@@ -22,6 +22,10 @@ class QueryResponse(BaseModel):
     answer: str
 
 
+class RetrieveDocumentsResponse(BaseModel):
+    documents: list
+
+
 @app.post("/generate", response_model=QueryResponse)
 def generate_code(request: QueryRequest):
     query = request.query
@@ -46,5 +50,18 @@ def generate_code(request: QueryRequest):
         retrieved_docs = retrieve_documents(query, vector_store)
         answer = bare_llm_generate(query, qa_chain)
         return QueryResponse(answer=answer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/retrieve_documents", response_model=RetrieveDocumentsResponse)
+def retrieve_documents_api(request: QueryRequest):
+    query = request.query
+    if not query:
+        raise HTTPException(status_code=400, detail="Query cannot be empty.")
+    
+    try:
+        retrieved_docs = retrieve_documents(query, vector_store)
+        return RetrieveDocumentsResponse(documents=[doc.page_content for doc in retrieved_docs])
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
