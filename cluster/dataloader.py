@@ -4,7 +4,7 @@ from orm import *
 import utils
 
 
-def add_apis_from_txt(session, torch_version="1.12", tf_version="2.10", jax_version="0.4.13"):
+def add_apis_from_txt(session, torch_version="1.12", tf_version="2.10", jax_version="0.4.13", ms_version="2.4.0"):
     if not session.query(PytorchAPI).first():  # 从文件读取Pytorch APIs并添加到数据库
         try:
             with open('apis/pytorch/torch_valid_apis.txt', 'r', encoding='utf-8') as file:
@@ -104,7 +104,7 @@ def process_signature(full_api_name, raw_signature):
         return signature
 
 
-def add_apis_from_json(session, torch_version="1.12", tf_version="2.10", jax_version="0.4.13"):
+def add_apis_from_json(session, torch_version="1.12", tf_version="2.10", jax_version="0.4.13", ms_version="2.4.0"):
     if not session.query(JAXAPI).first():  # 从JSON文件读取JAX APIs并添加到数据库
         try:
             with open('apis/jax/jax_apis.json', 'r', encoding='utf-8') as file:
@@ -192,6 +192,33 @@ def add_apis_from_json(session, torch_version="1.12", tf_version="2.10", jax_ver
             session.close()
             print("Tensorflow API data loaded successfully!")
 
+    if not session.query(MindSporeAPI).first():  # 从JSON文件读取MindSpore APIs并添加到数据库
+        try:
+            with open('apis/mindspore/ms_apis.json', 'r', encoding='utf-8') as file:
+                ms_apis = json.load(file)
+                for api_id, api_info in ms_apis.items():
+                    # 检查数据库中是否已存在该API
+                    is_valid = utils.validate_api_existence(api_info['module'], api_info['name'])
+                    api_exists = session.query(MindSporeAPI).filter_by(full_name=api_info['fullName']).first()
+                    if api_exists is None and is_valid:  # 如果API不存在且API是有效的:
+                        # 创建MindSporeAPI实例并添加到session
+                        new_api = MindSporeAPI(
+                            name=api_info['name'],
+                            module=api_info['module'],
+                            full_name=api_info['fullName'],
+                            signature=process_signature(api_info['fullName'], api_info['signature']),
+                            description=api_info['description'],
+                            version=ms_version
+                        )
+                        session.add(new_api)
+                session.commit()
+        except Exception as e:
+            session.rollback()
+            print(f"Error processing MindSpore APIs file: {e}")
+        finally:
+            session.close()
+            print("MindSpore API data loaded successfully!")
+
 
 def attach_error_trigger_code(api_class, error_trigger_class, dir_path, session):
     # 获取所有.json文件的列表
@@ -256,13 +283,15 @@ if __name__ == '__main__':
     session = utils.get_session()
 
     # 如果JAX/Tensorflow/Pytorch数据库中为空则添加数据
-    # add_apis_from_txt(session, torch_version="1.12", tf_version="2.10", jax_version="0.4.13")
-    add_apis_from_json(session, torch_version="1.12", tf_version="2.10", jax_version="0.4.13")
+    # add_apis_from_txt(session, torch_version="1.12", tf_version="2.10", jax_version="0.4.13", ms_version="2.4.0")
+    add_apis_from_json(session, torch_version="1.12", tf_version="2.10", jax_version="0.4.13", ms_version="2.4.0")
 
     # 将错误触发代码附加到Pytorch/Tensorflow/JAX API下
     torch_dir = '../data/error_triggers/pytorch_issue'
     tf_dir = '../data/error_triggers/tensorflow_issue'
     jax_dir = '../data/error_triggers/jax_issue'
+    ms_dir = '../data/error_triggers/ms_issue'
     # attach_error_trigger_code(PytorchAPI, PytorchErrorTrigger, torch_dir, session)
     # attach_error_trigger_code(TensorflowAPI, TensorflowErrorTrigger, tf_dir, session)
     # attach_error_trigger_code(JAXAPI, JAXErrorTrigger, jax_dir, session)
+    # attach_error_trigger_code(MindSporeAPI, JAXErrorTrigger, jax_dir, session)

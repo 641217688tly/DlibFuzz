@@ -1,204 +1,170 @@
+from fuzzer.validator import SeedValidator
 from utils import *
-from tqdm.contrib import itertools
-import os
 from orm import *
-import threading
-
-ERROR_TRIGGER_TARGET = 6
-
-TORCH_VERSION = "1.12"
-TF_VERSION = "2.10"
-JAX_VERSION = "0.4.13"
-
-STEPS_PROMPT = """
-1.Consider: For given APIs, think about which edge cases and combinations of API calls may expose potential vulnerabilities in the API.
-2.Generate Differential Testing Code: Create code snippets for differential testing using the identified API combinations from PyTorch, TensorFlow, and JAX.
-Step 1: Define common variable values that will be used across all three libraries.
-Step 2: Write code for PyTorch using the provided API combination ({torch_apis}).
-Step 3: Write code for TensorFlow using the provided API combination ({tf_apis}).
-Step 4: Write code for JAX using the provided API combination ({jax_apis}).
-"""
-
-REQUIREMENTS_PROMPT = """
-1.Imports: Ensure that all necessary modules or APIs are imported.
-2.Consistency in Input: Use the same input values for API combinations across different libraries.
-3.Consistency in Output: The output values from the code snippets should be identical when using the same inputs.
-4.Clear Separation: Use comments # PyTorch, # TensorFlow, and # JAX to clearly separate the code snippets for each library.
-5.Code-Only Format: Only output code and comments in the required format, avoiding any additional text or Markdown syntax.
-6.Simplicity: Avoid creating custom functions or classes for code that is not reused multiple times.
-7.Correctness: Ensure the generated code does not contain syntax errors (e.g., SyntaxError, NameError) or invalid input errors (e.g., ValueError, InvalidArgumentError).
-"""
-
-OUTPUT_EXAMPLE_PROMPT = """
-Known API combinations ["torch.tensor", "torch.nn.CrossEntropyLoss"] from the PyTorch library, ["tensorflow.constant", "tensorflow.nn.softmax_cross_entropy_with_logits"] from the TensorFlow library, and ["jax.numpy.array", "jax.nn.log_softmax", "jax.numpy.sum"] from the JAX library all have the same functionality. The code snippet for differential testing of these API combinations is as follows:
-```python
-logits = [[4.0, 1.0, 0.2]]
-# Labels (one-hot encoded)
-labels = [[1.0, 0.0, 0.0]]
-
-# PyTorch
-logits_pt = torch.tensor(logits, requires_grad=True)
-labels_pt = torch.tensor(labels)
-loss_fn_pt = torch.nn.CrossEntropyLoss()
-output_pt = loss_fn_pt(logits_pt, torch.argmax(labels_pt, dim=1))
-print("PyTorch Loss:", output_pt.item())
-
-# TensorFlow
-logits_tf = tf.constant(logits)
-labels_tf = tf.constant(labels)
-output_tf = tf.nn.softmax_cross_entropy_with_logits(labels=labels_tf, logits=logits_tf)
-print("TensorFlow NN Loss:", output_tf.numpy()[0])
-
-# JAX
-logits_jax = jnp.array(logits)
-labels_jax = jnp.array(labels)
-log_softmax = jax.nn.log_softmax(logits_jax)
-output_jax = -jnp.sum(labels_jax * log_softmax)
-print("JAX Loss:", output_jax)
-```
-"""
 
 
-def generate_seeds4cluster(session, openai_client, cluster, seeds_num=5):
-    folder_path = f'seeds/unverified_seeds/zero-shot/{cluster.id}'
-    # 在folder_path下创建一个新的文件夹, 文件夹名为cluster.id
-    if not os.path.exists(folder_path):
-        os.makedirs(folder_path)
+class SeedGenerator:
+    def __init__(self, session, openai_client):
+        self.session = session
+        self.openai_client = openai_client
 
-    # 先从cluster中获取所有的Pytorch对象, Tensorflow对象和JAX对象的组合. 比如当前有一个cluster, 其中包含了Pytorch对象A1和A2, Tensorflow对象B1和JAX对象C1, 则有以下组合: (A1,B1,C1), (A2,B1,C1); 再比如当前有一个cluster, 其中包含了Pytorch对象A1, Tensorflow对象为null, JAX对象C1和C2, 则有以下组合: (A1,C1), (A1,C2)
-    all_combinations = list(itertools.product(
-        cluster.pytorch_combinations if cluster.pytorch_combinations else [None],
-        cluster.tensorflow_combinations if cluster.tensorflow_combinations else [None],
-        cluster.jax_combinations if cluster.jax_combinations else [None]
-    ))
+    def generate_seeds4cluster(self, cluster: Cluster):
+        api_combination_list = []  # [APIA1, APIB1, APIB2, APIC1]
+        if cluster.pytorch_combinations:
+            api_combination_list.extend(cluster.pytorch_combinations)
+        if cluster.tensorflow_combinations:
+            api_combination_list.extend(cluster.tensorflow_combinations)
+        if cluster.jax_combinations:
+            api_combination_list.extend(cluster.jax_combinations)
 
-    for multi_lib_combinations in all_combinations:  # 对于每种组合都生成5个seed
-        # 在folder_path下创建一个新的文件夹, 文件夹名为combination中Pytorch, Tensorflow和JAX对象的id组合. 比如当前的combination为(A1,B1,C1), 则创建的文件夹名为(A1.id)_(B1.id)_(C1.id)
-        seed_folder_name = "_".join(
-            [str(single_lib_combination.id) for single_lib_combination in multi_lib_combinations if
-             single_lib_combination])
-        if not os.path.exists(f'{folder_path}/{seed_folder_name}'):
-            os.makedirs(f'{folder_path}/{seed_folder_name}')
+        # 先查询该等价簇已经生成了几个种子
+        seeds_num = self.session.query(ClusterTestSeed).filter(ClusterTestSeed.cluster_id == cluster.id).count()
+        remaining_energy = cluster.energy - seeds_num
+        for i in range(cluster.energy - remaining_energy + 1, cluster.energy + 1):  # 生成n个seed
+            base_api_combination = api_combination_list[(i - 1) % len(api_combination_list)]
+            try:
+                print("*" * 30 + f"Generate Seed{i}" + "*" * 30)
+                base_api_seed, twin_apis_seeds = self.generate_seed4combination(cluster, api_combination_list, base_api_combination)
 
-        # 分别获取PytorchAPICombination, TensorFlowAPICombination和JaxAPICombination内所有的API
-        torch_apis = multi_lib_combinations[0].apis if multi_lib_combinations[0] else []
-        tf_apis = multi_lib_combinations[1].apis if multi_lib_combinations[1] else []
-        jax_apis = multi_lib_combinations[2].apis if multi_lib_combinations[2] else []
-        for i in range(seeds_num):  # 生成n个seed
-            # 构建prompt
-            prompt = f"""
-Objective:
-Generate code snippets that can be used to differentially test API combinations from PyTorch (v{TORCH_VERSION}), TensorFlow (v{TF_VERSION}), and JAX (v{JAX_VERSION}), which have identical functionalities. The goal is to identify potential crashes or inconsistencies across these libraries.
+                print("-" * 20 + f"Base API Seed" + "-" * 20 + f"\n{base_api_seed}")
+                for twin_apis_seed in twin_apis_seeds:
+                    print("-" * 20 + f"Twin API Seed" + "-" * 20 + f"\n{twin_apis_seed}")
+            except Exception as e:
+                print(f"Error in generating seed for cluster {cluster.id}: {e}")
+                self.session.rollback()  # 回滚在异常中的任何数据库更改
+                break
+        # 检查是否所有的种子都已经生成完毕
+        seeds_num = self.session.query(ClusterTestSeed).filter_by(cluster_id=cluster.id).count()
+        if seeds_num >= cluster.energy:
+            cluster.is_tested = True
+            self.session.commit()
 
-Background:
-API combinations from the PyTorch {torch_apis}, TensorFlow {tf_apis}, and JAX {jax_apis} all have identical functionalities. The definition of "Identical Functionality" is as follows:
-1.Consistency in Input Transformation: When these APIs have no return value, applying them to inputs with the same structure or element values (such as tensors) should result in consistent transformations or changes to the original input.
-2.Consistency in Output: When these APIs have return values, they should produce the same output values when given the same input values.
+    def generate_seed4combination(self, cluster: Cluster, api_combination_list, base_api_combination): # 此处api_list和base_api都是APICombination
+        seed = ClusterTestSeed(
+            cluster_id=cluster.id,
+            start_test=datetime.utcnow()
+        )
+        self.session.add(seed)
+        self.session.commit()
 
-Steps:
-{STEPS_PROMPT}
+        # 1.先为基底API生成测试用例
+        base_seed = self.generate_seed4base(seed, base_api_combination)
 
-Requirements:
-{REQUIREMENTS_PROMPT}
+        # 2.随后尝试对基底API进行修复
+        base_seed_validator = SeedValidator(self.session, self.openai_client, seed, base_seed, cluster.base)
+        validated_base_seed = base_seed_validator.validate()
+        if validated_base_seed is None:
+            # 如果修复失败, 依旧使用修复前的代码
+            validated_base_seed = base_seed
+        # 3.参考基底API的测试用例生成其他库中的孪生API的测试用例
+        twin_apis = [api for api in api_combination_list if api != base_api]
+        twin_apis_seeds = []
+        for twin_api in twin_apis:
+            if twin_api is None:
+                continue
+            twin_api_seed = self.generate_seed4twin(seed, twin_api, base_api, validated_base_seed)
+            twin_apis_seeds.append(twin_api_seed)
+        seed.end_test = datetime.utcnow()
+        return validated_base_seed, twin_apis_seeds
 
-Output Format Example:
-{OUTPUT_EXAMPLE_PROMPT}
-"""
-            response_data = None
-            attempt_num = 0
-            while attempt_num < 5:  # 设置最大尝试次数以避免无限循环
-                try:
-                    response = openai_client.chat.completions.create(
-                        model="gpt-4o-mini",  # gpt-4o-mini  gpt-3.5-turbo
-                        messages=[
-                            {"role": "system",
-                             "content": "You're an AI assistant adept at using multiple deep learning libraries"},
-                            {"role": "user", "content": prompt}
-                        ],
-                        temperature=1,
-                    )
-                    response_data = response.choices[0].message.content
-                    print(response_data)
-                    break
-                except Exception as e:
-                    print(f"Failed to get response due to: \n{e} \nRetrying(Current attempt: {attempt_num + 1})...")
-                    attempt_num += 1
-                    session.rollback()  # 回滚在异常中的任何数据库更改
-                    break
-            if attempt_num == 5:  # 设置最大尝试次数以避免无限循环
-                print("Max attempts reached. Unable to get valid JSON data.")
-                return
-            # 创建一个新的ClusterTestSeed对象
-            new_seed = ClusterTestSeed(
-                cluster_id=cluster.id,
-                pytorch_combination_id=multi_lib_combinations[0].id if multi_lib_combinations[0] else None,
-                tensorflow_combination_id=multi_lib_combinations[1].id if multi_lib_combinations[1] else None,
-                jax_combination_id=multi_lib_combinations[2].id if multi_lib_combinations[2] else None,
-                code=response_data,
-                unverified_file_path=f'{folder_path}/{seed_folder_name}/seed_{i}.py',
-                verified_file_path=f'{folder_path}/{seed_folder_name}/seed_{i}.py'.replace("unverified_seeds",
-                                                                                           "verified_seeds")
-            )
-            session.add(new_seed)
-            session.commit()
+    def generate_seed4base(self, seed: ClusterTestSeed, base_api_combination):  # 生成基底API的测试用例
+        version = base_api_combination.apis[0].version
+        lib = base_api_combination.apis[0].__class__.__name__.replace("API", "")
+        signatures = [api.signature for api in base_api_combination.apis]
+        prompt = f"""
+    Tasks:
+    1.Import Required Modules
+    2.Call {signatures} in {lib} (ver{version}) to perform the necessary computations or actions.
+    3.Generate input data that is likely to trigger an edge case or boundary condition and pass it to the API function.
+    4.4.If the ({signatures}) has a return value, print its output. If it does not have a return value, print the value of the variables affected by ({signatures}).
 
-            # 在seed_folder_name文件夹下创建一个新的json文件, 文件名为seed_{i}.py
-            with open(f'{folder_path}/{seed_folder_name}/seed_{i}.py', 'w') as file:
-                # 读取json_data中的code字段, 并将其写入到文件中
-                file.write(response_data)
-    # 在所有的seed生成完毕后, 将cluster的is_tested字段设置为True
-    cluster.is_tested = True
+    Requirements:
+    1.Imports: Ensure that all necessary modules or APIs are imported.
+    2.Code-Only Format: Only output code and comments in the required format, avoiding any additional text or Markdown syntax.
+    3.Correctness: Ensure the generated code does not contain syntax errors (e.g., SyntaxError, NameError) or invalid input errors (e.g., ValueError, InvalidArgumentError).
+    4.Besides the return value of ({signatures}) or the variables affected by it, do not print anything else. Ensure the print statements can be executed reliably and avoid placing them in try-catch and if-else blocks.
+    """
+        base_seed_code = self.query_openai(prompt)
+        if base_seed_code is None:
+            print(f"During generate seed for base API {base_api.full_name}, some error occurred.")
+            return None
+        # 为seed对象赋值
+        if isinstance(base_api, PytorchAPI):
+            seed.raw_pytorch_code = base_seed_code
+        elif isinstance(base_api, TensorflowAPI):
+            seed.raw_tensorflow_code = base_seed_code
+        else:
+            seed.raw_jax_code = base_seed_code
+        self.session.commit()
+        return base_seed_code
+
+    def generate_seed4twin(self, seed: ClusterTestSeed, twin_api, base_api, base_seed):  # 生成孪生API的测试用例
+        prompt = f"""
+    Task:
+    It is known that the API ({twin_api.signature}) in {twin_api.__class__.__name__.replace("API", "")} (ver{twin_api.version}) has the same functionality as the API ({base_api.signature}) in {base_api.__class__.__name__.replace("API", "")} (ver{base_api.version}). Please imitate the logic of the usage of ({base_api.signature}) in {base_api.__class__.__name__.replace("API", "")} (ver{base_api.version}) shown in the code example below and generate an equivalent code snippet using the API ({twin_api.signature}) in {twin_api.__class__.__name__.replace("API", "")} (ver{twin_api.version}).
+    ```python
+    {base_seed}
+    ```
+
+    Requirements:
+    1.Imports: Ensure that all necessary modules or APIs are imported.
+    2.Consistency in Input: The input parameters for the API ({twin_api.signature}) in {twin_api.__class__.__name__.replace("API", "")} (ver{twin_api.version}) in your generated code should be the same as the input parameters for the API ({base_api.signature}) in {base_api.__class__.__name__.replace("API", "")} (ver{base_api.version}) in the sample code.
+    3.Consistency in Output: The example code prints the return value or the affected variables from the call to ({base_api.signature}). Ensure that your generated code also prints the return value or the affected variables from the call to ({twin_api.signature}), and that this output is consistent with the output of the sample code. This requires that your invocation of ({twin_api.signature}) is consistent with the invocation of ({base_api.signature}).
+    4.Code-Only Format: Only output code and comments in the required format, avoiding any additional text or Markdown syntax.
+    5.Correctness: Ensure the generated code does not contain syntax errors (e.g., SyntaxError, NameError) or invalid input errors (e.g., ValueError, InvalidArgumentError).
+    6.Besides the return value of ({twin_api.signature}) or the variables affected by it, do not print anything else. Ensure the print statements can be executed reliably and avoid placing them in try-catch and if-else blocks.
+    """
+        twin_seed_code = self.query_openai(prompt)
+        if twin_seed_code is None:
+            print(f"During generate seed for base API {twin_api.full_name}, some error occurred.")
+            return None
+            # 为seed对象赋值
+        if isinstance(twin_api, PytorchAPI):
+            seed.raw_pytorch_code = twin_seed_code
+        elif isinstance(twin_api, TensorflowAPI):
+            seed.raw_tensorflow_code = twin_seed_code
+        else:
+            seed.raw_jax_code = twin_seed_code
+        self.session.commit()
+        return twin_seed_code
+
+    def query_openai(self, prompt, max_retry_limit=5, model="gpt-4o-mini"):
+        attempt_num = 0
+        while attempt_num < max_retry_limit:  # 设置最大尝试次数以避免无限循环
+            try:
+                response = self.openai_client.chat.completions.create(
+                    model=model,  # gpt-4o-mini  gpt-3.5-turbo
+                    messages=[
+                        {"role": "system",
+                         "content": "You're an AI assistant adept at using multiple deep learning libraries"},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=1,
+                )
+                response_data = response.choices[0].message.content
+                return response_data
+            except Exception as e:
+                print(f"Failed to get response due to: \n{e} \nRetrying(Current attempt: {attempt_num + 1})...")
+                attempt_num += 1
+                self.session.rollback()  # 回滚在异常中的任何数据库更改
+        if attempt_num >= 5:  # 设置最大尝试次数以避免无限循环
+            print("Max attempts reached. Unable to get valid JSON data.")
+            return None
+
+
+def clear_cache():
+    session = get_session()
+    session.query(ClusterTestSeed).delete()
+    session.commit()
+    # 将所有cluster的is_tested字段设置为False
+    clusters = session.query(Cluster).all()
+    for cluster in clusters:
+        cluster.is_tested = False
+    # 将所有的ClusterTestSeed中的数据都删除
+    session.query(ClusterTestSeed).delete()
     session.commit()
 
 
-def generate_seeds4clusters(session, openai_client, clusters, seeds_num=5):
-    for cluster in clusters:
-        print(f"Processing cluster ID: {cluster.id}")
-        generate_seeds4cluster(session, openai_client, cluster, seeds_num)
-
-
-def multithreaded_run(thread_num=3):
-    sessions = []
-    openai_clients = []
-    for i in range(thread_num):
-        sessions.append(get_session())
-        openai_clients.append(get_openai_client())
-
-    untested_clusters = get_session().query(Cluster).filter(Cluster.is_tested == False).all()
-    print(f"Total clusters to process: {len(untested_clusters)}")
-
-    # 划分任务
-    split_clusters = [untested_clusters[i::thread_num] for i in range(
-        thread_num)]  # split_clusters = [[cluster1,cluster2,..],[cluster2000,cluster2001,...],[cluster4000,cluster40001,...]]
-
-    threads = []
-    for i, clusters in enumerate(split_clusters):
-        thread = threading.Thread(target=generate_seeds4clusters, args=(sessions[i], openai_clients[i], clusters))
-        threads.append(thread)
-        thread.start()
-
-    for thread in threads:
-        thread.join()
-
-    for session in sessions:
-        session.close()
-
-
-def run():
-    session = get_session()
-    openai_client = get_openai_client()
-
-    # 获得所有的cluster未测试的cluster
-    untested_clusters = session.query(Cluster).filter(Cluster.is_tested == False).all()
-    while untested_clusters:
-        print("----------------------------------------------------------------------------------")
-        generate_seeds4cluster(session, openai_client, untested_clusters[0])
-        untested_clusters = session.query(Cluster).filter(Cluster.is_tested == False).all()
-        total_clusters_num = session.query(Cluster).count()
-        untested_clusters_num = len(untested_clusters)
-        print(f"Untested / Total: {untested_clusters_num} / {total_clusters_num}")
-
-
 if __name__ == '__main__':
-    run()
-    #multithreaded_run()
+    clear_cache()
+    # multithreaded_run()

@@ -4,54 +4,11 @@ from json import JSONDecodeError
 from orm import *
 from utils import *
 
-EXAMPLE1 = """json
-{
-    "Pytorch": {
-        "1": ["torch.nn.CrossEntropyLoss"]
-    },
-    "Tensorflow": {
-        "1": ["tensorflow.keras.losses.CategoricalCrossentropy"],
-        "2": ["tensorflow.keras.losses.SparseCategoricalCrossentropy"],
-        "3": ["tensorflow.nn.softmax_cross_entropy_with_logits"]
-    },
-    "JAX": {
-        "1": ["jax.nn.log_softmax", "jax.numpy.sum", "jax.numpy.mean"]
-    }
-}
-"""
-
-EXAMPLE2 = """json
-{
-    "Pytorch": {
-        "1": ["torch.nn.ReLU"]
-    },
-    "Tensorflow": {
-        "1": ["tensorflow.nn.relu"],
-        "2": ["tensorflow.keras.layers.ReLU"]
-    },
-    "JAX": {
-        "1": ["jax.nn.relu"]
-    }
-}
-"""
-
-EXAMPLE3 = """json
-{
-    "Pytorch": {
-        "1": ["torch.nn.BatchNorm1d"]
-    },
-    "Tensorflow": {
-        "1": ["tensorflow.keras.layers.BatchNormalization"]
-    },
-    "JAX": {
-        "1": ["jax.example_libraries.stax.BatchNorm"]
-    }
-}
-"""
 
 
-# ----------------------------------------------Clusterer----------------------------------------------
-class JAXClusterer:
+
+
+class MindSporeClusterer:
     def __init__(self, api, session, openai_client):
         self.api = api
         self.session = session
@@ -59,42 +16,15 @@ class JAXClusterer:
         self.torch_ver = get_library_version()['pytorch']
         self.tf_ver = get_library_version()['tensorflow']
         self.jax_ver = get_library_version()['jax']
-        self.messages = self.initialize_message()
+        self.ms_ver = get_library_version()['mindspore']
         self.responses = []
         self.errors = []
         self.module_alias_mapper = {
             "tf": "tensorflow",
             "np": "numpy",
             "pd": "pandas",
+            "ms": "mindspore"
         }
-
-    def initialize_message(self):  # 构建clusterer的初始提词并返回对话消息
-        clusterer_prompt = f"""
-Objective:
-Identify equivalent or identical API functions or combinations of functions in TensorFlow (v{self.tf_ver}) and PyTorch (v{self.torch_ver}) that perform the same tasks as the function {self.api.full_name} in JAX (v{self.jax_ver}).
-
-Steps:
-1.Identify the Functionality: First, understand the functionality of {self.api.full_name} in JAX.
-2.Search for Equivalents: Then, find API functions in PyTorch and TensorFlow that match this functionality.
-3.Format the Output: Present the findings in the specified JSON format.
-
-Criteria for "Identical Functionality":
-1.Consistency in Input Transformation: When these APIs have no return value, applying them to inputs with the same structure or element values (such as tensors) should result in consistent transformations or changes to the original input.
-2.Consistency in Output: When these APIs have return values, they should produce the same output values when given the same input values.
-
-Required Output Format:
-1.Structure: The output should be a JSON object with three keys: "Pytorch", "Tensorflow", and "JAX". Each key should map to a dictionary where the values are lists of API functions (or combinations of API functions) that provide the same functionality.
-2.Examples:
-Example 1: 
-{EXAMPLE1}
-Example 2: 
-{EXAMPLE2}
-"""
-        messages = [
-            {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
-            {"role": "user", "content": clusterer_prompt}
-        ]
-        return messages
 
     def handle_module_alias(self, module_name):
         module_parts = module_name.split('.')
@@ -266,44 +196,5 @@ Example 2:
         new_cluster = None
         if json_data:
             new_cluster = self.save_cluster(json_data)
-        return new_cluster
+            return new_cluster
 
-
-def run_randomly():  # 随机挑选未聚类的JAXAPI进行聚类
-    # 创建数据库连接
-    session = get_session()
-    openai_client = get_openai_client()
-
-    # 对未聚类的JAXAPI进行聚类
-    uncluttered_torch_apis = session.query(JAXAPI).filter_by(is_clustered=False).all()
-    while uncluttered_torch_apis:
-        print("----------------------------------------------------------------------------------")
-        # 随机选择一个未聚类的JAXAPI
-        uncluttered_torch_api = random.choice(uncluttered_torch_apis)
-        clusterer = JAXClusterer(uncluttered_torch_api, session, openai_client)
-        clusterer.cluster_api()
-
-        uncluttered_torch_apis = session.query(JAXAPI).filter_by(is_clustered=False).all()
-        total_apis_num = session.query(JAXAPI).count()
-        unclustered_torch_apis_num = len(uncluttered_torch_apis)
-        print(f"Unclustered / Total: {unclustered_torch_apis_num} / {total_apis_num}")
-
-
-def run_linearly():  # 线性地对未聚类的JAXAPI进行聚类
-    # 创建数据库连接
-    session = get_session()
-    openai_client = get_openai_client()
-
-    # 对未聚类的JAXAPI进行聚类
-    uncluttered_torch_apis = session.query(JAXAPI).filter_by(is_clustered=False).all()
-    for i, uncluttered_torch_api in enumerate(uncluttered_torch_apis):
-        print("----------------------------------------------------------------------------------")
-        # 选择一个未聚类的JAXAPI
-        clusterer = JAXClusterer(uncluttered_torch_api, session, openai_client)
-        clusterer.cluster_api()
-        print(f"Unclustered / Total: {len(uncluttered_torch_apis) - i - 1} / {len(uncluttered_torch_apis)}" + "\n")
-
-
-if __name__ == '__main__':
-    # run_randomly()
-    run_linearly()

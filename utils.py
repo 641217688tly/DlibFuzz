@@ -10,6 +10,7 @@ from orm import *
 TORCH_VERSION = "1.12"
 TF_VERSION = "2.10"
 JAX_VERSION = "0.4.13"
+MINDSPORE_VERSION = "2.4.0"
 
 
 def get_session():
@@ -46,7 +47,8 @@ def get_library_version():
     library_version = {
         "pytorch": TORCH_VERSION,
         "tensorflow": TF_VERSION,
-        "jax": JAX_VERSION
+        "jax": JAX_VERSION,
+        "mindspore": MINDSPORE_VERSION
     }
     return library_version
 
@@ -67,7 +69,7 @@ def validate_api_existence(module_name, api_name):  # 验证API是否存在的�
         return False
 
 
-def validate_api_availability(function): # 验证API是否为被弃用的函数
+def validate_api_availability(function):  # 验证API是否为被弃用的函数
     """Check if the function is deprecated."""
     docstring = inspect.getdoc(function)
     if docstring and ('deprecated' and 'removed') in docstring.lower():
@@ -120,6 +122,7 @@ def check_all_api_lists():
     print(f"\nNumber of Tensorflow APIs that exist: {exists_count3}")
     print(f"Number of Tensorflow APIs that do not exist: {not_exists_count3}")
 
+
 def get_api_signature(full_api_name):
     """
     根据 API 的全名获取其函数签名
@@ -144,11 +147,11 @@ def get_api_signature(full_api_name):
             return signature
         else:  # 如果函数没有输出值
             input_params = raw_signature.strip()
-            #output_params = "()"
+            # output_params = "()"
             # 如果signature没有被"()"包围，则添加括号
             if not input_params.startswith('(') and not input_params.endswith(')'):
                 input_params = f"({input_params})"
-            #signature = f"{full_api_name}{input_params} -> {output_params}"
+            # signature = f"{full_api_name}{input_params} -> {output_params}"
             signature = f"{full_api_name}{input_params}"
             return signature
 
@@ -177,6 +180,7 @@ def get_api_signature(full_api_name):
         print(f"get_api_signature() encounters an unexpected error: {e}")
         return f"{full_api_name}()"
 
+
 def count_fuzz_time():
     session = get_session()
     try:
@@ -204,6 +208,7 @@ def count_fuzz_time():
         print(f"An error occurred while calculating fuzzing times: {str(e)}")
     finally:
         session.close()
+
 
 def get_cluster_api_combinations(cluster_id: int):
     session = get_session()

@@ -50,7 +50,7 @@ EXAMPLE3 = """json
 
 
 # ----------------------------------------------Clusterer----------------------------------------------
-class Clusterer:
+class TensorflowClusterer:
     def __init__(self, api, session, openai_client):
         self.api = api
         self.session = session
@@ -262,8 +262,11 @@ Example 3:
     # ----------------------------------------------run()----------------------------------------------
     def cluster_api(self):
         json_data = self.conduct_cluster()
+        new_cluster = None
         if json_data:
-            self.save_cluster(json_data)
+            new_cluster = self.save_cluster(json_data)
+        return new_cluster
+
 
 
 def run_randomly():  # 随机挑选未聚类的TensorflowAPI进行聚类
@@ -277,7 +280,7 @@ def run_randomly():  # 随机挑选未聚类的TensorflowAPI进行聚类
         print("----------------------------------------------------------------------------------")
         # 随机选择一个未聚类的TensorflowAPI
         uncluttered_torch_api = random.choice(uncluttered_torch_apis)
-        clusterer = Clusterer(uncluttered_torch_api, session, openai_client)
+        clusterer = TensorflowClusterer(uncluttered_torch_api, session, openai_client)
         clusterer.cluster_api()
 
         uncluttered_torch_apis = session.query(TensorflowAPI).filter_by(is_clustered=False).all()
@@ -296,7 +299,7 @@ def run_linearly():  # 线性地对未聚类的TensorflowAPI进行聚类
     for i, uncluttered_torch_api in enumerate(uncluttered_torch_apis):
         print("----------------------------------------------------------------------------------")
         # 选择一个未聚类的TensorflowAPI
-        clusterer = Clusterer(uncluttered_torch_api, session, openai_client)
+        clusterer = TensorflowClusterer(uncluttered_torch_api, session, openai_client)
         clusterer.cluster_api()
         print(f"Unclustered / Total: {len(uncluttered_torch_apis) - i - 1} / {len(uncluttered_torch_apis)}" + "\n")
 
