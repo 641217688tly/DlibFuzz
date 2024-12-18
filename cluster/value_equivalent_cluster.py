@@ -2,7 +2,8 @@ import json
 import random
 from json import JSONDecodeError
 
-import utils
+from sqlalchemy import func
+
 from utils import *
 
 EXAMPLE1 = """json
@@ -226,7 +227,7 @@ Example 3:
                 api = self.session.query(API).filter_by(full_name=full_api_name).first()
                 if not api:
                     module_name, api_name = full_api_name.rsplit('.', 1)
-                    api_info = utils.inspect_api_info(module_name, api_name)
+                    api_info = inspect_api_info(module_name, api_name)
                     api = API(
                         name=api_name,
                         module=module_name,
@@ -240,16 +241,8 @@ Example 3:
                     self.session.commit()
                 api_combination_objects[api_count].append(
                     api)  # { "1" : [CategoricalCrossentropy], "2" : [constant, softmax_cross_entropy_with_logits] }
-        return api_combination_objects
-
-    def associate_api_combinations_to_cluster(self, cluster, api_combination_objects):
-        for api_id, api_combination in api_combination_objects.items():  # 逐个访问每个API组合
-            combination = APICombination(
-                apis=api_combination,
-                cluster=cluster
-            )
-            self.session.add(combination)
-            self.session.commit()
+        return list(
+            api_combination_objects.values())  # [['CategoricalCrossentropy'], ['constant', 'softmax_cross_entropy_with_logits']]
 
     def save_cluster(self, json_data):
         """
@@ -258,7 +251,7 @@ Example 3:
         try:
             self.api.is_clustered = True
             # 1. 解析返回的JSON数据并检查Pytorch和JAX中的所有API名,如果API表中没有对应的条目,则先在对应表中创建对应的数据
-            libs_apis_combination_objects = {}
+            libs_apis_combination_objects = {}  # {"Pytorch" : [[API1],[API2, API3]], "JAX" : [[API1],[API2, API3]], ...}
             for lib, dict_api_combinations in json_data.items():
                 apis_combination_objects = self.supplement_apis(dict_api_combinations)
                 libs_apis_combination_objects[lib] = apis_combination_objects
@@ -266,16 +259,50 @@ Example 3:
             # 2. 如果libs_apis_combination_objects中至少有2个库的apis_combination_objects不为空, 那么创建Cluster对象:
             if len([lib for lib, apis_combination_objects in libs_apis_combination_objects.items() if
                     apis_combination_objects]) >= 2:
-                new_cluster = Cluster(
-                    type='ValueEquivalent',
-                    energy=5,
-                )
-                self.session.add(new_cluster)
-                self.session.commit()
+                # 从{"Pytorch": [["API1"], ["API2", "API3"]], "JAX": [["API4"], ["API5", "API6"]], ...}中获取由单独的API组成的API组合:[["API1"], ["API4"]]
+                single_api_combinations = [sublist for dictionary in libs_apis_combination_objects.values() for sublist
+                                           in dictionary if len(sublist) == 1]
+                if len(single_api_combinations) > 0:
+                    cluster_dict = {}
+                    for single_api_combination in single_api_combinations:
+                        api = single_api_combination[0]
+                        api_obj_combinations = self.session.query(APICombination).join(APICombination.apis).group_by(
+                            APICombination.id).having(
+                            func.count(API.id) == 1,  # 确保每个组合只有一个API
+                            func.min(API.id) == api.id
+                        ).all()
+                        for api_obj_combination in api_obj_combinations:
+                            cluster = api_obj_combination.cluster
+                            cluster_dict[cluster] = cluster_dict.get(cluster, 0) + 1
+                    if cluster_dict:
+                        # Case 2.1
+                        value_equivalent_cluster = max(cluster_dict, key=cluster_dict.get)
+                    else:
+                        # Case 2.2
+                        value_equivalent_cluster = Cluster(
+                            type='ValueEquivalent',
+                            energy=5,
+                        )
+                        self.session.add(value_equivalent_cluster)
+                        self.session.commit()
+                else:
+                    # Case 2.2
+                    value_equivalent_cluster = Cluster(
+                        type='ValueEquivalent',
+                        energy=5,
+                    )
+                    self.session.add(value_equivalent_cluster)
+                    self.session.commit()
 
                 # 3. 为每个API组合创建对应的APICombination对象, 之后将它们与新创建的Cluster对象关联
                 for lib, apis_combination_objects in libs_apis_combination_objects.items():
-                    self.associate_api_combinations_to_cluster(new_cluster, apis_combination_objects)
+                    for api_combination in apis_combination_objects:  # 逐个访问每个API组合
+                        combination = APICombination(
+                            apis=api_combination,
+                            cluster=value_equivalent_cluster
+                        )
+                        self.session.add(combination)
+                        self.session.commit()
             self.session.commit()
         except Exception as e:
             self.session.rollback()  # 回滚在异常中的任何数据库更改
