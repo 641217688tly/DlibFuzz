@@ -71,11 +71,13 @@ class MSValueEquivalentCluster:
 
                 # 查询Pytorch API
                 torch_api_obj = self.session.query(API).filter_by(lib='Pytorch', full_name=torch_api).first()
-                torch_api_obj_combinations = session.query(APICombination).join(APICombination.apis).group_by(
-                    APICombination.id).having(
-                    func.count(API.id) == 1,  # 确保每个组合只有一个API
-                    func.min(API.id) == torch_api_obj.id
-                ).all()
+                torch_api_obj_combinations = (session.query(APICombination)
+                                              .join(APICombination.apis)
+                                              .filter(Cluster.type == 'ValueEquivalent')
+                                              .group_by(APICombination.id)
+                                              .having(func.count(API.id) == 1,  # 确保每个组合只有一个API
+                                                      func.min(API.id) == torch_api_obj.id)
+                                              .all())
                 if torch_api_obj is None or len(torch_api_obj_combinations) == 0:
                     continue
 
@@ -101,7 +103,7 @@ class MSValueEquivalentCluster:
                     cluster = torch_api_obj_combination.cluster
                     ms_api_combination = APICombination(
                         cluster=cluster,
-                        apis = [ms_api_obj]
+                        apis=[ms_api_obj]
                     )
                     self.session.add(ms_api_combination)
                     self.session.commit()

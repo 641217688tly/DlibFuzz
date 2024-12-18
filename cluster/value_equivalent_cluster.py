@@ -1,7 +1,6 @@
 import json
 import random
 from json import JSONDecodeError
-
 from sqlalchemy import func
 
 from utils import *
@@ -266,11 +265,13 @@ Example 3:
                     cluster_dict = {}
                     for single_api_combination in single_api_combinations:
                         api = single_api_combination[0]
-                        api_obj_combinations = self.session.query(APICombination).join(APICombination.apis).group_by(
-                            APICombination.id).having(
-                            func.count(API.id) == 1,  # 确保每个组合只有一个API
-                            func.min(API.id) == api.id
-                        ).all()
+                        api_obj_combinations = (self.session.query(APICombination)
+                                                .join(APICombination.apis)
+                                                .filter(Cluster.type == 'ValueEquivalent')
+                                                .group_by(APICombination.id)
+                                                .having(func.count(API.id) == 1,  # 确保每个组合只有一个API
+                                                        func.min(API.id) == api.id)
+                                                .all())
                         for api_obj_combination in api_obj_combinations:
                             cluster = api_obj_combination.cluster
                             cluster_dict[cluster] = cluster_dict.get(cluster, 0) + 1
