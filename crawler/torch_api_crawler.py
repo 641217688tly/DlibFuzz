@@ -89,7 +89,8 @@ def get_torch_full_api_names(module, prefix=''):
                     "module": current_prefix,
                     "fullName": full_name,
                     "signature": signature,
-                    "description": doc.split('\n')[0]  # 只取docstring的第一行
+                    "description": ' '.join(doc.replace('\n', ' ').split())
+                    # "description": doc.split('\n')[0]  # 只取docstring的第一行
                 })
 
     return apis

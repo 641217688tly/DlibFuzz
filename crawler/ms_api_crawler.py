@@ -5,7 +5,6 @@ import mindspore
 modules_to_include = [
     'mindspore',
     'mindspore.nn',
-    'mindspore.nn.functional',
     'mindspore.ops',
     'mindspore.ops.primitive',
     'mindspore.mint',
@@ -28,6 +27,7 @@ modules_to_include = [
     'mindspore.experimental',
 ]
 
+
 def get_mindspore_full_api_names():
     apis = []
     visited_modules = set()
@@ -49,7 +49,8 @@ def get_mindspore_full_api_names():
             "module": '.'.join(module_name.split('.')[:-1]),
             "fullName": module_name,
             "signature": "",
-            "description": inspect.getdoc(module).split('\n')[0] if inspect.getdoc(module) else "No description available."
+            "description": inspect.getdoc(module).split('\n')[0] if inspect.getdoc(
+                module) else "No description available."
         })
 
         try:
@@ -92,7 +93,8 @@ def get_mindspore_full_api_names():
                         "module": module_name,
                         "fullName": full_name,
                         "signature": "",
-                        "description": inspect.getdoc(member).split('\n')[0] if inspect.getdoc(member) else "No description available."
+                        "description": inspect.getdoc(member).split('\n')[0] if inspect.getdoc(
+                            member) else "No description available."
                     })
 
                     # 获取子模块的成员（不再递归，防止深入未指定的子模块）
@@ -123,13 +125,15 @@ def get_mindspore_full_api_names():
                                 "module": full_name,
                                 "fullName": sub_full_name,
                                 "signature": signature,
-                                "description": doc.split('\n')[0]
+                                "description": ' '.join(doc.replace('\n', ' ').split())
+                                # "description": doc.split('\n')[0]
                             })
                 else:
                     # 子模块不在 modules_to_include 中，忽略
                     continue
 
     return apis
+
 
 # 获取 MindSpore 的 API
 apis = get_mindspore_full_api_names()
@@ -138,5 +142,6 @@ apis = get_mindspore_full_api_names()
 print(f"Total APIs collected: {len(apis)}")
 
 # 将 API 写入 JSON 文件
+apis_dict = {str(index + 1): api for index, api in enumerate(apis)}
 with open('mindspore_apis.json', 'w') as f:
-    json.dump(apis, f, indent=2, ensure_ascii=False)
+    json.dump(apis_dict, f, indent=2, ensure_ascii=False)

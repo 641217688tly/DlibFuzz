@@ -41,7 +41,7 @@ def get_tf_full_api_names(module, prefix=''):
                     continue
 
                 # 检查文档字符串是否包含 "deprecated"，如果包含则认为是废弃的 API
-                doc = inspect.getdoc(member)
+                doc = inspect.getdoc(member) or "No description available."
                 if doc and "deprecated" in doc.lower():
                     continue
 
@@ -55,7 +55,8 @@ def get_tf_full_api_names(module, prefix=''):
                     "module": current_prefix[:-1],
                     "fullName": full_name,
                     "signature": signature,
-                    "description": doc.split('\n')[0] if doc else "No description available."  # 只取docstring的第一行
+                    "description": ' '.join(doc.replace('\n', ' ').split())
+                    # "description": doc.split('\n')[0]  # 只取docstring的第一行
                 })
 
                 # 输出当前API，调试时可以帮助查看进度
@@ -69,5 +70,5 @@ apis = get_tf_full_api_names(tf, 'tf.')
 
 # 将 API 写入 JSON 文件
 apis_dict = {str(index + 1): api for index, api in enumerate(apis)}
-with open('tf_apis.json', 'w') as f:
+with open('tensorflow_apis.json', 'w') as f:
     json.dump(apis_dict, f, indent=2)
