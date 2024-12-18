@@ -1,0 +1,158 @@
+import json
+import os
+from orm import *
+import utils
+
+
+def process_signature(full_api_name, raw_signature):
+    # 将raw_signature按照最后一个'->'分割为输入参数和输出参数
+    parts = raw_signature.strip().rsplit('->', 1)
+    if len(parts) == 2:
+        input_params, output_params = parts
+        input_params = input_params.strip()
+        output_params = output_params.strip()
+        # 如果input_params没有被"()"包围，则为其添加括号
+        if not input_params.startswith('(') and not input_params.endswith(')'):
+            input_params = f"({input_params})"
+        # 如果output_params没有被"()"包围，则为其添加括号
+        if not output_params.startswith('(') and not output_params.endswith(')'):
+            output_params = f"({output_params})"
+        signature = f"{full_api_name}{input_params} -> {output_params}"
+        return signature
+    else:  # 如果函数没有输出值
+        input_params = raw_signature.strip()
+        # output_params = "()"
+        # 如果signature没有被"()"包围，则添加括号
+        if not input_params.startswith('(') and not input_params.endswith(')'):
+            input_params = f"({input_params})"
+        # signature = f"{full_api_name}{input_params} -> {output_params}"
+        signature = f"{full_api_name}{input_params}"
+        return signature
+
+
+def add_apis_from_json(db_session, file_path, lib, version):
+    # 首先检查数据库中是否已存在该库的API
+    lib_exists = db_session.query(API).filter_by(lib=lib, version=version).first()
+    if lib_exists is not None:
+        print(f"{lib} API data already exists in the database!")
+        return
+
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            apis = json.load(file)
+            for api_id, api_info in apis.items():
+                module = api_info['module']
+                full_api_name = api_info['fullName']
+
+                # 对Tensorflow库的API进行特殊处理
+                if module.startswith("tf"):  # 如果module以"tf"开头，则将str中的第一个"tf"替换为"tensorflow"
+                    module = module.replace("tf", "tensorflow", 1)
+                if full_api_name.startswith("tf"):  # 如果full_api_name以"tf"开头，则将str中的第一个"tf"替换为"tensorflow"
+                    full_api_name = full_api_name.replace("tf", "tensorflow", 1)
+
+                # 检查数据库中是否已存在该API
+                is_valid = utils.validate_api_existence(module, api_info['name'])
+                api_exists = db_session.query(API).filter_by(full_name=full_api_name, lib=lib, version=version).first()
+                if api_exists is None and is_valid:  # 如果API不存在且API是有效的:
+                    # 创建TensorflowAPI实例并添加到session
+                    new_api = API(
+                        lib=lib,
+                        name=api_info['name'],
+                        module=module,
+                        full_name=full_api_name,
+                        signature=process_signature(full_api_name, api_info['signature']),
+                        description=api_info['description'],
+                        version=version
+                    )
+                    db_session.add(new_api)
+            db_session.commit()
+    except Exception as e:
+        db_session.rollback()
+        print(f"Error processing Tensorflow APIs file: {e}")
+    finally:
+        db_session.close()
+        print(f"{lib} API data loaded successfully!")
+
+
+def attach_history_errors(session, dir_path, lib):
+    # 获取所有.json文件的列表
+    json_files = [f for f in os.listdir(dir_path) if f.endswith('.json')]
+    files_num = len(json_files)  # 总文件数
+
+    # 读取目录下所有json文件
+    for count, filename in enumerate(json_files, start=1):  # start=1表示从1开始计数
+        file_path = os.path.join(dir_path, filename)
+        print(
+            f"----------------------------------------------------------Loading History Errors: {count}----------------------------------------------------------")
+        with open(file_path, 'r', encoding='utf-8') as file:
+            print(f"Current JSON File: {file_path}\n")
+            data = json.load(file)
+            apis = data.get("API", [])
+            title = data.get("Title", "")
+            code = data.get("Code", "")
+            description = data.get("Description", "")
+            if not code or not apis:  # 如果code为""或apis为空列表，则跳过
+                print(f"Skipping {file_path} due to missing code or APIs")
+                continue
+
+            for full_api_name in apis:
+                try:
+                    print(f"Processing {full_api_name}...")
+                    module_name, api_name = full_api_name.rsplit('.', 1)
+                    if utils.validate_api_existence(module_name, api_name):  # 验证API在当前Python环境中的当前版本的DL库内是否存在
+                        api = session.query(API).filter_by(lib=lib, full_name=full_api_name).first()
+                        if not api:
+                            api_info = utils.inspect_api_info(module_name, api_name)
+                            api = API(
+                                name=api_name,
+                                module=module_name,
+                                full_name=full_api_name,
+                                signature=api_info['signature'],
+                                description=api_info['description'],
+                                lib=lib,
+                                version=api_info['version'],
+                            )
+                            session.add(api)
+                            session.flush()  # 确保api对象有id
+
+                        # 检查api.history_errors中是否已经存在相同的错误触发代码
+                        existing_trigger = session.query(APIHistoryError).filter_by(
+                            api_id=api.id,
+                            title=title,
+                            code=code
+                        ).first()
+
+                        if not existing_trigger:
+                            # 创建新的错误触发代码实例并添加到数据库
+                            new_errors = APIHistoryError(
+                                api_id=api.id,
+                                title=title,
+                                code=code,
+                                description=description
+                            )
+                            session.add(new_errors)
+                        print(f"Successfully processed {full_api_name}\n")
+                    else:
+                        print(
+                            f"WARNING: The {full_api_name} does not exist or is deprecated in the current version of the library!\n")
+                    session.commit()  # 提交所有更改
+                except Exception as e:
+                    session.rollback()  # 出现异常时回滚
+                    print(f"An error occurred: {e}")
+        print(f"Processed {count}/{files_num} files")
+
+
+if __name__ == '__main__':
+    session = utils.get_session()
+
+    # 如果JAX/Tensorflow/Pytorch数据库中为空则添加数据
+    # torch_version="1.12", tf_version="2.10", jax_version="0.4.13", ms_version="2.4.0"
+    add_apis_from_json(session, 'cluster/apis/pytorch/torch_apis.json', 'Pytorch', "1.12")
+    add_apis_from_json(session, 'cluster/apis/jax/jax_apis.json', 'JAX', "0.4.13")
+    add_apis_from_json(session, 'cluster/apis/mindspore/ms_apis.json', 'MindSpore', "2.4.0")
+
+    # 将错误触发代码附加到Pytorch/JAX API下
+    torch_dir = 'data/error_triggers/pytorch_issue'
+    jax_dir = 'data/error_triggers/jax_issue'
+    attach_history_errors(session, torch_dir, 'Pytorch')
+    attach_history_errors(session, jax_dir, 'JAX')

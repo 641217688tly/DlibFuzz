@@ -1,16 +1,10 @@
 import importlib
 import inspect
-import os
 import warnings
 import httpx
 from openai import OpenAI
 from sqlalchemy.orm import sessionmaker
 from orm import *
-
-TORCH_VERSION = "1.12"
-TF_VERSION = "2.10"
-JAX_VERSION = "0.4.13"
-MINDSPORE_VERSION = "2.4.0"
 
 
 def get_session():
@@ -42,15 +36,16 @@ def get_openai_client():
         return openai_client
 
 
-def get_library_version():
-    # 创建一个字典，用于存储各个库的版本
-    library_version = {
-        "pytorch": TORCH_VERSION,
-        "tensorflow": TF_VERSION,
-        "jax": JAX_VERSION,
-        "mindspore": MINDSPORE_VERSION
-    }
-    return library_version
+def get_libs_info():  # 该函数将返回数据库中待测试的深度学习库的名称和版本, 比如[('Pytorch', '1.12'), ('JAX', '0.4.13'), ('MindSpore', '2.4.0')]
+    db_session = get_session()
+    try:
+        results = db_session.query(API.lib, API.version).distinct().all()
+        return results
+    except Exception as e:
+        print(f"An error occurred while getting tested libraries: {str(e)}")
+        return []
+    finally:
+        db_session.close()
 
 
 def validate_api_existence(module_name, api_name):  # 验证API是否存在的函数
@@ -83,6 +78,64 @@ def validate_api_availability(function):  # 验证API是否为被弃用的函数
         except Exception:
             pass
         return any(item.category == DeprecationWarning for item in w)
+
+
+def map_module2lib(module_name):
+    lib_map = {
+        'torch': 'Pytorch',
+        'jax': 'JAX',
+        'jaxlib': 'JAX',
+        'tensorflow': 'Tensorflow',
+        'tf': 'Tensorflow',
+        'ms': 'MindSpore',
+        'mindspore': 'MindSpore'
+    }
+    return lib_map.get(module_name, 'Unknown')
+
+
+def inspect_api_info(module_name, api_name):
+    if validate_api_existence(module_name, api_name) is False:  # 验证API是否存在
+        print(f"API {api_name} does not exist.")
+        return None
+
+    module = importlib.import_module(module_name)  # 动态导入模块
+    func = getattr(module, api_name)  # 从模块中获取函数对象
+
+    if validate_api_availability(func) is True:  # 验证API是否为被弃用的函数
+        print(f"API {api_name} is deprecated.")
+        return None
+
+    # 获取函数签名
+    signature = get_api_signature(f"{module_name}.{api_name}")
+
+    # 获取函数文档
+    description = ""
+    try:
+        description = inspect.getdoc(func)
+    except Exception as e:
+        print(f"Error getting doc for {module_name}.{api_name}: {e}")
+
+    # 获取API所属的库
+    lib = map_module2lib(module_name)
+
+    # 获取API的版本
+    version = ""
+    lib_version_list = get_libs_info()  # [('Pytorch', '1.12'), ('JAX', '0.4.13'), ('MindSpore', '2.4.0')]
+    for lib_name, lib_version in lib_version_list:
+        if lib_name.lower() == lib.lower():
+            version = lib_version
+            break
+
+    api_info = {
+        "module": module_name,
+        "name": api_name,
+        "full_name": f"{module_name}.{api_name}",
+        "signature": signature,
+        "description": description,
+        "lib": lib,
+        "version": version
+    }
+    return api_info
 
 
 def check_api_list(file_path):  # 检查每个API是否存在

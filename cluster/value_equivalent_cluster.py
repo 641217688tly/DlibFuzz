@@ -1,7 +1,8 @@
 import json
 import random
 from json import JSONDecodeError
-from orm import *
+
+import utils
 from utils import *
 
 EXAMPLE1 = """json
@@ -50,51 +51,21 @@ EXAMPLE3 = """json
 """
 
 
-# ----------------------------------------------Clusterer----------------------------------------------
-class JAXClusterer:
+# ----------------------------------------------Cluster----------------------------------------------
+class ValueEquivalentCluster:
     def __init__(self, api, session, openai_client):
         self.api = api
         self.session = session
         self.openai_client = openai_client
-        self.torch_ver = get_library_version()['pytorch']
-        self.tf_ver = get_library_version()['tensorflow']
-        self.jax_ver = get_library_version()['jax']
-        self.messages = self.initialize_message()
+        self.messages = self.initialize_message(api)
         self.responses = []
         self.errors = []
         self.module_alias_mapper = {
             "tf": "tensorflow",
+            "ms": "mindspore",
             "np": "numpy",
             "pd": "pandas",
         }
-
-    def initialize_message(self):  # 构建clusterer的初始提词并返回对话消息
-        clusterer_prompt = f"""
-Objective:
-Identify equivalent or identical API functions or combinations of functions in TensorFlow (v{self.tf_ver}) and PyTorch (v{self.torch_ver}) that perform the same tasks as the function {self.api.full_name} in JAX (v{self.jax_ver}).
-
-Steps:
-1.Identify the Functionality: First, understand the functionality of {self.api.full_name} in JAX.
-2.Search for Equivalents: Then, find API functions in PyTorch and TensorFlow that match this functionality.
-3.Format the Output: Present the findings in the specified JSON format.
-
-Criteria for "Identical Functionality":
-1.Consistency in Input Transformation: When these APIs have no return value, applying them to inputs with the same structure or element values (such as tensors) should result in consistent transformations or changes to the original input.
-2.Consistency in Output: When these APIs have return values, they should produce the same output values when given the same input values.
-
-Required Output Format:
-1.Structure: The output should be a JSON object with three keys: "Pytorch", "Tensorflow", and "JAX". Each key should map to a dictionary where the values are lists of API functions (or combinations of API functions) that provide the same functionality.
-2.Examples:
-Example 1: 
-{EXAMPLE1}
-Example 2: 
-{EXAMPLE2}
-"""
-        messages = [
-            {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
-            {"role": "user", "content": clusterer_prompt}
-        ]
-        return messages
 
     def handle_module_alias(self, module_name):
         module_parts = module_name.split('.')
@@ -160,6 +131,51 @@ Example 2:
             self.errors.append(str(e))
             return False
 
+    def initialize_message(self, api):  # 构建cluster的初始提词并返回对话消息
+        base_lib = api.lib
+        base_lib_version = api.version
+        twin_libs = []  # [('JAX', '0.4.13'), ('MindSpore', '2.4.0')]
+        libs_info = get_libs_info()  # [('Pytorch', '1.12'), ('JAX', '0.4.13'), ('MindSpore', '2.4.0')]
+        for lib_name, lib_version in libs_info:
+            if lib_name.lower() == base_lib.lower() and lib_version == base_lib_version:
+                continue
+            if lib_name.lower() == 'mindspore':
+                continue  # 使用MindSpore官方提供的API对应关系来完成值等价聚类
+            twin_libs.append((lib_name, lib_version))
+
+        # 为twin_libs中的所有库生成一个通用的提示词, 比如[('JAX', '0.4.13')]的提示词为: "JAX (v0.4.13)"; 再比如[('JAX', '0.4.13'), ('Pytorch', '1.12')]的提示词为: "JAX (v0.4.13) and Pytorch (v1.12)"
+        twin_libs_prompt = " and ".join([f"{lib} (v{ver})" for lib, ver in twin_libs])
+        # 拼接获取所有的twin_libs内库的名称
+        twin_libs_name = " and ".join([f"\"{lib}\"" for lib, ver in twin_libs])
+        cluster_prompt = f"""
+Objective:
+Identify equivalent or identical API functions or combinations of functions in {twin_libs_prompt} that perform the same tasks as the function {api.full_name} in {base_lib} (v{base_lib_version}).
+
+Steps:
+1.Identify the Functionality: First, understand the functionality of {api.full_name} in {base_lib} (v{base_lib_version}).
+2.Search for Equivalents: Then, find API functions in {twin_libs_prompt} that match this functionality.
+3.Format the Output: Present the findings in the specified JSON format.
+
+Criteria for "Identical Functionality":
+1.Consistency in Input Transformation: When these APIs have no return value, applying them to inputs with the same structure or element values (such as tensors) should result in consistent transformations or changes to the original input.
+2.Consistency in Output: When these APIs have return values, they should produce the same output values when given the same input values.
+
+Required Output Format:
+1.Structure: The output should be a JSON object with {len(twin_libs)} keys: {twin_libs_name}. Each key should map to a dictionary where the values are lists of API functions (or combinations of API functions) that provide the same functionality.
+2.Examples:
+Example 1: 
+{EXAMPLE1}
+Example 2: 
+{EXAMPLE2}
+Example 3:
+{EXAMPLE3}
+    """
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
+            {"role": "user", "content": cluster_prompt}
+        ]
+        return messages
+
     def conduct_cluster(self):  # 生成并检验JSON数据, 在检验完成或尝试次数达到上限后返回JSON数据或空值
         attempt_num = 0
         while attempt_num < 5:  # 设置最大尝试次数以避免无限循环
@@ -194,12 +210,12 @@ Example 2:
         return None
 
     # --------------------------------------save API Combinations and Cluster into database--------------------------------------
-    def supplement_apis(self, api_combinations, api_class):  # 将Jax/Pytorch/Tensorflow的API组合内不在数据库中的API添加到数据库中
+    def supplement_apis(self, api_combinations):  # 将JAX/Pytorch的API组合内不在数据库中的API添加到数据库中
         """
         以下列数据为例:
         api_combinations = "Tensorflow" : {
-            "1" : ["tensorflow.keras.losses.CategoricalCrossentropy"], // tensorflow.keras.losses.CategoricalCrossentropy internal will automatically array into Tensorflow tensor, so there is no need to be used with tensorflow.constant
-            "2" : ["tensorflow.constant", "tensorflow.nn.softmax_cross_entropy_with_logits"] // Before using tensorflow.nn.softmax_cross_entropy_with_logits, it needs to use tensorflow.constant to convert the input value into a tensor
+            "1" : ["tensorflow.keras.losses.CategoricalCrossentropy"],
+            "2" : ["tensorflow.constant", "tensorflow.nn.softmax_cross_entropy_with_logits"]
         }
         api_class = Tensorflow
         """
@@ -207,15 +223,18 @@ Example 2:
         for api_count, api_combination in api_combinations.items():  # 逐个访问每个API组合
             api_combination_objects[api_count] = []  # api_combination_objects = { "1" : [], "2" : [] }
             for full_api_name in api_combination:  # 获取某个API组合中的每个API
-                api = self.session.query(api_class).filter_by(full_name=full_api_name).first()
+                api = self.session.query(API).filter_by(full_name=full_api_name).first()
                 if not api:
                     module_name, api_name = full_api_name.rsplit('.', 1)
-                    api = api_class(
+                    api_info = utils.inspect_api_info(module_name, api_name)
+                    api = API(
                         name=api_name,
                         module=module_name,
-                        full_name=full_api_name,  # 根据api_class来设置version
-                        signature=get_api_signature(full_api_name),
-                        version=self.torch_ver if api_class == PytorchAPI else self.tf_ver if api_class == TensorflowAPI else self.jax_ver
+                        full_name=full_api_name,
+                        lib=api_info['lib'],
+                        description=api_info['description'],
+                        signature=api_info['signature'],
+                        version=api_info['version'],
                     )
                     self.session.add(api)
                     self.session.commit()
@@ -223,9 +242,12 @@ Example 2:
                     api)  # { "1" : [CategoricalCrossentropy], "2" : [constant, softmax_cross_entropy_with_logits] }
         return api_combination_objects
 
-    def associate_api_combinations_to_cluster(self, cluster, api_combination_objects, combination_class):
+    def associate_api_combinations_to_cluster(self, cluster, api_combination_objects):
         for api_id, api_combination in api_combination_objects.items():  # 逐个访问每个API组合
-            combination = combination_class(apis=api_combination, cluster=cluster)
+            combination = APICombination(
+                apis=api_combination,
+                cluster=cluster
+            )
             self.session.add(combination)
             self.session.commit()
 
@@ -235,26 +257,25 @@ Example 2:
         """
         try:
             self.api.is_clustered = True
-            # 1. 解析返回的JSON数据并检查Pytorch,Tensorflow和Jax中的所有API名,如果PytorchAPI表或TensorflowAPI表或JAX表中没有对应的API,则先在对应表中创建对应的数据
-            torch_apis_combination_objects = self.supplement_apis(json_data['Pytorch'], PytorchAPI)
-            tf_apis_combination_objects = self.supplement_apis(json_data['Tensorflow'], TensorflowAPI)
-            jax_apis_combination_objects = self.supplement_apis(json_data['JAX'], JAXAPI)
-            # 2. 如果tf_apis_combination_objects和torch_apis_combination_objects有一个不为空则创建Cluster对象:
-            if tf_apis_combination_objects or torch_apis_combination_objects:
+            # 1. 解析返回的JSON数据并检查Pytorch和JAX中的所有API名,如果API表中没有对应的条目,则先在对应表中创建对应的数据
+            libs_apis_combination_objects = {}
+            for lib, dict_api_combinations in json_data.items():
+                apis_combination_objects = self.supplement_apis(dict_api_combinations)
+                libs_apis_combination_objects[lib] = apis_combination_objects
+
+            # 2. 如果libs_apis_combination_objects中至少有2个库的apis_combination_objects不为空, 那么创建Cluster对象:
+            if len([lib for lib, apis_combination_objects in libs_apis_combination_objects.items() if
+                    apis_combination_objects]) >= 2:
                 new_cluster = Cluster(
+                    type='ValueEquivalent',
                     energy=5,
                 )
                 self.session.add(new_cluster)
                 self.session.commit()
 
-                # 3. 为Pytorch, Tensorflow和Jax的每个API组合创建对应的PytorchAPICombination, TensorflowAPICombination和JaxAPICombination对象, 之后将它们与新创建的Cluster对象关联
-                self.associate_api_combinations_to_cluster(new_cluster, torch_apis_combination_objects,
-                                                           PytorchAPICombination)
-                self.associate_api_combinations_to_cluster(new_cluster, tf_apis_combination_objects,
-                                                           TensorflowAPICombination)
-                self.associate_api_combinations_to_cluster(new_cluster, jax_apis_combination_objects, JAXAPICombination)
-                self.session.commit()
-                return new_cluster
+                # 3. 为每个API组合创建对应的APICombination对象, 之后将它们与新创建的Cluster对象关联
+                for lib, apis_combination_objects in libs_apis_combination_objects.items():
+                    self.associate_api_combinations_to_cluster(new_cluster, apis_combination_objects)
             self.session.commit()
         except Exception as e:
             self.session.rollback()  # 回滚在异常中的任何数据库更改
@@ -269,38 +290,38 @@ Example 2:
         return new_cluster
 
 
-def run_randomly():  # 随机挑选未聚类的JAXAPI进行聚类
+def run_randomly():  # 随机挑选未聚类的API进行聚类
     # 创建数据库连接
     session = get_session()
     openai_client = get_openai_client()
 
-    # 对未聚类的JAXAPI进行聚类
-    uncluttered_torch_apis = session.query(JAXAPI).filter_by(is_clustered=False).all()
+    # 对未聚类的PytorchAPI进行聚类
+    uncluttered_torch_apis = session.query(API).filter_by(is_clustered=False).all()
     while uncluttered_torch_apis:
         print("----------------------------------------------------------------------------------")
-        # 随机选择一个未聚类的JAXAPI
+        # 随机选择一个未聚类的API
         uncluttered_torch_api = random.choice(uncluttered_torch_apis)
-        clusterer = JAXClusterer(uncluttered_torch_api, session, openai_client)
-        clusterer.cluster_api()
+        cluster = ValueEquivalentCluster(uncluttered_torch_api, session, openai_client)
+        cluster.cluster_api()
 
-        uncluttered_torch_apis = session.query(JAXAPI).filter_by(is_clustered=False).all()
-        total_apis_num = session.query(JAXAPI).count()
+        uncluttered_torch_apis = session.query(API).filter_by(is_clustered=False).all()
+        total_apis_num = session.query(API).count()
         unclustered_torch_apis_num = len(uncluttered_torch_apis)
         print(f"Unclustered / Total: {unclustered_torch_apis_num} / {total_apis_num}")
 
 
-def run_linearly():  # 线性地对未聚类的JAXAPI进行聚类
+def run_linearly():  # 线性地对未聚类的API进行聚类
     # 创建数据库连接
     session = get_session()
     openai_client = get_openai_client()
 
-    # 对未聚类的JAXAPI进行聚类
-    uncluttered_torch_apis = session.query(JAXAPI).filter_by(is_clustered=False).all()
+    # 对未聚类的API进行聚类
+    uncluttered_torch_apis = session.query(API).filter_by(is_clustered=False).all()
     for i, uncluttered_torch_api in enumerate(uncluttered_torch_apis):
         print("----------------------------------------------------------------------------------")
-        # 选择一个未聚类的JAXAPI
-        clusterer = JAXClusterer(uncluttered_torch_api, session, openai_client)
-        clusterer.cluster_api()
+        # 选择一个未聚类的TensorflowAPI
+        cluster = ValueEquivalentCluster(uncluttered_torch_api, session, openai_client)
+        cluster.cluster_api()
         print(f"Unclustered / Total: {len(uncluttered_torch_apis) - i - 1} / {len(uncluttered_torch_apis)}" + "\n")
 
 
