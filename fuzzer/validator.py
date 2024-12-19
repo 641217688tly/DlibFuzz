@@ -1,3 +1,4 @@
+import os
 import subprocess
 from utils import *
 
@@ -20,13 +21,11 @@ Requirements:
     return prompt
 
 
-class SeedValidator:
-    def __init__(self, session, openai_client, seed: ClusterTestSeed, raw_code, lib: str):
+class APITestSeedValidator:
+    def __init__(self, session, openai_client, seed: APITestSeed):
         self.session = session
         self.openai_client = openai_client
-        self.lib = lib
         self.seed = seed
-        self.raw_code = raw_code
 
     def eliminate_markdown(self, raw_code):  # 去除raw_code中的markdown语法
         code_lines = raw_code.split('\n')  # 将代码按行分割成列表
@@ -36,38 +35,15 @@ class SeedValidator:
         # 返回更新后的代码
         return cleaned_code
 
-    def insert_possible_imports(self, raw_code):  # 向seed.code中插入可能的导入语句
-        torch_possible_imports = [
+    def insert_possible_imports(self, raw_code):  # 向seed.code中插入可能需要的的导入语句
+        possible_imports = [
             "import torch",
-        ]
-        tf_possible_imports = [
             "import tensorflow",
-        ]
-        jax_possible_imports = [
             "import jax",
+            "import mindspore",
+            "import numpy"
         ]
-
-        code_lines = raw_code.split('\n')
-        # 检查代码中是否已包含了可能的导入语句
-        imports_to_add = []
-        if self.lib == "Pytorch":
-            for import_statement in torch_possible_imports:
-                if not import_statement in code_lines:  # 如果代码中没有包含该导入语句, 则将其添加到imports_to_add列表中
-                    imports_to_add.append(import_statement)
-        elif self.lib == "Tensorflow":
-            for import_statement in tf_possible_imports:
-                if not import_statement in code_lines:
-                    imports_to_add.append(import_statement)
-        else:
-            for import_statement in jax_possible_imports:
-                if not import_statement in code_lines:
-                    imports_to_add.append(import_statement)
-
-        # 如果有需要添加的导入语句，将它们插入到代码的开头
-        if imports_to_add:
-            updated_code = '\n'.join(imports_to_add) + '\n' + raw_code
-        else:
-            updated_code = raw_code
+        updated_code = '\n'.join(possible_imports) + '\n' + raw_code
         return updated_code
 
     def pylint_static_analysis(self, file_path):  # 使用静态分析工具pylint分析Python代码, 如果发现错误, 则返回False和错误信息
@@ -114,22 +90,14 @@ class SeedValidator:
         os.remove(file_path)  # 删除临时文件
         return is_valid, error_details
 
-    def save_valid_code(self, valid_code):
-        if self.lib == "Pytorch":
-            self.seed.valid_pytorch_code = valid_code
-        elif self.lib == "Tensorflow":
-            self.seed.valid_tensorflow_code = valid_code
-        else:
-            self.seed.valid_jax_code = valid_code
-        self.session.commit()
-
     def validate(self, max_retry_limit=5):  # 修复代码中的错误
-        code_without_markdown = self.eliminate_markdown(self.raw_code)  # 去除code中的markdown语法
+        code_without_markdown = self.eliminate_markdown(self.seed.raw_code)  # 去除code中的markdown语法
         code_complemented_import = self.insert_possible_imports(code_without_markdown)  # 向code中插入可能的导入语句
         is_valid, error_details = self.static_analysis(code_complemented_import)
 
         if is_valid:  # 如果代码没有错误, 则结束修复
-            self.save_valid_code(code_complemented_import)
+            self.seed.valid_code = code_complemented_import
+            self.session.commit()
             return code_complemented_import  # 返回有效的代码
 
         print(f"\nError Details:\n {error_details}")
@@ -159,7 +127,8 @@ class SeedValidator:
 
                 is_valid, error_details = self.static_analysis(validated_code)
                 if is_valid:
-                    self.save_valid_code(validated_code)
+                    self.seed.valid_code = validated_code
+                    self.session.commit()
                     return validated_code  # 返回修复后的有效代码
                 else:
                     print(f"\nError Details:\n {error_details}")
@@ -174,75 +143,84 @@ class SeedValidator:
         print(f"Max attempts reached. Failed to fix the code snippet.")
         return None
 
-def export_validated_seed(seed: ClusterTestSeed):  # 导出种子中各个库的测试用例为py文件
-    # TODO 待修改
-    if seed.is_validated:
-        # 先构建输出路径
-        seed_folder_name = ''
-        if seed.pytorch_api_id:
-            seed_folder_name = seed_folder_name + f'Pytorch({seed.pytorch_api.name})'
-        if seed.tensorflow_api_id:
-            seed_folder_name = seed_folder_name + f'Tensorflow({seed.tensorflow_api.name})'
-        if seed.jax_api_id:
-            seed_folder_name = seed_folder_name + f'JAX({seed.jax_api.name})'
-        output_combination_folder_path = f'seeds/validated_seeds/zero-shot/{seed.cluster_id}/' + seed_folder_name
-        if not os.path.exists(output_combination_folder_path):  # 创建API组合的文件夹
-            os.makedirs(output_combination_folder_path, exist_ok=True)
-        # 创建一个新的输出文件夹
-        output_folder_path = f"{output_combination_folder_path}/seed_{len(os.listdir(output_combination_folder_path)) + 1}"
-        if not os.path.exists(output_folder_path):  # 创建API组合的文件夹
-            os.makedirs(output_folder_path, exist_ok=True)
-        # 随后在输出路径下导出各个库的测试用例
-        # 导出seed.valid_pytorch_code到output_path/torch_seed.py
-        if seed.valid_pytorch_code:
-            with open(f'{output_folder_path}/torch_seed.py', 'w') as f:
-                f.write(seed.valid_pytorch_code)
-        # 导出seed.valid_tensorflow_code到output_path/tf.py
-        if seed.valid_tensorflow_code:
-            with open(f'{output_folder_path}/tf_seed.py', 'w') as f:
-                f.write(seed.valid_tensorflow_code)
-        # 导出seed.valid_jax_code到output_path/jax.py
-        if seed.valid_jax_code:
-            with open(f'{output_folder_path}/jax_seed.py', 'w') as f:
-                f.write(seed.valid_jax_code)
 
-def validate_all_seeds():
+class ClusterTestSeedValidator:
+    def __init__(self, session, openai_client, seed: ClusterTestSeed):
+        self.session = session
+        self.openai_client = openai_client
+        self.seed = seed
+
+    def validate(self):
+        if self.seed.is_validated:
+            return True
+        # 寻找当前ClusterSeed中待验证的APISeed
+        api_seeds_waiting_validate = self.seed.api_seeds.filter(APITestSeed.is_validated == False).all()
+        if_success = True
+        for api_seed in api_seeds_waiting_validate:
+            api_seed_validator = APITestSeedValidator(self.session, self.openai_client, api_seed)
+            validated_code = api_seed_validator.validate()
+            if validated_code is None:
+                if_success = False
+        if if_success:
+            self.seed.is_validated = True
+            self.session.commit()
+        return if_success
+
+
+def export_valid_cluster_seed(seed: ClusterTestSeed):  # 导出种子中各个库的测试用例为py文件
+    if seed.is_validated:
+        cluster_folder_path = 'seeds/validated_seeds/'
+        # 首先区分是否利用了历史错误
+        if seed.type == 'WithHistoryError':  # 利用了历史错误
+            cluster_folder_path = cluster_folder_path + 'WithHistoryError/'
+            # 然后区分值等价和状态等价
+            if seed.cluster.type == 'ValueEquivalent':
+                cluster_folder_path = cluster_folder_path + 'ValueEquivalent/'
+            else:  # 状态等价
+                cluster_folder_path = cluster_folder_path + 'StateEquivalent/'
+        else:  # 没有利用历史错误
+            cluster_folder_path = cluster_folder_path + 'WithoutHistoryError/'
+            # 然后区分值等价和状态等价
+            if seed.cluster.type == 'ValueEquivalent':
+                cluster_folder_path = cluster_folder_path + 'ValueEquivalent/'
+            else:  # 状态等价
+                cluster_folder_path = cluster_folder_path + 'StateEquivalent/'
+        cluster_folder_path = cluster_folder_path + f'Cluster_{seed.cluster_id}/'
+        if not os.path.exists(cluster_folder_path):
+            os.makedirs(cluster_folder_path, exist_ok=True)
+
+        # 查看cluster_folder_path下已经存在了多少个seed文件夹
+        cluster_seed_folder_path = cluster_folder_path + f'seed_{len(os.listdir(cluster_folder_path)) + 1}/'
+        if not os.path.exists(cluster_seed_folder_path):
+            os.makedirs(cluster_seed_folder_path, exist_ok=True)
+        for api_seed in seed.api_seeds:
+            api_group = api_seed.api_group
+            # 将api_group内各个API的full_name用"+"拼接在一起
+            api_seed_file_name = '+'.join([api.full_name for api in api_group.apis])
+            # 使用api_seed中api_group内各个API的名称作为seed文件夹的名称
+            api_seed_file_path = cluster_seed_folder_path + api_seed_file_name + '.py'
+            with open(api_seed_file_path, 'w') as f:
+                f.write(api_seed.valid_code)
+
+
+def validate_and_export_all_seeds():
     session = get_session()
     openai_client = get_openai_client()
-    # 查询所有未经验证的种子
-    unvalidated_seeds = session.query(ClusterTestSeed).filter(ClusterTestSeed.is_validated == False).all()
-    while unvalidated_seeds:
+    # 查询所有未经验证的ClusterSeed
+    unvalidated_cluster_seeds = session.query(ClusterTestSeed).filter(ClusterTestSeed.is_validated == False).all()
+    while unvalidated_cluster_seeds:
         print("----------------------------------------------------------------------------------")
-        seed = unvalidated_seeds[0]
-        is_valid = True
-        if seed.pytorch_combination_id and seed.valid_pytorch_code is None:
-            torch_validator = SeedValidator(session, openai_client, seed, seed.raw_pytorch_code, "Pytorch")
-            valid_code = torch_validator.validate()
-            if valid_code is None:
-                is_valid = False
-                print("Failed to fix the Pytorch code.")
-        if seed.tensorflow_combination_id and seed.valid_tensorflow_code is None:
-            tf_validator = SeedValidator(session, openai_client, seed, seed.raw_tensorflow_code, "Tensorflow")
-            valid_code = tf_validator.validate()
-            if valid_code is None:
-                is_valid = False
-                print("Failed to fix the Tensorflow code.")
-        if seed.jax_combination_id and seed.valid_jax_code is None:
-            jax_validator = SeedValidator(session, openai_client, seed, seed.raw_jax_code, "JAX")
-            valid_code = jax_validator.validate()
-            if valid_code is None:
-                is_valid = False
-                print("Failed to fix the Jax code.")
-        if is_valid:
-            seed.is_validated = True
-            session.commit()
-            print(f"Seed({seed.id}) validated successfully.")
-
+        cluster_seed = unvalidated_cluster_seeds[0]
+        cluster_seed_validator = ClusterTestSeedValidator(session, openai_client, cluster_seed)
+        is_success = cluster_seed_validator.validate()
+        if is_success:
+            export_valid_cluster_seed(cluster_seed)
         # 更新未校验的种子集
-        unvalidated_seeds = session.query(ClusterTestSeed).filter(ClusterTestSeed.is_validated == False).all()
+        unvalidated_cluster_seeds = session.query(ClusterTestSeed).filter(ClusterTestSeed.is_validated == False).all()
         # 打印未校验的种子数量
         total_seeds_num = session.query(ClusterTestSeed).count()
-        print(f"Unvalidated / Total: {len(unvalidated_seeds)} / {total_seeds_num}")
+        print(f"Unvalidated / Total: {len(unvalidated_cluster_seeds)} / {total_seeds_num}")
+
 
 if __name__ == '__main__':
-    validate_all_seeds()
+    validate_and_export_all_seeds()

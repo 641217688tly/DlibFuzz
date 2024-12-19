@@ -263,31 +263,30 @@ def count_fuzz_time():
         session.close()
 
 
-def get_cluster_api_combinations(cluster_id: int):
+def get_cluster_api_group(cluster_id: int):
     session = get_session()
     cluster = session.query(Cluster).filter(Cluster.id == cluster_id).first()
-    pytorch_combinations = cluster.pytorch_combinations
-    tensorflow_combinations = cluster.tensorflow_combinations
-    jax_combinations = cluster.jax_combinations
-
-    def print_combinations(combinations, api_type):
-        print("\n" + "*" * 100)
-        print(f"{api_type} API combinations:")
-        for combination in combinations:
-            print("=" * 80)
-            print(f"{api_type} API combination ID: {combination.id}")
-            # 获得Pytorch API组合中的所有API
-            apis = combination.apis
-            for api in apis:
-                print("-" * 60)
-                print(f"{api_type} API ID: {api.id}, Full name: {api.full_name}")
-
-    print_combinations(pytorch_combinations, "Pytorch")
-    print_combinations(tensorflow_combinations, "Tensorflow")
-    print_combinations(jax_combinations, "JAX")
+    api_groups = cluster.api_groups
+    for api_group in api_groups:
+        print("-" * 60)
+        apis = api_group.apis
+        for api in apis:
+            print(f"(API ID: {api.id}, Full Name: {api.full_name})", end=", ")
 
 
 if __name__ == '__main__':
-    # export_all_validated_seeds()
-    # get_cluster_api_combinations(2)
-    print(get_api_signature("jax.numpy.mean"))
+    list = [
+        'jax.nn.relu',
+        'jax.nn.leaky_relu',
+        'jax.nn.sigmoid',
+        'jax.nn.tanh',
+        'jax.nn.gelu',
+        'jax.nn.softplus',
+        'jax.nn.elu',
+        'jax.nn.selu',
+        'jax.nn.softsign',
+        'jax.nn.swish',
+    ]
+    for api in list:
+        module_name, api_name = api.rsplit('.', 1)
+        print(validate_api_existence(module_name, api_name))
