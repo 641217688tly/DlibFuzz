@@ -171,3 +171,5 @@ cython_debug/
 results_*/
 seeds/
 generated_code_*
+
+docs/
