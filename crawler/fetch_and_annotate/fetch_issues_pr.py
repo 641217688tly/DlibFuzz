@@ -235,7 +235,6 @@ async def main():
         for idx, pr in enumerate(pr_jax):
             save_to_file(save_directory, 'jax_pr', str(idx), pr)
 
-    print('Done!')
 
 
 if __name__ == "__main__":
