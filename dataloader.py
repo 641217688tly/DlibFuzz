@@ -78,7 +78,7 @@ def attach_history_errors(session, dir_path, lib):
     # 获取所有.json文件的列表
     json_files = [f for f in os.listdir(dir_path) if f.endswith('.json')]
     files_num = len(json_files)  # 总文件数
-
+    added_errors_num = 0
     # 读取目录下所有json文件
     for count, filename in enumerate(json_files, start=1):  # start=1表示从1开始计数
         file_path = os.path.join(dir_path, filename)
@@ -86,11 +86,19 @@ def attach_history_errors(session, dir_path, lib):
             f"----------------------------------------------------------Loading History Errors: {count}----------------------------------------------------------")
         with open(file_path, 'r', encoding='utf-8') as file:
             print(f"Current JSON File: {file_path}\n")
-            data = json.load(file)
+            # 尝试解析JSON文件, 如果解析失败则跳过
+            try:
+                data = json.load(file)
+            except Exception as e:
+                continue
             apis = data.get("API", [])
             title = data.get("Title", "")
             code = data.get("Code", "")
+            url = data.get("URL", "")
             description = data.get("Description", "")
+            if not isinstance(description, str): # 如果解析得到的description不是字符串类型而是字典类型或数组类型, 则将其转换为字符串
+                description = str(description)
+
             if not code or not apis:  # 如果code为""或apis为空列表，则跳过
                 print(f"Skipping {file_path} due to missing code or APIs")
                 continue
@@ -128,6 +136,7 @@ def attach_history_errors(session, dir_path, lib):
                                 api_id=api.id,
                                 title=title,
                                 code=code,
+                                issue_url=url,
                                 description=description
                             )
                             session.add(new_errors)
@@ -139,7 +148,14 @@ def attach_history_errors(session, dir_path, lib):
                 except Exception as e:
                     session.rollback()  # 出现异常时回滚
                     print(f"An error occurred: {e}")
+            # 检索APIHistoryError表, 查找当前History Error是否已经被添加
+            existing_error = session.query(APIHistoryError).filter_by(title=title, code=code,
+                                                                      description=description).first()
+            if existing_error:
+                added_errors_num = added_errors_num + 1
+
         print(f"Processed {count}/{files_num} files")
+    return added_errors_num
 
 
 if __name__ == '__main__':
@@ -152,7 +168,10 @@ if __name__ == '__main__':
     add_apis_from_json(session, 'cluster/apis/mindspore/ms_apis.json', 'MindSpore', "2.4.0")
 
     # 将错误触发代码附加到Pytorch/JAX API下
-    torch_dir = 'data/error_triggers/pytorch_issue'
-    jax_dir = 'data/error_triggers/jax_issue'
-    attach_history_errors(session, torch_dir, 'Pytorch')
-    attach_history_errors(session, jax_dir, 'JAX')
+    torch_dir = 'data/history_errors/pytorch_issue'
+    jax_dir = 'data/history_errors/jax_issue'
+    added_torch_errors_num = attach_history_errors(session, torch_dir, 'Pytorch')
+    added_jax_errors_num = attach_history_errors(session, jax_dir, 'JAX')
+
+    print(f"Total number of added Pytorch error triggers: {added_torch_errors_num}") # 93
+    print(f"Total number of added JAX error triggers: {added_jax_errors_num}") # 562

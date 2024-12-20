@@ -101,9 +101,9 @@ def inspect_api_info(module_name, api_name):
     module = importlib.import_module(module_name)  # 动态导入模块
     func = getattr(module, api_name)  # 从模块中获取函数对象
 
-    if validate_api_availability(func) is True:  # 验证API是否为被弃用的函数
-        print(f"API {api_name} is deprecated.")
-        return None
+    # if validate_api_availability(func) is True:  # 验证API是否为被弃用的函数
+    #     print(f"API {api_name} is deprecated.")
+    #     return None
 
     # 获取函数签名
     signature = get_api_signature(f"{module_name}.{api_name}")
@@ -116,7 +116,8 @@ def inspect_api_info(module_name, api_name):
         print(f"Error getting doc for {module_name}.{api_name}: {e}")
 
     # 获取API所属的库
-    lib = map_module2lib(module_name)
+    api_lib = module_name.split('.')[0] # 用"."分割module_name, 然后取第一个部分作为库名
+    lib = map_module2lib(api_lib)
 
     # 获取API的版本
     version = ""
@@ -275,18 +276,24 @@ def get_cluster_api_group(cluster_id: int):
 
 
 if __name__ == '__main__':
-    list = [
-        'jax.nn.relu',
-        'jax.nn.leaky_relu',
-        'jax.nn.sigmoid',
-        'jax.nn.tanh',
-        'jax.nn.gelu',
-        'jax.nn.softplus',
-        'jax.nn.elu',
-        'jax.nn.selu',
-        'jax.nn.softsign',
-        'jax.nn.swish',
-    ]
-    for api in list:
-        module_name, api_name = api.rsplit('.', 1)
-        print(validate_api_existence(module_name, api_name))
+    # list = [
+    #     'jax.nn.relu',
+    #     'jax.nn.leaky_relu',
+    #     'jax.nn.sigmoid',
+    #     'jax.nn.tanh',
+    #     'jax.nn.gelu',
+    #     'jax.nn.softplus',
+    #     'jax.nn.elu',
+    #     'jax.nn.selu',
+    #     'jax.nn.softsign',
+    #     'jax.nn.swish',
+    # ]
+    # for api in list:
+    #     module_name, api_name = api.rsplit('.', 1)
+    #     print(validate_api_existence(module_name, api_name))
+    module_name = 'torch._C'
+    api_name = '_autograd_init'
+    module = importlib.import_module(module_name)  # 动态导入模块
+    func = getattr(module, api_name)  # 从模块中获取函数对象
+    if validate_api_availability(func) is True:  # 验证API是否为被弃用的函数
+        print(f"API {api_name} is deprecated.")

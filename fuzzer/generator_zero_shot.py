@@ -3,7 +3,7 @@ from utils import *
 from orm import *
 
 
-class SeedGenerator:
+class ValueEquivalentSeedGenerator:
     def __init__(self, session, openai_client):
         self.session = session
         self.openai_client = openai_client
