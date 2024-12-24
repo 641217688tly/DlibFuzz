@@ -26,14 +26,24 @@ def fetch_issues(repo_owner: str, repo_name: str, label: str='bug', num_results:
     page = 1
     headers = {'Authorization': os.getenv('GITHUB_TOKEN', '')}
 
+
+        
+
     while len(issues) < num_results:
         url =f'https://api.github.com/repos/{repo_owner}/{repo_name}/issues'
-        params = {
-            'state': 'all',
-            'labels': label,
-            'page': page,
-            'per_page': 100
-        }
+        if label == 'all':
+            params = {
+                'state': 'all',
+                'page': page,
+                'per_page': 100
+            }
+        else:
+            params = {
+                'state': 'all',
+                'labels': label,
+                'page': page,
+                'per_page': 100
+            }
 
         response = requests.get(url, headers=headers, params=params)
         if response.status_code != 200:
@@ -134,12 +144,19 @@ if __name__ == "__main__":
     save_directory = f'results_{current_time_in_str}'
 
     # fetch issues and pull requests from PyTorch
-    print('Fetching issues from PyTorch...')
-    issues_torch = fetch_issues('pytorch', 'pytorch', num_results=1000)
+    print('Fetching issues labelled "bug" from PyTorch...')
+    issues_torch = fetch_issues('pytorch', 'pytorch', num_results=1000, label='bug')
+
+    print('Fetching issues labelled "high priority" from PyTorch...')
+    issues_torch_high_priority = fetch_issues('pytorch', 'pytorch', num_results=1000, label='high priority')
+
 
     print('Saving the results to "pytorch_issue"...')
     index_pytorch_issues = 0
     for issue in issues_torch:
+        save_to_file(save_directory, 'pytorch_issue', str(index_pytorch_issues), issue)
+        index_pytorch_issues += 1
+    for issue in issues_torch_high_priority:
         save_to_file(save_directory, 'pytorch_issue', str(index_pytorch_issues), issue)
         index_pytorch_issues += 1
     
@@ -152,24 +169,6 @@ if __name__ == "__main__":
     #     save_to_file(save_directory, 'pytorch_pr', str(index_pytorch_pr), pr)
     #     index_pytorch_pr += 1
     
-    # fetch issues and pull requests from TensorFlow
-    print('Fetching issues from TensorFlow...')
-    issues_tf = fetch_issues('tensorflow', 'tensorflow', label='type:bug', num_results=1000)
-
-    print('Saving the results to "tensorflow_issue"...')
-    index_tf_issues = 0
-    for issue in issues_tf:
-        save_to_file(save_directory, 'tensorflow_issue', str(index_tf_issues), issue)
-        index_tf_issues += 1
-    
-    # print('Fetching pull requests from TensorFlow...')
-    # pr_tf = fetch_pull_requests('tensorflow', 'tensorflow', num_results=1000)
-
-    # print('Saving the results to "tensorflow_pr"...')
-    # index_tf_pr = 0
-    # for pr in pr_tf:
-    #     save_to_file(save_directory, 'tensorflow_pr', str(index_tf_pr), pr)
-    #     index_tf_pr += 1
     
     # fetch issues and pull requests from JAX
     print('Fetching issues from JAX...')
@@ -189,5 +188,24 @@ if __name__ == "__main__":
     # for pr in pr_jax:
     #     save_to_file(save_directory, 'jax_pr', str(index_jax_pr), pr)
     #     index_jax_pr += 1
+
+
+    print('Fetching issues from MindSpore...')
+    issues_ms = fetch_issues('mindspore-ai', 'mindspore', num_results=1000, label='all')
+
+    print('Saving the results to "mindspore_issue"...')
+    index_ms_issues = 0
+    for issue in issues_ms:
+        save_to_file(save_directory, 'mindspore_issue', str(index_ms_issues), issue)
+        index_ms_issues += 1
+    
+    print('Fetching pull requests from MindSpore...')
+    pr_ms = fetch_pull_requests('mindspore-ai', 'mindspore', num_results=1000)
+
+    print('Saving the results to "ms_pr"...')
+    index_ms_pr = 0
+    for pr in pr_ms:
+        save_to_file(save_directory, 'ms_pr', str(index_ms_pr), pr)
+        index_ms_pr += 1
 
     print('Done!')
