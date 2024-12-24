@@ -18,9 +18,9 @@ db_url = f"mysql+pymysql://{user}:{password}@{host}/{database}"  # 创建数据�
 # 创建数据库连接
 Base = declarative_base()
 
-api_combination_association = Table('api_combination_association', Base.metadata,
-                                    Column('api_combination_id', Integer,
-                                           ForeignKey('api_combination.id')),
+api_group_association = Table('api_group_association', Base.metadata,
+                                    Column('api_group_id', Integer,
+                                           ForeignKey('api_group.id')),
                                     Column('api_id', Integer, ForeignKey('api.id')))
 
 
@@ -42,13 +42,13 @@ class API(Base):
     history_errors = relationship('APIHistoryError', back_populates='api')  # 一个API可能有多个触发bug的代码片段
 
 
-class APICombination(Base):
-    __tablename__ = 'api_combination'
+class APIGroup(Base):
+    __tablename__ = 'api_group'
     id = Column(Integer, primary_key=True)
-    apis = relationship('API', secondary=api_combination_association)
+    apis = relationship('API', secondary=api_group_association)
     cluster_id = Column(Integer, ForeignKey('cluster.id'), nullable=True)
-    cluster = relationship('Cluster', back_populates='api_combinations')
-    api_seeds = relationship('APITestSeed', back_populates='api_combination')
+    cluster = relationship('Cluster', back_populates='api_groups')
+    api_seeds = relationship('APITestSeed', back_populates='api_group')
 
 
 class APIHistoryError(Base):
@@ -68,7 +68,7 @@ class Cluster(Base):
     type = Column(Enum('ValueEquivalent', 'StateEquivalent', name='cluster_type_enum'), nullable=False)
     description = Column(Text, nullable=True)
     energy = Column(Integer, default=5)
-    api_combinations = relationship('APICombination', back_populates='cluster')
+    api_groups = relationship('APIGroup', back_populates='cluster')
     is_tested = Column(Boolean, default=False)  # 该API是否已经生成过了种子
     cluster_seeds = relationship('ClusterTestSeed', back_populates='cluster')
 
@@ -76,6 +76,7 @@ class Cluster(Base):
 class ClusterTestSeed(Base):
     __tablename__ = 'cluster_seed'
     id = Column(Integer, primary_key=True)
+    type = Column(Enum('WithHistoryError', 'WithoutHistoryError', name='cluster_seed_type_enum'), nullable=False)
     cluster_id = Column(Integer, ForeignKey('cluster.id'), nullable=True)
     cluster = relationship('Cluster', back_populates='cluster_seeds')
     api_seeds = relationship('APITestSeed', back_populates='cluster_seed', cascade="all, delete-orphan")
@@ -89,8 +90,8 @@ class APITestSeed(Base):
     id = Column(Integer, primary_key=True)
     cluster_seed_id = Column(Integer, ForeignKey('cluster_seed.id'))
     cluster_seed = relationship('ClusterTestSeed', back_populates='api_seeds')
-    api_combination_id = Column(Integer, ForeignKey('api_combination.id'), nullable=True)
-    api_combination = relationship('APICombination', back_populates='api_seeds')
+    api_group_id = Column(Integer, ForeignKey('api_group.id'), nullable=True)
+    api_group = relationship('APIGroup', back_populates='api_seeds')
     raw_code = Column(Text, nullable=True)
     valid_code = Column(Text, nullable=True)
     is_validated = Column(Boolean, default=False)  # 该种子是否已经修复过了

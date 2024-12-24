@@ -101,9 +101,9 @@ def inspect_api_info(module_name, api_name):
     module = importlib.import_module(module_name)  # 动态导入模块
     func = getattr(module, api_name)  # 从模块中获取函数对象
 
-    if validate_api_availability(func) is True:  # 验证API是否为被弃用的函数
-        print(f"API {api_name} is deprecated.")
-        return None
+    # if validate_api_availability(func) is True:  # 验证API是否为被弃用的函数
+    #     print(f"API {api_name} is deprecated.")
+    #     return None
 
     # 获取函数签名
     signature = get_api_signature(f"{module_name}.{api_name}")
@@ -116,7 +116,8 @@ def inspect_api_info(module_name, api_name):
         print(f"Error getting doc for {module_name}.{api_name}: {e}")
 
     # 获取API所属的库
-    lib = map_module2lib(module_name)
+    api_lib = module_name.split('.')[0] # 用"."分割module_name, 然后取第一个部分作为库名
+    lib = map_module2lib(api_lib)
 
     # 获取API的版本
     version = ""
@@ -263,31 +264,36 @@ def count_fuzz_time():
         session.close()
 
 
-def get_cluster_api_combinations(cluster_id: int):
+def get_cluster_api_group(cluster_id: int):
     session = get_session()
     cluster = session.query(Cluster).filter(Cluster.id == cluster_id).first()
-    pytorch_combinations = cluster.pytorch_combinations
-    tensorflow_combinations = cluster.tensorflow_combinations
-    jax_combinations = cluster.jax_combinations
-
-    def print_combinations(combinations, api_type):
-        print("\n" + "*" * 100)
-        print(f"{api_type} API combinations:")
-        for combination in combinations:
-            print("=" * 80)
-            print(f"{api_type} API combination ID: {combination.id}")
-            # 获得Pytorch API组合中的所有API
-            apis = combination.apis
-            for api in apis:
-                print("-" * 60)
-                print(f"{api_type} API ID: {api.id}, Full name: {api.full_name}")
-
-    print_combinations(pytorch_combinations, "Pytorch")
-    print_combinations(tensorflow_combinations, "Tensorflow")
-    print_combinations(jax_combinations, "JAX")
+    api_groups = cluster.api_groups
+    for api_group in api_groups:
+        print("-" * 60)
+        apis = api_group.apis
+        for api in apis:
+            print(f"(API ID: {api.id}, Full Name: {api.full_name})", end=", ")
 
 
 if __name__ == '__main__':
-    # export_all_validated_seeds()
-    # get_cluster_api_combinations(2)
-    print(get_api_signature("jax.numpy.mean"))
+    # list = [
+    #     'jax.nn.relu',
+    #     'jax.nn.leaky_relu',
+    #     'jax.nn.sigmoid',
+    #     'jax.nn.tanh',
+    #     'jax.nn.gelu',
+    #     'jax.nn.softplus',
+    #     'jax.nn.elu',
+    #     'jax.nn.selu',
+    #     'jax.nn.softsign',
+    #     'jax.nn.swish',
+    # ]
+    # for api in list:
+    #     module_name, api_name = api.rsplit('.', 1)
+    #     print(validate_api_existence(module_name, api_name))
+    module_name = 'torch._C'
+    api_name = '_autograd_init'
+    module = importlib.import_module(module_name)  # 动态导入模块
+    func = getattr(module, api_name)  # 从模块中获取函数对象
+    if validate_api_availability(func) is True:  # 验证API是否为被弃用的函数
+        print(f"API {api_name} is deprecated.")

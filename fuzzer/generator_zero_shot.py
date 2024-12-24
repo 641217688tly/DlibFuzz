@@ -1,9 +1,9 @@
-from fuzzer.validator import SeedValidator
+from fuzzer.validator import APITestSeedValidator
 from utils import *
 from orm import *
 
 
-class SeedGenerator:
+class ValueEquivalentSeedGenerator:
     def __init__(self, session, openai_client):
         self.session = session
         self.openai_client = openai_client
@@ -51,7 +51,7 @@ class SeedGenerator:
         base_seed = self.generate_seed4base(seed, base_api_combination)
 
         # 2.随后尝试对基底API进行修复
-        base_seed_validator = SeedValidator(self.session, self.openai_client, seed, base_seed, cluster.base)
+        base_seed_validator = APITestSeedValidator(self.session, self.openai_client, seed, base_seed, cluster.base)
         validated_base_seed = base_seed_validator.validate()
         if validated_base_seed is None:
             # 如果修复失败, 依旧使用修复前的代码

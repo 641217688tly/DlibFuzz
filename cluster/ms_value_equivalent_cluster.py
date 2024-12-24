@@ -65,20 +65,19 @@ class MSValueEquivalentCluster:
             for torch_api, ms_api in mapper_dic.items():
                 torch_module_name, torch_api_name = torch_api.rsplit('.', 1)
                 ms_module_name, ms_api_name = ms_api.rsplit('.', 1)
-                if not (validate_api_existence(torch_module_name, torch_api_name) and validate_api_existence(
-                        ms_module_name, ms_api_name)):
+                if not validate_api_existence(torch_module_name, torch_api_name):
                     continue
 
                 # 查询Pytorch API
                 torch_api_obj = self.session.query(API).filter_by(lib='Pytorch', full_name=torch_api).first()
-                torch_api_obj_combinations = (session.query(APICombination)
-                                              .join(APICombination.apis)
-                                              .filter(Cluster.type == 'ValueEquivalent')
-                                              .group_by(APICombination.id)
-                                              .having(func.count(API.id) == 1,  # 确保每个组合只有一个API
-                                                      func.min(API.id) == torch_api_obj.id)
+                torch_api_obj_groups = (session.query(APIGroup)
+                                              .join(APIGroup.apis)
+                                              .filter(Cluster.type == 'ValueEquivalent') # group.cluster.type == 'ValueEquivalent'
+                                              .group_by(APIGroup.id)
+                                              .having(func.count(API.id) == 1,  # 确保当前Group内只包含一个API
+                                                      func.min(API.id) == torch_api_obj.id)  # 确保当前Group内包含的API是torch_api_obj
                                               .all())
-                if torch_api_obj is None or len(torch_api_obj_combinations) == 0:
+                if torch_api_obj is None or len(torch_api_obj_groups) == 0:
                     continue
 
                 # 查询MindSpore API
@@ -98,14 +97,14 @@ class MSValueEquivalentCluster:
                     self.session.add(ms_api_obj)
                     self.session.commit()
 
-                # 根据torch_api_obj_combinations反向查找值等价簇, 之后以ms_api_obj新建APICombination并加入簇
-                for torch_api_obj_combination in torch_api_obj_combinations:
-                    cluster = torch_api_obj_combination.cluster
-                    ms_api_combination = APICombination(
-                        cluster=cluster,
+                # 根据torch_api_obj_groups反向查找值等价簇, 之后以ms_api_obj新建APIgroup并加入簇
+                for torch_api_obj_group in torch_api_obj_groups:
+                    value_equivalent_cluster = torch_api_obj_group.cluster
+                    ms_api_group = APIGroup(
+                        cluster=value_equivalent_cluster,
                         apis=[ms_api_obj]
                     )
-                    self.session.add(ms_api_combination)
+                    self.session.add(ms_api_group)
                     self.session.commit()
         except Exception as e:
             print(f"Error: {e}")
