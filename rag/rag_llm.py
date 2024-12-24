@@ -14,7 +14,7 @@ from embeddings import OllamaEmbeddings
 from langchain.chains import RetrievalQA
 
 
-def load_html_files(directory: str, kind: str):
+def load_files(directory: str, kind: str):
     documents = []
     for filename in os.listdir(directory):
         if filename.endswith('.html') or filename.endswith('.htm'):
@@ -25,12 +25,17 @@ def load_html_files(directory: str, kind: str):
                     sections = soup.find_all('div', class_='section')
                     text = "\n".join(section.get_text(separator='') for section in sections)
                     documents.append(text)
+        elif filename.endswith('.md'):
+            filepath = os.path.join(directory, filename)
+            with open(filepath, 'r', encoding='utf-8') as file:
+                text = file.read()
+                documents.append(text)
     return documents
 
 
 def initialize_rag_system(documents_dir: str):
     # Step 1: Load documents
-    docs = load_html_files(documents_dir, kind='pytorch')
+    docs = load_files(documents_dir, kind='pytorch')
     
     # Step 2: Preprocess documents
     text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
