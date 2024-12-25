@@ -9,7 +9,7 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
-from llm import CodeQwenLLM, CodeGemmaLLM
+from llm import CodeQwenLLM, OpenAILLM
 from embeddings import OllamaEmbeddings
 from langchain.chains import RetrievalQA
 
@@ -49,7 +49,7 @@ def initialize_rag_system(documents_dir: str):
     
     # Step 4: Initialize LLM
     # llm = CodeQwenLLM()
-    llm = CodeGemmaLLM()
+    llm = OpenAILLM()
     
     # Step 5: Establish RAG pipeline
     prompt_template = """
@@ -132,14 +132,14 @@ if __name__ == "__main__":
             start_time = time.time()
             retrieved_docs = vector_store.as_retriever().invoke(query)
 
-            answer = qa_chain.run(query) #TODO 十分奇怪，CodeGemma在使用qa_chain.run时不会有问题，但在使用qa_chain.invoke时就会报错
+            answer = qa_chain.invoke(query)
 
             end_time = time.time()
 
             total_time = end_time - start_time
 
             print("\nGenerated Code:\n")
-            print(answer)
+            print(answer['result'])
             print("\n" + "=" * 50 + "\n")
 
             print(f"total time: {total_time}")
