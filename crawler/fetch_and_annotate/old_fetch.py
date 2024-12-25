@@ -4,7 +4,9 @@ import requests
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
 
+load_dotenv()
 
 def create_session_with_retries():
     session = requests.Session()
@@ -25,6 +27,7 @@ def fetch_issues(repo_owner: str, repo_name: str, label: str='bug', num_results:
     issues = []
     page = 1
     headers = {'Authorization': os.getenv('GITHUB_TOKEN', '')}
+    print(f"token: {os.getenv('GITHUB_TOKEN', '')}")
 
 
         
@@ -199,13 +202,13 @@ if __name__ == "__main__":
         save_to_file(save_directory, 'mindspore_issue', str(index_ms_issues), issue)
         index_ms_issues += 1
     
-    print('Fetching pull requests from MindSpore...')
-    pr_ms = fetch_pull_requests('mindspore-ai', 'mindspore', num_results=1000)
+    # print('Fetching pull requests from MindSpore...')
+    # pr_ms = fetch_pull_requests('mindspore-ai', 'mindspore', num_results=1000)
 
-    print('Saving the results to "ms_pr"...')
-    index_ms_pr = 0
-    for pr in pr_ms:
-        save_to_file(save_directory, 'ms_pr', str(index_ms_pr), pr)
-        index_ms_pr += 1
+    # print('Saving the results to "ms_pr"...')
+    # index_ms_pr = 0
+    # for pr in pr_ms:
+    #     save_to_file(save_directory, 'ms_pr', str(index_ms_pr), pr)
+    #     index_ms_pr += 1
 
     print('Done!')
