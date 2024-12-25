@@ -129,7 +129,7 @@ class OpenAILLM(LLM):
     """
     Custom LLM class to interface with OpenAI models.
     """
-    model_name: str = "gpt-4o"
+    model_name: str = "gpt-4o-mini"
     api_key: Optional[str] = None
     temperature: float = 0.7
     max_tokens: int = 1024
