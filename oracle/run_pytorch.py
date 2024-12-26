@@ -85,6 +85,7 @@ def run_seed_in_subprocess(code_path):
     """
     在子进程中执行 execute_pytorch_code，避免主进程因 OOM 等被 kill。
     """
+
     def target(return_dict, code_path):
         old_stdout, old_stderr = sys.stdout, sys.stderr
         with open(os.devnull, 'w') as devnull:
@@ -173,6 +174,20 @@ def convert_to_serializable(output):
             "imag": output.imag
         }
 
+    elif callable(output):
+        # 对 function / lambda / classmethod 等加一层转化
+        if hasattr(output, '__name__'):
+            return f"<function {output.__name__}>"
+        else:
+            return f"<callable {repr(output)}>"
+
+    elif type(output).__name__ == "OpOverloadPacket":
+        # 具体看这个对象怎么能解析
+        return {
+            "type": "OpOverloadPacket",
+            "desc": str(output)  # 可能就是 "quantized.elu" 之类
+        }
+
     # 其他基础类型
     elif isinstance(output, (int, float, str, bool, type(None))):
         return output
@@ -181,7 +196,8 @@ def convert_to_serializable(output):
     elif isinstance(output, (list, tuple)):
         return [_recursive_serialize(item) for item in output]
     elif isinstance(output, dict):
-        return {key: _recursive_serialize(val) for key, val in output.items()}
+        # 让 _recursive_serialize 整体处理这个 dict
+        return _recursive_serialize(output)
 
     else:
         # 默认兜底
@@ -330,11 +346,18 @@ def main():
     for batch_start in range(0, total_seeds, batch_size):
         batch_end = min(batch_start + batch_size, total_seeds)
         batch = seeds_to_run[batch_start:batch_end]
-
         print(f"Processing batch {batch_num}: seeds {batch_start + 1} to {batch_end}")
 
         batch_results = {}
-        # # 多线程版本（可能会导致大量并发进程），如果数量很大，可改用进程池
+
+        # # 用于生成指定batch的结果
+        # if batch_num != 29:
+        #     batch_num += 1
+        #     print(f"Skip batch {batch_num}")
+        #     continue
+
+
+        # # 多线程版本
         # with ThreadPoolExecutor(max_workers=4) as executor:
         #     future_to_seed = {
         #         executor.submit(run_seed_in_subprocess, code_path): seed_name
@@ -351,11 +374,6 @@ def main():
         for seed_name, code_path in batch:
             print(f"Executing Pytorch code in {code_path}")
             batch_results[seed_name] = run_seed_in_subprocess(code_path)
-            #
-            # if batch_num == 11:
-            #     batch_results[seed_name] = run_seed_in_subprocess(code_path)
-            # else:
-            #     batch_results[seed_name] = {"error": "skip"}
 
         # 保存当前批次结果
         save_batch_results(batch_results, output_dir, iteration_num, batch_num)
@@ -368,8 +386,11 @@ def main():
     print(f"\nAll batches processed. Total seeds: {total_seeds}")
     print(f"Execution time: {time.time() - start_time:.2f} seconds")
 
+    # 用于重复合并测试
+    # merge_results(output_dir, 1)
+
 
 if __name__ == "__main__":
     # 启动命令：python run_pytorch.py /path/to/seeds /path/to/output
-    # 例如：python run_pytorch.py /path/to/seeds /path/to/output
+    # 例如：python run_pytorch.py ../fuzzer/seeds/test_seeds ../oracle/outputs
     main()
