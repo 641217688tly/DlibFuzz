@@ -167,3 +167,9 @@ cython_debug/
 
 # VS Code
 .vscode/
+
+# 配置文件
+config.yml
+
+# 日志文件
+oracle/bug_tracker.ipynb

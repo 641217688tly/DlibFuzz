@@ -96,7 +96,7 @@ def attach_history_errors(session, dir_path, lib):
             code = data.get("Code", "")
             url = data.get("URL", "")
             description = data.get("Description", "")
-            if not isinstance(description, str): # 如果解析得到的description不是字符串类型而是字典类型或数组类型, 则将其转换为字符串
+            if not isinstance(description, str):  # 如果解析得到的description不是字符串类型而是字典类型或数组类型, 则将其转换为字符串
                 description = str(description)
 
             if not code or not apis:  # 如果code为""或apis为空列表，则跳过
@@ -173,5 +173,5 @@ if __name__ == '__main__':
     added_torch_errors_num = attach_history_errors(session, torch_dir, 'Pytorch')
     added_jax_errors_num = attach_history_errors(session, jax_dir, 'JAX')
 
-    print(f"Total number of added Pytorch error triggers: {added_torch_errors_num}") # 93
-    print(f"Total number of added JAX error triggers: {added_jax_errors_num}") # 562
+    print(f"Total number of added Pytorch error triggers: {added_torch_errors_num}")  # 93
+    print(f"Total number of added JAX error triggers: {added_jax_errors_num}")  # 562
