@@ -53,6 +53,16 @@ def save_to_file(directory: str, prefix: str, title: str, item: str):
         file.write(item)
 
 
+def annotate_and_save_issues(prompt_template: str, issues: dict, directory: str, prefix: str):
+    annotated = {}
+    for key, value in issues.items():
+        print(f"Annotating issue {key}...")
+        annotated[key] = send_to_openai(prompt_template, value)
+        save_to_file(directory, prefix, key, annotated[key])
+    return annotated
+
+
+
 if __name__ == "__main__":
     index_fetch_results = str(sys.argv[1])
     print(index_fetch_results)
@@ -77,13 +87,14 @@ if __name__ == "__main__":
             issues_torch[os.path.splitext(file)[0]] = content
 
     print("Annotating PyTorch issues...")
-    annotated_torch = annotate_issues(prompt_template.format("PyTorch", "PyTorch", "PyTorch"), issues_torch)
+    # annotated_torch = annotate_issues(prompt_template.format("PyTorch", "PyTorch", "PyTorch"), issues_torch)
+    annotated_torch = annotate_and_save_issues(prompt_template.format("PyTorch", "PyTorch", "PyTorch"), issues_torch, save_directory, 'pytorch_issue')
 
-    print("Saving annotated PyTorch issues...")
-    index_pytorch_issues = 0
-    for issue in annotated_torch.values():
-        save_to_file(save_directory, 'pytorch_issue', str(index_pytorch_issues), issue)
-        index_pytorch_issues += 1
+    # print("Saving annotated PyTorch issues...")
+    # index_pytorch_issues = 0
+    # for issue in annotated_torch.values():
+    #     save_to_file(save_directory, 'pytorch_issue', str(index_pytorch_issues), issue)
+    #     index_pytorch_issues += 1
 
     # JAX issues
     print("Reading JAX issues...")
@@ -94,13 +105,14 @@ if __name__ == "__main__":
             issues_jax[os.path.splitext(file)[0]] = content
     
     print("Annotating JAX issues...")
-    annotated_jax = annotate_issues(prompt_template.format("Jax", "Jax", "Jax"), issues_jax)
+    # annotated_jax = annotate_issues(prompt_template.format("Jax", "Jax", "Jax"), issues_jax)
+    annotated_jax = annotate_and_save_issues(prompt_template.format("Jax", "Jax", "Jax"), issues_jax, save_directory, 'jax_issue')
 
-    print("Saving annotated JAX issues...")
-    index_jax_issues = 0
-    for issue in annotated_jax.values():
-        save_to_file(save_directory, 'jax_issue', str(index_jax_issues), issue)
-        index_jax_issues += 1
+    # print("Saving annotated JAX issues...")
+    # index_jax_issues = 0
+    # for issue in annotated_jax.values():
+    #     save_to_file(save_directory, 'jax_issue', str(index_jax_issues), issue)
+    #     index_jax_issues += 1
 
     # MindSpore issues
     print("Reading MindSpore issues...")
@@ -111,12 +123,13 @@ if __name__ == "__main__":
             issues_ms[os.path.splitext(file)[0]] = content
     
     print("Annotating MindSpore issues...")
-    annotated_ms = annotate_issues(prompt_template.format("MindSpore", "MindSpore", "MindSpore"), issues_ms)
+    # annotated_ms = annotate_issues(prompt_template.format("MindSpore", "MindSpore", "MindSpore"), issues_ms)
+    annotated_ms = annotate_and_save_issues(prompt_template.format("MindSpore", "MindSpore", "MindSpore"), issues_ms, save_directory, 'ms_issue')
 
-    print("Saving annotated MindSpore issues...")
-    index_ms_issues = 0
-    for issue in annotated_ms.values():
-        save_to_file(save_directory, 'ms_issue', str(index_ms_issues), issue)
-        index_ms_issues += 1
+    # print("Saving annotated MindSpore issues...")
+    # index_ms_issues = 0
+    # for issue in annotated_ms.values():
+    #     save_to_file(save_directory, 'ms_issue', str(index_ms_issues), issue)
+    #     index_ms_issues += 1
     
     print("Done!")
