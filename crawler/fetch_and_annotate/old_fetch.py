@@ -102,6 +102,53 @@ def fetch_pull_requests(repo_owner: str, repo_name: str, state: str='open', num_
         page += 1
 
         return pull_requests
+    
+
+def fetch_issues_gitee(repo_owner: str, repo_name: str, label: str='bug', num_results: int=100) -> list[dict]:
+    issues = []
+    page = 1
+    headers = {'Authorization': f"Bearer {os.getenv('GITEE_TOKEN', '')}"}
+    print(f"token: {os.getenv('GITEE_TOKEN', '')}")
+
+    while len(issues) < num_results:
+        url = f'https://gitee.com/api/v5/repos/{repo_owner}/{repo_name}/issues'
+        if label == 'all':
+            params = {
+                'state': 'all',
+                'page': page,
+                'per_page': 100,
+                'sort': 'created',
+                'direction': 'desc'
+            }
+        else:
+            params = {
+                'state': 'all',
+                'labels': label,
+                'page': page,
+                'per_page': 100,
+                'sort': 'created',
+                'direction': 'desc'
+            }
+
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code != 200:
+            raise Exception(f"Failed to fetch issues: {response.status_code}, Response: {response.text}")
+
+        page_issues = response.json()
+        if not page_issues:
+            break
+
+        for issue in page_issues:
+            title = issue.get('title')
+            issue_url = issue.get('html_url')
+            state = issue.get('state')
+            content = issue.get('body', '')  # Gitee provides content directly in the response
+            issues.append({'title': title, 'url': issue_url, 'state': state, 'content': content})
+            if len(issues) >= num_results:
+                break
+        page += 1
+
+    return issues
 
 
 def fetch_issue_content(issue_url: str) -> str:
@@ -192,7 +239,7 @@ if __name__ == "__main__":
     #     save_to_file(save_directory, 'jax_pr', str(index_jax_pr), pr)
     #     index_jax_pr += 1
 
-
+    # fetch issues and pull requests from MindSpore
     print('Fetching issues from MindSpore...')
     issues_ms = fetch_issues('mindspore-ai', 'mindspore', num_results=1000, label='all')
 
@@ -202,6 +249,16 @@ if __name__ == "__main__":
         save_to_file(save_directory, 'mindspore_issue', str(index_ms_issues), issue)
         index_ms_issues += 1
     
+    # fetch issues from MindSpore's Gitee repository
+    print('Fetching issues from MindSpore...')
+    issues_ms_gitee = fetch_issues_gitee('mindspore', 'mindspore', num_results=1000, label='all')
+
+    index_ms_issues_gitee = 0
+    for issue in issues_ms_gitee:
+        save_to_file(save_directory, 'mindspore_issue_gitee', str(index_ms_issues_gitee), issue)
+        index_ms_issues_gitee += 1
+
+
     # print('Fetching pull requests from MindSpore...')
     # pr_ms = fetch_pull_requests('mindspore-ai', 'mindspore', num_results=1000)
 
@@ -210,5 +267,6 @@ if __name__ == "__main__":
     # for pr in pr_ms:
     #     save_to_file(save_directory, 'ms_pr', str(index_ms_pr), pr)
     #     index_ms_pr += 1
+
 
     print('Done!')
