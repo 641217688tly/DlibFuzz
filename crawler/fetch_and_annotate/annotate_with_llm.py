@@ -85,23 +85,6 @@ if __name__ == "__main__":
         save_to_file(save_directory, 'pytorch_issue', str(index_pytorch_issues), issue)
         index_pytorch_issues += 1
 
-    # TensorFlow issues
-    print("Reading TensorFlow issues...")
-    issues_tf = {}
-    for file in os.listdir(f'results_{index_fetch_results}/tensorflow_issue'):
-        with open(f'results_{index_fetch_results}/tensorflow_issue/{file}', 'r') as f:
-            content = f.read()
-            issues_tf[os.path.splitext(file)[0]] = content
-    
-    print("Annotating TensorFlow issues...")
-    annotated_tf = annotate_issues(prompt_template.format("TensorFlow", "TensorFlow", "TensorFlow"), issues_tf)
-
-    print("Saving annotated TensorFlow issues...")
-    index_tf_issues = 0
-    for issue in annotated_tf.values():
-        save_to_file(save_directory, 'tensorflow_issue', str(index_tf_issues), issue)
-        index_tf_issues += 1
-
     # JAX issues
     print("Reading JAX issues...")
     issues_jax = {}
@@ -118,5 +101,22 @@ if __name__ == "__main__":
     for issue in annotated_jax.values():
         save_to_file(save_directory, 'jax_issue', str(index_jax_issues), issue)
         index_jax_issues += 1
+
+    # MindSpore issues
+    print("Reading MindSpore issues...")
+    issues_ms = {}
+    for file in os.listdir(f'results_{index_fetch_results}/ms_issue'):
+        with open(f'results_{index_fetch_results}/ms_issue/{file}', 'r') as f:
+            content = f.read()
+            issues_ms[os.path.splitext(file)[0]] = content
+    
+    print("Annotating MindSpore issues...")
+    annotated_ms = annotate_issues(prompt_template.format("MindSpore", "MindSpore", "MindSpore"), issues_ms)
+
+    print("Saving annotated MindSpore issues...")
+    index_ms_issues = 0
+    for issue in annotated_ms.values():
+        save_to_file(save_directory, 'ms_issue', str(index_ms_issues), issue)
+        index_ms_issues += 1
     
     print("Done!")
