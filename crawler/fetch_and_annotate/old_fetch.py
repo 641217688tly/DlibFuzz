@@ -23,7 +23,7 @@ def create_session_with_retries():
 session = create_session_with_retries()
 
 
-def fetch_issues(repo_owner: str, repo_name: str, label: str='bug', num_results: int=100) -> list[dict]:
+def fetch_issues(saving_directory: str, dir_prefix: str, repo_owner: str, repo_name: str, label: str='bug', num_results: int=100) -> list[dict]:
     issues = []
     page = 1
     headers = {'Authorization': os.getenv('GITHUB_TOKEN', '')}
@@ -61,6 +61,7 @@ def fetch_issues(repo_owner: str, repo_name: str, label: str='bug', num_results:
             issue_url = issue.get('html_url')
             state = issue.get('state')
             content = fetch_issue_content(issue_url)
+            save_to_file(saving_directory, dir_prefix, len(issues), {'title': title, 'url': issue_url, 'state': state, 'content': content})
             issues.append({'title': title, 'url': issue_url, 'state':state, 'content': content})
             if len(issues) >= num_results:
                 break
@@ -195,21 +196,12 @@ if __name__ == "__main__":
 
     # fetch issues and pull requests from PyTorch
     print('Fetching issues labelled "bug" from PyTorch...')
-    issues_torch = fetch_issues('pytorch', 'pytorch', num_results=1000, label='bug')
+    issues_torch = fetch_issues(save_directory, 'pytorch_issues', 'pytorch', 'pytorch', num_results=5000, label='bug')
 
     print('Fetching issues labelled "high priority" from PyTorch...')
-    issues_torch_high_priority = fetch_issues('pytorch', 'pytorch', num_results=1000, label='high priority')
+    issues_torch_high_priority = fetch_issues(save_directory, 'pytorch_issues_hp', 'pytorch', 'pytorch', num_results=5000, label='high priority')
 
 
-    print('Saving the results to "pytorch_issue"...')
-    index_pytorch_issues = 0
-    for issue in issues_torch:
-        save_to_file(save_directory, 'pytorch_issue', str(index_pytorch_issues), issue)
-        index_pytorch_issues += 1
-    for issue in issues_torch_high_priority:
-        save_to_file(save_directory, 'pytorch_issue', str(index_pytorch_issues), issue)
-        index_pytorch_issues += 1
-    
     # print('Fetching pull requests from PyTorch...')
     # pr_torch = fetch_pull_requests('pytorch', 'pytorch', num_results=1000)
 
@@ -222,14 +214,9 @@ if __name__ == "__main__":
     
     # fetch issues and pull requests from JAX
     print('Fetching issues from JAX...')
-    issues_jax = fetch_issues('google', 'jax', num_results=1000)
+    issues_jax = fetch_issues(save_directory, 'jax_issues', 'google', 'jax', num_results=5000)
 
-    print('Saving the results to "jax_issue"...')
-    index_jax_issues = 0
-    for issue in issues_jax:
-        save_to_file(save_directory, 'jax_issue', str(index_jax_issues), issue)
-        index_jax_issues += 1
-    
+
     # print('Fetching pull requests from JAX...')
     # pr_jax = fetch_pull_requests('google', 'jax', num_results=1000)
 
@@ -241,22 +228,13 @@ if __name__ == "__main__":
 
     # fetch issues and pull requests from MindSpore
     print('Fetching issues from MindSpore...')
-    issues_ms = fetch_issues('mindspore-ai', 'mindspore', num_results=1000, label='all')
+    issues_ms = fetch_issues(save_directory, 'ms_issues', 'mindspore-ai', 'mindspore', num_results=5000, label='all')
 
-    print('Saving the results to "mindspore_issue"...')
-    index_ms_issues = 0
-    for issue in issues_ms:
-        save_to_file(save_directory, 'mindspore_issue', str(index_ms_issues), issue)
-        index_ms_issues += 1
     
     # fetch issues from MindSpore's Gitee repository
     print('Fetching issues from MindSpore...')
-    issues_ms_gitee = fetch_issues_gitee('mindspore', 'mindspore', num_results=1000, label='all')
+    issues_ms_gitee = fetch_issues_gitee(save_directory, 'ms_issues_gitee', 'mindspore', 'mindspore', num_results=5000, label='all')
 
-    index_ms_issues_gitee = 0
-    for issue in issues_ms_gitee:
-        save_to_file(save_directory, 'mindspore_issue_gitee', str(index_ms_issues_gitee), issue)
-        index_ms_issues_gitee += 1
 
 
     # print('Fetching pull requests from MindSpore...')
