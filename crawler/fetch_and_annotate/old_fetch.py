@@ -2,9 +2,9 @@ import datetime
 import os
 import requests
 from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from urllib3 import Retry
 
 load_dotenv()
 

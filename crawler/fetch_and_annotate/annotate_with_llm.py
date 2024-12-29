@@ -1,10 +1,8 @@
 import os
 import sys
 import asyncio
-from aiohttp import ClientSession
 from openai import OpenAI
 from dotenv import load_dotenv
-from tenacity import retry, wait_exponential, stop_after_attempt
 
 
 load_dotenv()
@@ -12,8 +10,6 @@ client = OpenAI(
     api_key = os.getenv("OPENAI_API_KEY", "")
 )
 
-MAX_CONCURRENT_REQUESTS = 5
-DELAY_BETWEEN_REQUESTS = 1.5
 
 
 def send_to_openai(prompt_template: str, content_to_be_annotated: str):
@@ -68,60 +64,6 @@ def annotate_and_save_issues(prompt_template: str, issues: dict, directory: str,
     return annotated
 
 
-async def send_to_openai_async(prompt_template: str, 
-                               content_to_be_annotated: str, 
-                               semaphore: asyncio.Semaphore
-                               ) -> str:
-    @retry(wait=wait_exponential(multiplier=1, min=4, max=60), stop=stop_after_attempt(5))
-    async def _send_request():
-        async with semaphore:
-            await asyncio.sleep(DELAY_BETWEEN_REQUESTS)
-            async with ClientSession() as session:
-                response = await send_to_openai(session, prompt_template, content_to_be_annotated)
-                return response
-    return await _send_request()
-    
-
-async def process_single_issue(key: str, 
-                               value: str, 
-                               prompt_template: str, 
-                               directory: str, 
-                               prefix: str, 
-                               semaphore: asyncio.Semaphore
-                               ) -> str:
-    try:
-        annotated = await send_to_openai_async(prompt_template, value, semaphore)
-        save_to_file(directory, prefix, key, annotated)
-        return key, annotated
-    except Exception as e:
-        print(f"Failed to annotate issue {key}: {str(e)}")
-        return key, None
-    
-
-async def annotate_and_save_issues_async(prompt_template: str, 
-                                         issues: dict, 
-                                         directory: str, 
-                                         prifix: str
-                                         ) -> dict:
-    annotated = {}
-    tasks = []
-    semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
-
-    for key, value in issues.items():
-        print(f"Annotating issue {key}...")
-        task = asyncio.create_task(
-            process_single_issue(key, value, prompt_template, directory, prifix, semaphore)
-        )
-        tasks.append(task)
-    
-    results = await asyncio.gather(*tasks)
-
-    for key, result in results:
-        annotated[key] = result if result else "Failed to annotate issue."
-    
-    return annotated
-
-
 
 if __name__ == "__main__":
     index_fetch_results = str(sys.argv[1])
@@ -147,16 +89,11 @@ if __name__ == "__main__":
             issues_torch[os.path.splitext(file)[0]] = content
 
     print("Annotating PyTorch issues...")
-    # annotated_torch = annotate_and_save_issues(prompt_template.format("PyTorch", "PyTorch", "PyTorch"), 
-    #                                            issues_torch, 
-    #                                            save_directory, 
-    #                                            'pytorch_issue'
-    #                                            )
-    asyncio.run(annotate_and_save_issues_async(prompt_template.format("PyTorch", "PyTorch", "PyTorch"), 
+    annotated_torch = annotate_and_save_issues(prompt_template.format("PyTorch", "PyTorch", "PyTorch"), 
                                                issues_torch, 
                                                save_directory, 
                                                'pytorch_issue'
-                                               ))
+                                               )
 
     # JAX issues
     print("Reading JAX issues...")
@@ -167,16 +104,11 @@ if __name__ == "__main__":
             issues_jax[os.path.splitext(file)[0]] = content
     
     print("Annotating JAX issues...")
-    # annotated_jax = annotate_and_save_issues(prompt_template.format("Jax", "Jax", "Jax"), 
-    #                                          issues_jax, 
-    #                                          save_directory, 
-    #                                          'jax_issue'
-    #                                          )
-    asyncio.run(annotate_and_save_issues_async(prompt_template.format("Jax", "Jax", "Jax"), 
-                                               issues_jax, 
-                                               save_directory, 
-                                               'jax_issue'
-                                               ))
+    annotated_jax = annotate_and_save_issues(prompt_template.format("Jax", "Jax", "Jax"), 
+                                             issues_jax, 
+                                             save_directory, 
+                                             'jax_issue'
+                                             )
 
     # print("Saving annotated JAX issues...")
     # index_jax_issues = 0
@@ -193,16 +125,12 @@ if __name__ == "__main__":
             issues_ms[os.path.splitext(file)[0]] = content
     
     print("Annotating MindSpore issues...")
-    # annotated_ms = annotate_and_save_issues(prompt_template.format("MindSpore", "MindSpore", "MindSpore"), 
-    #                                         issues_ms, 
-    #                                         save_directory, 
-    #                                         'ms_issue'
-    #                                         )
-    asyncio.run(annotate_and_save_issues_async(prompt_template.format("MindSpore", "MindSpore", "MindSpore"), 
-                                               issues_ms, 
-                                               save_directory, 
-                                               'ms_issue'
-                                               ))
+    annotated_ms = annotate_and_save_issues(prompt_template.format("MindSpore", "MindSpore", "MindSpore"), 
+                                            issues_ms, 
+                                            save_directory, 
+                                            'ms_issue'
+                                            )
+
 
     # print("Saving annotated MindSpore issues...")
     # index_ms_issues = 0
