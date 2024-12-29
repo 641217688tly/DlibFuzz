@@ -71,7 +71,7 @@ def fetch_issues(saving_directory: str, dir_prefix: str, repo_owner: str, repo_n
     return issues
 
 
-def fetch_pull_requests(repo_owner: str, repo_name: str, state: str='open', num_results: int=100) -> list[dict]:
+def fetch_pull_requests(saving_directory: str, dir_prefix: str, repo_owner: str, repo_name: str, state: str='open', num_results: int=100) -> list[dict]:
     pull_requests = []
     page = 1
     headers = {'Authorization': os.getenv('GITHUB_TOKEN', '')}
@@ -97,6 +97,7 @@ def fetch_pull_requests(repo_owner: str, repo_name: str, state: str='open', num_
             title = pr.get('title')
             pr_url = pr.get('html_url')
             content = fetch_pr_content(pr_url)
+            save_to_file(saving_directory, dir_prefix, len(pull_requests), {'title': title, 'url': pr_url, 'content': content})
             pull_requests.append({'title': title, 'url': pr_url, 'content': content})
             if len(pull_requests) >= num_results:
                 break
@@ -105,7 +106,7 @@ def fetch_pull_requests(repo_owner: str, repo_name: str, state: str='open', num_
         return pull_requests
     
 
-def fetch_issues_gitee(repo_owner: str, repo_name: str, label: str='bug', num_results: int=100) -> list[dict]:
+def fetch_issues_gitee(saving_directory: str, dir_prefix: str, repo_owner: str, repo_name: str, label: str='bug', num_results: int=100) -> list[dict]:
     issues = []
     page = 1
     headers = {'Authorization': f"Bearer {os.getenv('GITEE_TOKEN', '')}"}
@@ -143,7 +144,8 @@ def fetch_issues_gitee(repo_owner: str, repo_name: str, label: str='bug', num_re
             title = issue.get('title')
             issue_url = issue.get('html_url')
             state = issue.get('state')
-            content = issue.get('body', '')  # Gitee provides content directly in the response
+            content = issue.get('body', '')
+            save_to_file(saving_directory, dir_prefix, len(issues), {'title': title, 'url': issue_url, 'state': state, 'content': content})
             issues.append({'title': title, 'url': issue_url, 'state': state, 'content': content})
             if len(issues) >= num_results:
                 break
@@ -228,12 +230,12 @@ if __name__ == "__main__":
 
     # fetch issues and pull requests from MindSpore
     print('Fetching issues from MindSpore...')
-    issues_ms = fetch_issues(save_directory, 'ms_issues', 'mindspore-ai', 'mindspore', num_results=5000, label='all')
+    issues_ms = fetch_issues(save_directory, 'mindspore_issues', 'mindspore-ai', 'mindspore', num_results=5000, label='all')
 
     
     # fetch issues from MindSpore's Gitee repository
     print('Fetching issues from MindSpore...')
-    issues_ms_gitee = fetch_issues_gitee(save_directory, 'ms_issues_gitee', 'mindspore', 'mindspore', num_results=5000, label='all')
+    issues_ms_gitee = fetch_issues_gitee(save_directory, 'mindspore_issues_gitee', 'mindspore', 'mindspore', num_results=5000, label='all')
 
 
 
