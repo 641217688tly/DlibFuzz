@@ -23,7 +23,13 @@ def create_session_with_retries():
 session = create_session_with_retries()
 
 
-def fetch_issues(saving_directory: str, dir_prefix: str, repo_owner: str, repo_name: str, label: str='bug', num_results: int=100) -> list[dict]:
+def fetch_issues(saving_directory: str, 
+                 dir_prefix: str, 
+                 repo_owner: str, 
+                 repo_name: str, 
+                 label: str='bug', 
+                 num_results: int=100
+                 ) -> list[dict]:
     issues = []
     page = 1
     headers = {'Authorization': os.getenv('GITHUB_TOKEN', '')}
@@ -61,8 +67,16 @@ def fetch_issues(saving_directory: str, dir_prefix: str, repo_owner: str, repo_n
             issue_url = issue.get('html_url')
             state = issue.get('state')
             content = fetch_issue_content(issue_url)
-            save_to_file(saving_directory, dir_prefix, len(issues), {'title': title, 'url': issue_url, 'state': state, 'content': content})
-            issues.append({'title': title, 'url': issue_url, 'state':state, 'content': content})
+            save_to_file(saving_directory, dir_prefix, len(issues), {'title': title, 
+                                                                     'url': issue_url, 
+                                                                     'state': state, 
+                                                                     'content': content
+                                                                     })
+            issues.append({'title': title, 
+                           'url': issue_url, 
+                           'state':state, 
+                           'content': content
+                           })
             if len(issues) >= num_results:
                 break
         page += 1
@@ -71,7 +85,13 @@ def fetch_issues(saving_directory: str, dir_prefix: str, repo_owner: str, repo_n
     return issues
 
 
-def fetch_pull_requests(saving_directory: str, dir_prefix: str, repo_owner: str, repo_name: str, state: str='open', num_results: int=100) -> list[dict]:
+def fetch_pull_requests(saving_directory: str, 
+                        dir_prefix: str, 
+                        repo_owner: str, 
+                        repo_name: str, 
+                        state: str='open', 
+                        num_results: int=100
+                        ) -> list[dict]:
     pull_requests = []
     page = 1
     headers = {'Authorization': os.getenv('GITHUB_TOKEN', '')}
@@ -97,8 +117,14 @@ def fetch_pull_requests(saving_directory: str, dir_prefix: str, repo_owner: str,
             title = pr.get('title')
             pr_url = pr.get('html_url')
             content = fetch_pr_content(pr_url)
-            save_to_file(saving_directory, dir_prefix, len(pull_requests), {'title': title, 'url': pr_url, 'content': content})
-            pull_requests.append({'title': title, 'url': pr_url, 'content': content})
+            save_to_file(saving_directory, dir_prefix, len(pull_requests), {'title': title, 
+                                                                            'url': pr_url, 
+                                                                            'content': content
+                                                                            })
+            pull_requests.append({'title': title, 
+                                  'url': pr_url, 
+                                  'content': content
+                                  })
             if len(pull_requests) >= num_results:
                 break
         page += 1
@@ -106,7 +132,13 @@ def fetch_pull_requests(saving_directory: str, dir_prefix: str, repo_owner: str,
         return pull_requests
     
 
-def fetch_issues_gitee(saving_directory: str, dir_prefix: str, repo_owner: str, repo_name: str, label: str='bug', num_results: int=100) -> list[dict]:
+def fetch_issues_gitee(saving_directory: str, 
+                       dir_prefix: str, 
+                       repo_owner: str, 
+                       repo_name: str, 
+                       label: str='bug', 
+                       num_results: int=100
+                       ) -> list[dict]:
     issues = []
     page = 1
     headers = {'Authorization': f"Bearer {os.getenv('GITEE_TOKEN', '')}"}
@@ -145,8 +177,16 @@ def fetch_issues_gitee(saving_directory: str, dir_prefix: str, repo_owner: str, 
             issue_url = issue.get('html_url')
             state = issue.get('state')
             content = issue.get('body', '')
-            save_to_file(saving_directory, dir_prefix, len(issues), {'title': title, 'url': issue_url, 'state': state, 'content': content})
-            issues.append({'title': title, 'url': issue_url, 'state': state, 'content': content})
+            save_to_file(saving_directory, dir_prefix, len(issues), {'title': title, 
+                                                                     'url': issue_url, 
+                                                                     'state': state, 
+                                                                     'content': content
+                                                                     })
+            issues.append({'title': title, 
+                           'url': issue_url, 
+                           'state': state, 
+                           'content': content
+                           })
             if len(issues) >= num_results:
                 break
         page += 1
@@ -198,10 +238,22 @@ if __name__ == "__main__":
 
     # fetch issues and pull requests from PyTorch
     print('Fetching issues labelled "bug" from PyTorch...')
-    issues_torch = fetch_issues(save_directory, 'pytorch_issues', 'pytorch', 'pytorch', num_results=5000, label='bug')
+    issues_torch = fetch_issues(saving_directory=save_directory, 
+                                dir_prefix='pytorch_issues', 
+                                repo_owner='pytorch', 
+                                repo_name='pytorch', 
+                                num_results=5000, 
+                                label='bug'
+                                )
 
     print('Fetching issues labelled "high priority" from PyTorch...')
-    issues_torch_high_priority = fetch_issues(save_directory, 'pytorch_issues_hp', 'pytorch', 'pytorch', num_results=5000, label='high priority')
+    issues_torch_high_priority = fetch_issues(saving_directory=save_directory, 
+                                              dir_prefix='pytorch_issues_hp', 
+                                              repo_owner='pytorch', 
+                                              repo_name='pytorch', 
+                                              num_results=5000, 
+                                              label='high priority'
+                                              )
 
 
     # print('Fetching pull requests from PyTorch...')
@@ -216,7 +268,12 @@ if __name__ == "__main__":
     
     # fetch issues and pull requests from JAX
     print('Fetching issues from JAX...')
-    issues_jax = fetch_issues(save_directory, 'jax_issues', 'google', 'jax', num_results=5000)
+    issues_jax = fetch_issues(saving_directory=save_directory, 
+                              dir_prefix='jax_issues', 
+                              repo_owner='google', 
+                              repo_name='jax', 
+                              num_results=5000
+                              )
 
 
     # print('Fetching pull requests from JAX...')
@@ -230,12 +287,24 @@ if __name__ == "__main__":
 
     # fetch issues and pull requests from MindSpore
     print('Fetching issues from MindSpore...')
-    issues_ms = fetch_issues(save_directory, 'mindspore_issues', 'mindspore-ai', 'mindspore', num_results=5000, label='all')
+    issues_ms = fetch_issues(saving_directory=save_directory, 
+                             dir_prefix='mindspore_issues', 
+                             repo_owner='mindspore-ai', 
+                             repo_name='mindspore', 
+                             num_results=5000, 
+                             label='all'
+                             )
 
     
     # fetch issues from MindSpore's Gitee repository
     print('Fetching issues from MindSpore...')
-    issues_ms_gitee = fetch_issues_gitee(save_directory, 'mindspore_issues_gitee', 'mindspore', 'mindspore', num_results=5000, label='all')
+    issues_ms_gitee = fetch_issues_gitee(saving_directory=save_directory, 
+                                         dir_prefix='mindspore_issues_gitee', 
+                                         repo_owner='mindspore', 
+                                         repo_name='mindspore', 
+                                         num_results=5000, 
+                                         label='all'
+                                         )
 
 
 
