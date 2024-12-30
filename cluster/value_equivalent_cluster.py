@@ -237,7 +237,7 @@ Example 3:
                         version=api_info['version'],
                     )
                     self.session.add(api)
-                    self.session.commit()
+                    self.session.flush()
                 api_group_objects[api_count].append(
                     api)  # { "1" : [CategoricalCrossentropy], "2" : [constant, softmax_cross_entropy_with_logits] }
         return list(
@@ -285,7 +285,7 @@ Example 3:
                             energy=5,
                         )
                         self.session.add(value_equivalent_cluster)
-                        self.session.commit()
+                        self.session.flush()
                 else:
                     # Case 2.2
                     value_equivalent_cluster = Cluster(
@@ -293,7 +293,7 @@ Example 3:
                         energy=5,
                     )
                     self.session.add(value_equivalent_cluster)
-                    self.session.commit()
+                    self.session.flush()
 
                 # 3. 为每个API组合创建对应的APIgroup对象, 之后将它们与新创建的Cluster对象关联
                 for lib, apis_group_objects in libs_apis_group_objects.items():
@@ -303,7 +303,7 @@ Example 3:
                             cluster=value_equivalent_cluster
                         )
                         self.session.add(group)
-                        self.session.commit()
+                        self.session.flush()
             self.session.commit()
         except Exception as e:
             self.session.rollback()  # 回滚在异常中的任何数据库更改
@@ -321,7 +321,7 @@ Example 3:
 def run_randomly():  # 随机挑选未聚类的API进行聚类
     # 创建数据库连接
     session = get_session()
-    openai_client = get_openai_client()
+    openai_client = get_llm_client()
 
     # 对未聚类的PytorchAPI进行聚类
     uncluttered_torch_apis = session.query(API).filter_by(is_clustered=False).all()
@@ -341,7 +341,7 @@ def run_randomly():  # 随机挑选未聚类的API进行聚类
 def run_linearly():  # 线性地对未聚类的API进行聚类
     # 创建数据库连接
     session = get_session()
-    openai_client = get_openai_client()
+    openai_client = get_llm_client()
 
     # 对未聚类的API进行聚类
     uncluttered_torch_apis = session.query(API).filter_by(is_clustered=False).all()
