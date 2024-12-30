@@ -54,24 +54,39 @@ class RAGClient:
         # Initialize the RAG system
         self.qa_chain, self.vector_store = self._initialize_rag_system()
         
+    
     def _load_files(self, kind: str = "pytorch") -> List[str]:
-        """Load documents from the specified directory"""
+        """Load documents recursively from the specified directory and its subdirectories"""
         documents = []
-        for filename in os.listdir(self.documents_dir):
-            if filename.endswith(('.html', '.htm')):
-                filepath = os.path.join(self.documents_dir, filename)
-                with open(filepath, 'r', encoding='utf-8') as file:
-                    soup = BeautifulSoup(file, 'html.parser')
-                    if kind == 'pytorch':
-                        sections = soup.find_all('div', class_='section')
-                        text = "\n".join(section.get_text(separator='') for section in sections)
-                        documents.append(text)
-            elif filename.endswith('.md'):
-                filepath = os.path.join(self.documents_dir, filename)
-                with open(filepath, 'r', encoding='utf-8') as file:
-                    text = file.read()
-                    documents.append(text)
+        
+        for root, _, files in os.walk(self.documents_dir):
+            for filename in files:
+                if filename.endswith(('.html', '.htm', '.md')):
+                    filepath = os.path.join(root, filename)
+                    try:
+                        if filename.endswith(('.html', '.htm')):
+                            with open(filepath, 'r', encoding='utf-8') as file:
+                                soup = BeautifulSoup(file, 'html.parser')
+                                if kind == 'pytorch':
+                                    sections = soup.find_all('div', class_='section')
+                                    if sections:
+                                        text = "\n".join(section.get_text(separator='') for section in sections)
+                                    else:
+                                        # If no sections found, get all text
+                                        text = soup.get_text(separator='\n')
+                                else:
+                                    text = soup.get_text(separator='\n')
+                                documents.append(text)
+                        else:  # .md files
+                            with open(filepath, 'r', encoding='utf-8') as file:
+                                text = file.read()
+                                documents.append(text)
+                    except Exception as e:
+                        print(f"Error processing file {filepath}: {str(e)}")
+                        continue
+            
         return documents
+    
     
     def _initialize_rag_system(self):
         """Initialize the RAG system components"""
