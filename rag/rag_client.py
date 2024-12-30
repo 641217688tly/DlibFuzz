@@ -67,7 +67,7 @@ class RAGClient:
                         if filename.endswith(('.html', '.htm')):
                             with open(filepath, 'r', encoding='utf-8') as file:
                                 soup = BeautifulSoup(file, 'html.parser')
-                                if kind == 'pytorch':
+                                if kind == 'pytorch' or 'jax':
                                     sections = soup.find_all('div', class_='section')
                                     if sections:
                                         text = "\n".join(section.get_text(separator='') for section in sections)

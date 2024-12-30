@@ -26,7 +26,7 @@ def load_files(directory: str, kind: str):
                     if filename.endswith(('.html', '.htm')):
                         with open(filepath, 'r', encoding='utf-8') as file:
                             soup = BeautifulSoup(file, 'html.parser')
-                            if kind == 'pytorch':
+                            if kind == 'pytorch' or 'jax':
                                 sections = soup.find_all('div', class_='section')
                                 if sections:
                                     text = "\n".join(section.get_text(separator='') for section in sections)
@@ -54,7 +54,7 @@ def load_files(directory: str, kind: str):
     return documents
 
 
-def initialize_rag_system(documents_dir: str, 
+def initialize_rag_system(documents_dir: list, 
                           openai_model: str = "gpt-4o-mini", 
                           openai_api_key: str = None
                           ):
@@ -156,7 +156,10 @@ if __name__ == "__main__":
     print("Welcome to the RAG System!")
     print("Type 'exit' or 'quit' to terminate the program.\n")
 
-    qa_chain, vector_store = initialize_rag_system("demo_docs")
+    # directories = ['docs/pytorch', 'docs/jax', 'docs/mindspore', 'docs/jittor']
+    directories = ['docs/jittor']
+
+    qa_chain, vector_store = initialize_rag_system(directories)
 
     while True:
         query = input("Enter your code-related query: ")
