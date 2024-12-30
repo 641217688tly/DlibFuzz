@@ -5,6 +5,7 @@ import httpx
 from openai import OpenAI
 from sqlalchemy.orm import sessionmaker
 from orm import *
+from rag.rag_client import RAGClient
 
 
 def get_session():
@@ -37,6 +38,12 @@ def get_llm_client(llm='gpt4o-mini', proxy_url="http://127.0.0.1:7890"):
             return openai_client
     elif llm == 'QianWen':
         return None
+    elif llm == 'gpt4o-mini-with-rag':
+        with open('config.yml', 'r', encoding='utf-8') as file:
+            config = yaml.safe_load(file)
+            directories = ['docs/pytorch', 'docs/jax', 'docs/mindspore', 'docs/jittor']
+            rag_client = RAGClient(directories, 'openai', 'gpt4o-mini', config['openai']['api_key'])
+            return rag_client
     else:
         return None
 
