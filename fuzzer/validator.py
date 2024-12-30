@@ -90,14 +90,14 @@ class APITestSeedValidator:
         os.remove(file_path)  # 删除临时文件
         return is_valid, error_details
 
-    def validate(self, max_retry_limit=5):  # 修复代码中的错误
+    def validate(self, max_retry=5):  # 修复代码中的错误
         code_without_markdown = self.eliminate_markdown(self.seed.raw_code)  # 去除code中的markdown语法
         code_complemented_import = self.insert_possible_imports(code_without_markdown)  # 向code中插入可能的导入语句
         is_valid, error_details = self.static_analysis(code_complemented_import)
 
         if is_valid:  # 如果代码没有错误, 则结束修复
             self.seed.valid_code = code_complemented_import
-            self.session.commit()
+            self.session.flush()
             return code_complemented_import  # 返回有效的代码
 
         print(f"\nError Details:\n {error_details}")
@@ -108,8 +108,8 @@ class APITestSeedValidator:
             {"role": "user", "content": prompt}
         ]
         attempt_num = 0
-        while attempt_num < max_retry_limit:
-            print(f"Try to fix the code snippet. Current attempt times: {attempt_num + 1}/{max_retry_limit}")
+        while attempt_num < max_retry:
+            print(f"Try to fix the code snippet. Current attempt times: {attempt_num + 1}/{max_retry}")
             try:
                 response = self.openai_client.chat.completions.create(
                     model="gpt-4o-mini",  # gpt-4o-mini  gpt-3.5-turbo
@@ -128,7 +128,7 @@ class APITestSeedValidator:
                 is_valid, error_details = self.static_analysis(validated_code)
                 if is_valid:
                     self.seed.valid_code = validated_code
-                    self.session.commit()
+                    self.session.flush()
                     return validated_code  # 返回修复后的有效代码
                 else:
                     print(f"\nError Details:\n {error_details}")
@@ -171,20 +171,24 @@ def export_valid_cluster_seed(seed: ClusterTestSeed):  # 导出种子中各个�
     if seed.is_validated:
         cluster_folder_path = 'seeds/validated_seeds/'
         # 首先区分是否利用了历史错误
-        if seed.type == 'WithHistoryError':  # 利用了历史错误
-            cluster_folder_path = cluster_folder_path + 'WithHistoryError/'
-            # 然后区分值等价和状态等价
-            if seed.cluster.type == 'ValueEquivalent':
-                cluster_folder_path = cluster_folder_path + 'ValueEquivalent/'
-            else:  # 状态等价
-                cluster_folder_path = cluster_folder_path + 'StateEquivalent/'
-        else:  # 没有利用历史错误
-            cluster_folder_path = cluster_folder_path + 'WithoutHistoryError/'
-            # 然后区分值等价和状态等价
-            if seed.cluster.type == 'ValueEquivalent':
-                cluster_folder_path = cluster_folder_path + 'ValueEquivalent/'
-            else:  # 状态等价
-                cluster_folder_path = cluster_folder_path + 'StateEquivalent/'
+        #if seed.type == 'WithHistoryError':  # 利用了历史错误
+        #    cluster_folder_path = cluster_folder_path + 'WithHistoryError/'
+        #    # 然后区分值等价和状态等价
+        #    if seed.cluster.type == 'ValueEquivalent':
+        #        cluster_folder_path = cluster_folder_path + 'ValueEquivalent/'
+        #    else:  # 状态等价
+        #        cluster_folder_path = cluster_folder_path + 'StateEquivalent/'
+        #else:  # 没有利用历史错误
+        #    cluster_folder_path = cluster_folder_path + 'WithoutHistoryError/'
+        #    # 然后区分值等价和状态等价
+        #    if seed.cluster.type == 'ValueEquivalent':
+        #        cluster_folder_path = cluster_folder_path + 'ValueEquivalent/'
+        #    else:  # 状态等价
+        #        cluster_folder_path = cluster_folder_path + 'StateEquivalent/'
+        if seed.cluster.type == 'ValueEquivalent':
+            cluster_folder_path = cluster_folder_path + 'ValueEquivalent/'
+        else:  # 状态等价
+            cluster_folder_path = cluster_folder_path + 'StateEquivalent/'
         cluster_folder_path = cluster_folder_path + f'Cluster_{seed.cluster_id}/'
         if not os.path.exists(cluster_folder_path):
             os.makedirs(cluster_folder_path, exist_ok=True)
@@ -205,7 +209,7 @@ def export_valid_cluster_seed(seed: ClusterTestSeed):  # 导出种子中各个�
 
 def validate_and_export_all_seeds():
     session = get_session()
-    openai_client = get_openai_client()
+    openai_client = get_llm_client()
     # 查询所有未经验证的ClusterSeed
     unvalidated_cluster_seeds = session.query(ClusterTestSeed).filter(ClusterTestSeed.is_validated == False).all()
     while unvalidated_cluster_seeds:

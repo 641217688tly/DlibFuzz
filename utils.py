@@ -23,17 +23,22 @@ def get_session():
         return session
 
 
-def get_openai_client():
-    with open('config.yml', 'r', encoding='utf-8') as file:  # 读取config.yml文件
-        config = yaml.safe_load(file)
-        # 设置代理
-        proxy = httpx.Client(proxies={
-            "http://": "http://127.0.0.1:7890",
-            "https://": "http://127.0.0.1:7890"
-        })
-        openai_client = OpenAI(api_key=config['openai']['api_key'], http_client=proxy)
-        # openai_client = OpenAI(base_url="https://api.gptsapi.net/v1", api_key="sk-lBR9ab45cb8a12646896f37fe57070f6e1b7b05e8a3N9xPt")  # WildCard API + 转发, 无需代理
-        return openai_client
+def get_llm_client(llm='gpt4o-mini', proxy_url="http://127.0.0.1:7890"):
+    # 设置代理
+    proxy = httpx.Client(proxies={
+        "http://": proxy_url,
+        "https://": proxy_url
+    })
+    # 根据llm的名称返回对应的客户端
+    if llm == 'gpt4o-mini':
+        with open('config.yml', 'r', encoding='utf-8') as file:  # 读取config.yml文件
+            config = yaml.safe_load(file)
+            openai_client = OpenAI(api_key=config['openai']['api_key'], http_client=proxy)
+            return openai_client
+    elif llm == 'QianWen':
+        return None
+    else:
+        return None
 
 
 def get_libs_info():  # 该函数将返回数据库中待测试的深度学习库的名称和版本, 比如[('Pytorch', '1.12'), ('JAX', '0.4.13'), ('MindSpore', '2.4.0')]
@@ -116,7 +121,7 @@ def inspect_api_info(module_name, api_name):
         print(f"Error getting doc for {module_name}.{api_name}: {e}")
 
     # 获取API所属的库
-    api_lib = module_name.split('.')[0] # 用"."分割module_name, 然后取第一个部分作为库名
+    api_lib = module_name.split('.')[0]  # 用"."分割module_name, 然后取第一个部分作为库名
     lib = map_module2lib(api_lib)
 
     # 获取API的版本
@@ -275,6 +280,21 @@ def get_cluster_api_group(cluster_id: int):
             print(f"(API ID: {api.id}, Full Name: {api.full_name})", end=", ")
 
 
+def count_api_nums_with_history_errors(lib):
+    session = get_session()
+    try:
+        apis = session.query(API).filter_by(lib=lib).all()
+        count = 0
+        for api in apis:
+            if api.history_errors:
+                count += 1
+        print(f"Number of {lib} APIs with history errors: {count} / {len(apis)}")
+    except Exception as e:
+        print(f"An error occurred while counting APIs with history errors: {str(e)}")
+    finally:
+        session.close()
+
+
 if __name__ == '__main__':
     # list = [
     #     'jax.nn.relu',
@@ -291,9 +311,12 @@ if __name__ == '__main__':
     # for api in list:
     #     module_name, api_name = api.rsplit('.', 1)
     #     print(validate_api_existence(module_name, api_name))
-    module_name = 'torch._C'
-    api_name = '_autograd_init'
-    module = importlib.import_module(module_name)  # 动态导入模块
-    func = getattr(module, api_name)  # 从模块中获取函数对象
-    if validate_api_availability(func) is True:  # 验证API是否为被弃用的函数
-        print(f"API {api_name} is deprecated.")
+    # module_name = 'torch._C'
+    # api_name = '_autograd_init'
+    # module = importlib.import_module(module_name)  # 动态导入模块
+    # func = getattr(module, api_name)  # 从模块中获取函数对象
+    # if validate_api_availability(func) is True:  # 验证API是否为被弃用的函数
+    #     print(f"API {api_name} is deprecated.")
+    count_api_nums_with_history_errors('Pytorch')
+    count_api_nums_with_history_errors('JAX')
+    count_api_nums_with_history_errors('MindSpore')

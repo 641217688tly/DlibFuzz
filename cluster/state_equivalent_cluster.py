@@ -290,7 +290,7 @@ TODO
 def run_randomly():  # 随机挑选未聚类的API进行聚类
     # 创建数据库连接
     session = get_session()
-    openai_client = get_openai_client()
+    openai_client = get_llm_client()
 
     # 对未聚类的PytorchAPI进行聚类
     uncluttered_torch_apis = session.query(API).filter_by(is_clustered=False).all()
@@ -310,7 +310,7 @@ def run_randomly():  # 随机挑选未聚类的API进行聚类
 def run_linearly():  # 线性地对未聚类的API进行聚类
     # 创建数据库连接
     session = get_session()
-    openai_client = get_openai_client()
+    openai_client = get_llm_client()
 
     # 对未聚类的API进行聚类
     uncluttered_torch_apis = session.query(API).filter_by(is_clustered=False).all()

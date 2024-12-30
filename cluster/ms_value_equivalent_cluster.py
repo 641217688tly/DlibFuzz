@@ -61,8 +61,8 @@ class MSValueEquivalentCluster:
         return mapper
 
     def value_equivalent_cluster(self, mapper_dic):  # 根据mapper_dic对Mindspore的API进行值等价聚类
-        try:
-            for torch_api, ms_api in mapper_dic.items():
+        for torch_api, ms_api in mapper_dic.items():
+            try:
                 torch_module_name, torch_api_name = torch_api.rsplit('.', 1)
                 ms_module_name, ms_api_name = ms_api.rsplit('.', 1)
                 if not validate_api_existence(torch_module_name, torch_api_name):
@@ -95,7 +95,7 @@ class MSValueEquivalentCluster:
                         is_clustered_by_value=True
                     )
                     self.session.add(ms_api_obj)
-                    self.session.commit()
+                    self.session.flush()
 
                 # 根据torch_api_obj_groups反向查找值等价簇, 之后以ms_api_obj新建APIgroup并加入簇
                 for torch_api_obj_group in torch_api_obj_groups:
@@ -105,12 +105,13 @@ class MSValueEquivalentCluster:
                         apis=[ms_api_obj]
                     )
                     self.session.add(ms_api_group)
-                    self.session.commit()
-        except Exception as e:
-            print(f"Error: {e}")
-            self.session.rollback()
-        finally:
-            self.session.close()
+                    self.session.flush()
+                self.session.commit()
+            except Exception as e:
+                print(f"Error: {e}")
+                self.session.rollback()
+                continue
+        self.session.close()
 
 
 if __name__ == "__main__":

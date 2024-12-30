@@ -36,25 +36,11 @@ logits = [[4.0, 1.0, 0.2]]
 # Labels (one-hot encoded)
 labels = [[1.0, 0.0, 0.0]]
 
-# PyTorch
 logits_pt = torch.tensor(logits, requires_grad=True)
 labels_pt = torch.tensor(labels)
 loss_fn_pt = torch.nn.CrossEntropyLoss()
 output_pt = loss_fn_pt(logits_pt, torch.argmax(labels_pt, dim=1))
 print("PyTorch Loss:", output_pt.item())
-
-# TensorFlow
-logits_tf = tf.constant(logits)
-labels_tf = tf.constant(labels)
-output_tf = tf.nn.softmax_cross_entropy_with_logits(labels=labels_tf, logits=logits_tf)
-print("TensorFlow NN Loss:", output_tf.numpy()[0])
-
-# JAX
-logits_jax = jnp.array(logits)
-labels_jax = jnp.array(labels)
-log_softmax = jax.nn.log_softmax(logits_jax)
-output_jax = -jnp.sum(labels_jax * log_softmax)
-print("JAX Loss:", output_jax)
 ```
 """
 
@@ -180,14 +166,14 @@ def generate_seeds(session, openai_client, cluster, seeds_num=5):
         # 分别获取PytorchAPICombination, TensorFlowAPICombination和JaxAPICombination内所有的API
         torch_apis = multi_lib_combinations[0].apis if multi_lib_combinations[0] else []
         torch_error_triggers_dict = get_apis_error_triggers(torch_apis,
-                                                            PytorchErrorTrigger,
+                                                            APIHistoryError,
                                                             session)
         tf_apis = multi_lib_combinations[1].apis if multi_lib_combinations[1] else []
         tf_error_triggers_dict = get_apis_error_triggers(tf_apis,
-                                                         TensorflowErrorTrigger,
+                                                         APIHistoryError,
                                                          session)
         jax_apis = multi_lib_combinations[2].apis if multi_lib_combinations[2] else []
-        jax_error_triggers_dict = get_apis_error_triggers(jax_apis, JAXErrorTrigger,
+        jax_error_triggers_dict = get_apis_error_triggers(jax_apis, APIHistoryError,
                                                           session)
         target = [round(ERROR_TRIGGER_TARGET * len(torch_apis) / (len(torch_apis) + len(tf_apis) + len(jax_apis))),
                   round(ERROR_TRIGGER_TARGET * len(tf_apis) / (len(torch_apis) + len(tf_apis) + len(jax_apis))),
@@ -272,7 +258,7 @@ Output Format Example:
 
 def run():
     session = get_session()
-    openai_client = get_openai_client()
+    openai_client = get_llm_client()
 
     # 获得所有的cluster未测试的cluster
     untested_clusters = session.query(Cluster).filter(Cluster.is_tested == False).all()
