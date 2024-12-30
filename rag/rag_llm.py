@@ -58,7 +58,9 @@ def initialize_rag_system(documents_dir: str,
                           openai_api_key: str = None
                           ):
     # Step 1: Load documents
+    print('Loading documents...')
     docs = load_files(documents_dir, kind='pytorch')
+    print('Documents loaded.')
     
     # Step 2: Preprocess documents
     text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=100)

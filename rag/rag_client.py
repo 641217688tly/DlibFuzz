@@ -91,7 +91,9 @@ class RAGClient:
     def _initialize_rag_system(self):
         """Initialize the RAG system components"""
         # Load and preprocess documents
+        print('Loading documents...')
         docs = self._load_files()
+        print('Documents loaded.')
         text_splitter = CharacterTextSplitter(
             chunk_size=self.chunk_size, 
             chunk_overlap=self.chunk_overlap
