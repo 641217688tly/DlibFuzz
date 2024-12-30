@@ -43,7 +43,6 @@ def load_files(directory: str, kind: str):
                             else:
                                 text = soup.get_text(separator='\n')
                             documents.append(text)
-                            print('document added')
                     else:  # .md files
                         with open(filepath, 'r', encoding='utf-8') as file:
                             text = file.read()
@@ -154,56 +153,56 @@ def retrieve_documents_only(query: str, vector_store):
 
 
 if __name__ == "__main__":
-    # print("Welcome to the RAG System!")
-    # print("Type 'exit' or 'quit' to terminate the program.\n")
+    print("Welcome to the RAG System!")
+    print("Type 'exit' or 'quit' to terminate the program.\n")
 
-    # qa_chain, vector_store = initialize_rag_system("demo_docs")
+    qa_chain, vector_store = initialize_rag_system("demo_docs")
 
-    # while True:
-    #     query = input("Enter your code-related query: ")
-    #     if query.lower() in ['exit', 'quit']:
-    #         print("Goodbye!")
-    #         break
+    while True:
+        query = input("Enter your code-related query: ")
+        if query.lower() in ['exit', 'quit']:
+            print("Goodbye!")
+            break
 
-    #     try:
-    #         start_time = time.time()
-    #         retrieved_docs = vector_store.as_retriever().invoke(query)
+        try:
+            start_time = time.time()
+            retrieved_docs = vector_store.as_retriever().invoke(query)
 
-    #         answer = qa_chain.invoke(query)
+            answer = qa_chain.invoke(query)
 
-    #         end_time = time.time()
+            end_time = time.time()
 
-    #         total_time = end_time - start_time
+            total_time = end_time - start_time
 
-    #         print("\nGenerated Code:\n")
-    #         print(answer['result'])
-    #         print("\n" + "=" * 50 + "\n")
+            print("\nGenerated Code:\n")
+            print(answer['result'])
+            print("\n" + "=" * 50 + "\n")
 
-    #         print(f"total time: {total_time}")
+            print(f"total time: {total_time}")
 
-    #         current_time = datetime.datetime.now().strftime('%m%d%H%M%S')
-    #         with open(f'generated_code_{current_time}.txt', 'w', encoding='utf-8') as file:
-    #             file.write(f"User Query: {query}\n")
+            current_time = datetime.datetime.now().strftime('%m%d%H%M%S')
+            with open(f'generated_code_{current_time}.txt', 'w', encoding='utf-8') as file:
+                file.write(f"User Query: {query}\n")
 
-    #             file.write("\nRetrieved Documents:\n")
+                file.write("\nRetrieved Documents:\n")
 
-    #             for idx, doc in enumerate(retrieved_docs, 1):
-    #                 file.write(f"\nDocument {idx}:\n")
-    #                 file.write(doc.page_content)
-    #                 file.write("\n" + "-" * 40 + "\n")
+                for idx, doc in enumerate(retrieved_docs, 1):
+                    file.write(f"\nDocument {idx}:\n")
+                    file.write(doc.page_content)
+                    file.write("\n" + "-" * 40 + "\n")
 
-    #             file.write("\nGenerated Code:\n")
-    #             file.write(answer['result'])
-    #             file.write("\n" + "=" * 50 + "\n")
-    #     except Exception as e:
-    #         print(f"An error occurred: {e}")
-    #         print("\n" + "=" * 50 + "\n")
+                file.write("\nGenerated Code:\n")
+                file.write(answer['result'])
+                file.write("\n" + "=" * 50 + "\n")
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            print("\n" + "=" * 50 + "\n")
 
-    directories = ['docs/pytorch', 'docs/jax', 'docs/mindspore', 'docs/jittor']
-    with open('documents.txt', 'w') as f:
-        docs = []
-        for directory in directories:
-            docs += load_files(directory, kind=directory.strip('docs/'))
-        for doc in docs:
-            f.write(doc)
-            f.write('\n\n')
+    # directories = ['docs/pytorch', 'docs/jax', 'docs/mindspore', 'docs/jittor']
+    # with open('documents3.txt', 'w') as f:
+    #     docs = []
+    #     for directory in directories:
+    #         docs += load_files(directory, kind=directory.strip('docs/'))
+    #     for doc in docs:
+    #         f.write(doc)
+    #         f.write('\n\n')
