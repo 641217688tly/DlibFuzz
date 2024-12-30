@@ -33,13 +33,15 @@ def load_files(directory: str, kind: str):
                                 else:
                                     # If no sections found, get all text
                                     text = soup.get_text(separator='\n')
-                            else:
+                            elif kind == 'mindspore' or kind == 'jittor':
                                 sections = soup.find_all('div', class_='section')
                                 if sections:
-                                    text = "\n".join(section.get_text(separator='') for section in sections)
+                                    text = "\n".join(section.get_text(separator=' ') for section in sections)
                                 else:
                                     # If no sections found, get all text
-                                    text = soup.get_text(separator='\n')
+                                    text = soup.get_text(separator='')
+                            else:
+                                text = soup.get_text(separator='\n')
                             documents.append(text)
                             print('document added')
                     else:  # .md files
@@ -59,7 +61,9 @@ def initialize_rag_system(documents_dir: str,
                           ):
     # Step 1: Load documents
     print('Loading documents...')
-    docs = load_files(documents_dir, kind='pytorch')
+    docs = []
+    for directory in documents_dir:
+        docs += load_files(directory, kind=directory.strip('docs/'))
     print('Documents loaded.')
     
     # Step 2: Preprocess documents
@@ -143,6 +147,7 @@ def retrieve_documents(query: str, vector_store):
     retrieved_docs = vector_store.as_retriever().invoke(query)
     return retrieved_docs
 
+
 def retrieve_documents_only(query: str, vector_store):
     retrieved_docs = vector_store.as_retriever().invoke(query)
     return retrieved_docs
@@ -194,8 +199,11 @@ if __name__ == "__main__":
     #         print(f"An error occurred: {e}")
     #         print("\n" + "=" * 50 + "\n")
 
-    documents = load_files("docs", kind='pytorch')
-    with open("docs.txt", 'w', encoding='utf-8') as file:
-        for doc in documents:
-            file.write(doc)
-            file.write("\n" + "=" * 50 + "\n")
+    directories = ['docs/pytorch', 'docs/jax', 'docs/mindspore', 'docs/jittor']
+    with open('documents.txt', 'w') as f:
+        docs = []
+        for directory in directories:
+            docs += load_files(directory, kind=directory.strip('docs/'))
+        for doc in docs:
+            f.write(doc)
+            f.write('\n\n')

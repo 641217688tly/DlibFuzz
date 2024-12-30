@@ -27,7 +27,7 @@ class RAGClient:
     
     def __init__(
         self,
-        documents_dir: str,
+        documents_dir: list,
         llm_model: str,
         openai_model: str = "gpt-4o-mini",
         openai_api_key: Optional[str] = None,
@@ -55,11 +55,11 @@ class RAGClient:
         self.qa_chain, self.vector_store = self._initialize_rag_system()
         
     
-    def _load_files(self, kind: str = "pytorch") -> List[str]:
+    def _load_files(self, load_dir:str, kind: str = "pytorch") -> List[str]:
         """Load documents recursively from the specified directory and its subdirectories"""
         documents = []
         
-        for root, _, files in os.walk(self.documents_dir):
+        for root, _, files in os.walk(load_dir):
             for filename in files:
                 if filename.endswith(('.html', '.htm', '.md')):
                     filepath = os.path.join(root, filename)
@@ -74,6 +74,13 @@ class RAGClient:
                                     else:
                                         # If no sections found, get all text
                                         text = soup.get_text(separator='\n')
+                                elif kind == 'mindspore' or kind == 'jittor':
+                                    sections = soup.find_all('div', class_='section')
+                                    if sections:
+                                        text = "\n".join(section.get_text(separator=' ') for section in sections)
+                                    else:
+                                        # If no sections found, get all text
+                                        text = soup.get_text(separator='')
                                 else:
                                     text = soup.get_text(separator='\n')
                                 documents.append(text)
@@ -92,7 +99,9 @@ class RAGClient:
         """Initialize the RAG system components"""
         # Load and preprocess documents
         print('Loading documents...')
-        docs = self._load_files()
+        docs = []
+        for directory in self.documents_dir:
+            docs += self._load_files(directory, kind=directory.strip('docs/'))
         print('Documents loaded.')
         text_splitter = CharacterTextSplitter(
             chunk_size=self.chunk_size, 
