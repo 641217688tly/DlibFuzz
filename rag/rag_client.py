@@ -1,214 +1,170 @@
-import datetime
-import os
-import time
-from typing import List, Optional, Dict, Any
+import requests
+from typing import List, Dict, Any, Optional
+import json
 from dataclasses import dataclass
+from datetime import datetime
 
-from bs4 import BeautifulSoup
-from langchain.text_splitter import CharacterTextSplitter
-from langchain_community.vectorstores import FAISS
-from langchain.schema import Document
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
-from langchain_core.output_parsers import StrOutputParser
-from langchain.chains import RetrievalQA
 
 @dataclass
-class RAGResponse:
-    """Response object for RAG queries"""
-    result: str
-    retrieved_docs: List[Document]
-    total_time: float
-    timestamp: str
+class Choice:
+    """Represents a single choice in the chat completion response"""
+    index: int
+    message: Dict[str, str]
+    finish_reason: str
 
-class RAGClient:
-    """A client for RAG-based code generation using OpenAI models"""
+
+class ChatCompletion:
+    """Helper class to match OpenAI's ChatCompletion response structure"""
+    def __init__(self, response_data: str):
+        self.id = f"rag-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        self.object = "chat.completion"
+        self.created = int(datetime.now().timestamp())
+        self.model = "rag-model"
+        self.usage = {
+            "prompt_tokens": None,
+            "completion_tokens": None,
+            "total_tokens": None
+        }
+        
+        # Create a Choice object with the proper structure
+        choice = Choice(
+            index=0,
+            message={"role": "assistant", "content": response_data},
+            finish_reason="stop"
+        )
+        
+        # Store choices as a list of Choice objects
+        self.choices = [choice]
+
+    def to_dict(self) -> Dict:
+        """Convert the response to a dictionary format"""
+        return {
+            "id": self.id,
+            "object": self.object,
+            "created": self.created,
+            "model": self.model,
+            "usage": self.usage,
+            "choices": [{
+                "index": choice.index,
+                "message": choice.message,
+                "finish_reason": choice.finish_reason
+            } for choice in self.choices]
+        }
+
+class RagClient:
+    """
+    A client that mimics the OpenAI client interface but uses the RAG API backend.
+    This allows for drop-in replacement in code that uses OpenAI's client.
+    """
     
-    def __init__(
-        self,
-        documents_dir: list,
-        llm_model: str,
-        openai_model: str = "gpt-4o-mini",
-        openai_api_key: Optional[str] = None,
-        embeddings_model: str = "llama3.1",
-        chunk_size: int = 1000,
-        chunk_overlap: int = 100
-    ):
+    def __init__(self, base_url: str = "http://localhost:8000", api_key: Optional[str] = None):
         """
-        Initialize the RAG OpenAI Client
+        Initialize the RAG client.
         
         Args:
-            documents_dir: Directory containing the documents for RAG
-            llm_model: LLM model to use ("openai" or "codellama")
-            embeddings_model: Embeddings model to use
-            chunk_size: Size of text chunks for splitting
-            chunk_overlap: Overlap between chunks
+            base_url: The base URL of the RAG API
+            api_key: Optional API key (included for OpenAI compatibility)
         """
-        self.documents_dir = documents_dir
-        self.llm_model = llm_model
-        self.embeddings_model = embeddings_model
-        self.chunk_size = chunk_size
-        self.chunk_overlap = chunk_overlap
+        self.base_url = base_url.rstrip('/')
+        self.api_key = api_key
+        self.chat = self.Chat(self)  # Mirror OpenAI's structure
         
-        # Initialize the RAG system
-        self.qa_chain, self.vector_store = self._initialize_rag_system()
+    class Chat:
+        def __init__(self, client):
+            self.client = client
+            self.completions = self
         
-    
-    def _load_files(self, load_dir:str, kind: str = "pytorch") -> List[str]:
-        """Load documents recursively from the specified directory and its subdirectories"""
-        documents = []
-        
-        for root, _, files in os.walk(load_dir):
-            for filename in files:
-                if filename.endswith(('.html', '.htm', '.md')):
-                    filepath = os.path.join(root, filename)
-                    try:
-                        if filename.endswith(('.html', '.htm')):
-                            with open(filepath, 'r', encoding='utf-8') as file:
-                                soup = BeautifulSoup(file, 'html.parser')
-                                if kind == 'pytorch' or 'jax':
-                                    sections = soup.find_all('div', class_='section')
-                                    if sections:
-                                        text = "\n".join(section.get_text(separator='') for section in sections)
-                                    else:
-                                        # If no sections found, get all text
-                                        text = soup.get_text(separator='\n')
-                                elif kind == 'mindspore' or kind == 'jittor':
-                                    sections = soup.find_all('div', class_='section')
-                                    if sections:
-                                        text = "\n".join(section.get_text(separator=' ') for section in sections)
-                                    else:
-                                        # If no sections found, get all text
-                                        text = soup.get_text(separator='')
-                                else:
-                                    text = soup.get_text(separator='\n')
-                                documents.append(text)
-                        else:  # .md files
-                            with open(filepath, 'r', encoding='utf-8') as file:
-                                text = file.read()
-                                documents.append(text)
-                    except Exception as e:
-                        print(f"Error processing file {filepath}: {str(e)}")
-                        continue
+        def create(self, 
+                  messages: List[Dict[str, str]], 
+                  model: Optional[str] = None,
+                  temperature: Optional[float] = None,
+                  max_tokens: Optional[int] = None,
+                  **kwargs) -> ChatCompletion:
+            """
+            Create a chat completion using the RAG system.
             
-        return documents
-    
-    
-    def _initialize_rag_system(self):
-        """Initialize the RAG system components"""
-        # Load and preprocess documents
-        print('Loading documents...')
-        docs = []
-        for directory in self.documents_dir:
-            docs += self._load_files(directory, kind=directory.strip('docs/'))
-        print('Documents loaded.')
-        text_splitter = CharacterTextSplitter(
-            chunk_size=self.chunk_size, 
-            chunk_overlap=self.chunk_overlap
-        )
-        split_docs = text_splitter.split_documents(
-            [Document(page_content=doc) for doc in docs]
-        )
-        
-        # Initialize embeddings
-        from embeddings import OllamaEmbeddings
-        embeddings = OllamaEmbeddings(model=self.embeddings_model)
-        
-        # Create vector store
-        vector_store = FAISS.from_documents(split_docs, embeddings)
-        
-        # Initialize LLM
-        if self.llm_model == "openai":
-            from llm import OpenAILLM
-            llm = OpenAILLM(self.openai_model, self.openai_api_key)
-        else:
-            from llm import CodeQwenLLM
-            llm = CodeQwenLLM()
+            Args:
+                messages: List of message dictionaries with 'role' and 'content'
+                model: Model identifier (ignored, included for compatibility)
+                temperature: Temperature for generation (ignored, included for compatibility)
+                max_tokens: Maximum tokens to generate (ignored, included for compatibility)
+                **kwargs: Additional arguments (ignored, included for compatibility)
             
-        # Setup RAG prompt
-        prompt_template = """
-        Instructions:
-        You are an AI assistant specialized in processing deep learning code based on user requirements.
-        Answer the User Query using the following retrieved documents. If the documents are not relevant, rely on your training data.
-
-        Retrieved Documents:
-        {context}
-        
-        User Query:
-        {question}
-        """
-        
-        prompt = ChatPromptTemplate.from_template(prompt_template)
-        
-        # Create QA chain
-        qa_chain = RetrievalQA.from_chain_type(
-            llm=llm,
-            chain_type="stuff",
-            retriever=vector_store.as_retriever(),
-            chain_type_kwargs={"prompt": prompt}
-        )
-        
-        return qa_chain, vector_store
+            Returns:
+                ChatCompletion: A response object matching OpenAI's structure
+            """
+            # Extract the last user message as the query
+            user_messages = [msg for msg in messages if msg["role"] == "user"]
+            if not user_messages:
+                raise ValueError("No user messages found in the conversation")
+            
+            query = user_messages[-1]["content"]
+            
+            # Prepare the request
+            headers = {"Content-Type": "application/json"}
+            data = {"query": query}
+            
+            # Make the request to the RAG API
+            try:
+                response = requests.post(
+                    f"{self.client.base_url}/generate",
+                    headers=headers,
+                    json=data
+                )
+                response.raise_for_status()
+                
+                # Parse the response
+                result = response.json()
+                return ChatCompletion(result["answer"])
+                
+            except requests.exceptions.RequestException as e:
+                raise Exception(f"Error communicating with RAG API: {str(e)}")
     
-    def generate(self, query: str, save_output: bool = True) -> RAGResponse:
+    def get_documents(self, query: str) -> List[str]:
         """
-        Generate code based on the input query
+        Retrieve relevant documents for a query (additional method not in OpenAI's interface).
         
         Args:
-            query: User's code-related query
-            save_output: Whether to save the output to a file
+            query: The query to retrieve documents for
             
         Returns:
-            RAGResponse object containing the result and metadata
+            List[str]: List of retrieved documents
         """
-        try:
-            start_time = time.time()
-            
-            # Retrieve relevant documents
-            retrieved_docs = self.vector_store.as_retriever().invoke(query)
-            
-            # Generate answer
-            answer = self.qa_chain.invoke(query)
-            
-            # Calculate timing and create timestamp
-            total_time = time.time() - start_time
-            timestamp = datetime.datetime.now().strftime('%m%d%H%M%S')
-            
-            # Create response object
-            response = RAGResponse(
-                result=answer['result'],
-                retrieved_docs=retrieved_docs,
-                total_time=total_time,
-                timestamp=timestamp
-            )
-            
-            # Save output if requested
-            if save_output:
-                self._save_output(query, response)
-            
-            return response
-            
-        except Exception as e:
-            raise Exception(f"Generation failed: {str(e)}")
-    
-    def _save_output(self, query: str, response: RAGResponse):
-        """Save the generation output to a file"""
-        filename = f'generated_code_{response.timestamp}.txt'
+        headers = {"Content-Type": "application/json"}
+        data = {"query": query}
         
-        with open(filename, 'w', encoding='utf-8') as file:
-            file.write(f"User Query: {query}\n")
+        try:
+            response = requests.post(
+                f"{self.base_url}/retrieve_documents",
+                headers=headers,
+                json=data
+            )
+            response.raise_for_status()
             
-            file.write("\nRetrieved Documents:\n")
-            for idx, doc in enumerate(response.retrieved_docs, 1):
-                file.write(f"\nDocument {idx}:\n")
-                file.write(doc.page_content)
-                file.write("\n" + "-" * 40 + "\n")
+            result = response.json()
+            return result["documents"]
             
-            file.write("\nGenerated Code:\n")
-            file.write(response.result)
-            file.write("\n" + "=" * 50 + "\n")
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Error retrieving documents: {str(e)}")
+
+
+if __name__ == "__main__":
+    # 初始化 RagClient
+    client = RagClient(base_url="http://localhost:8000")
     
-    def retrieve_documents(self, query: str) -> List[Document]:
-        """Retrieve relevant documents for a query without generating code"""
-        return self.vector_store.as_retriever().invoke(query)
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "How do I use PyTorch's DataLoader?"}
+    ]
+    
+    
+    response = client.chat.completions.create(
+        messages=messages,
+        model="gpt-4" # 这个参数没有用，仅仅是为了兼容性
+    )
+    
+    print(response.choices[0].message["content"])
+    
+    # 仅仅检索文档而不生成内容
+    documents = client.get_documents("How do I use PyTorch's DataLoader?")
+    print("\nRelevant documents:", documents)

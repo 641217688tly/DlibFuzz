@@ -1,6 +1,6 @@
 '''
 This is the API for the RAG system. It uses FastAPI to create a REST API.
-Start the server by running `uvicorn rag.gen_api:app --reload` in the terminal.
+Start the server by running `uvicorn gen_api:app --reload` in the terminal.
 '''
 
 from fastapi import FastAPI, HTTPException
@@ -11,7 +11,12 @@ from rag_llm import initialize_rag_system, rag_generate, retrieve_documents, bar
 app = FastAPI()
 
 # Initialize RAG system at startup
-qa_chain, vector_store = initialize_rag_system('demo_docs')
+directories = ['docs/pytorch', 'docs/jax', 'docs/mindspore', 'docs/jittor']
+qa_chain, vector_store = initialize_rag_system(documents_dir=directories, 
+                                               is_local=False, 
+                                               openai_model='gpt4o-mini', 
+                                               openai_api_key=''
+                                               )
 
 
 class QueryRequest(BaseModel):
@@ -38,6 +43,7 @@ def generate_code(request: QueryRequest):
         return QueryResponse(answer=answer)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    return QueryResponse(answer='Hello, World!')
 
 
 @app.post("/generate_without_rag", response_model=QueryResponse)
