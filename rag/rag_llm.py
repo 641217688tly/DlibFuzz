@@ -10,7 +10,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from llm import CodeQwenLLM, OpenAILLM
-# from transformers_llm import TransformersLLM
+from transformers_llm import TransformersLLM
 from embeddings import OllamaEmbeddings
 from langchain.chains import RetrievalQA
 
@@ -55,6 +55,7 @@ def load_files(directory: str, kind: str):
 
 
 def initialize_rag_system(documents_dir: list, 
+                          is_local: bool,
                           openai_model: str = "gpt-4o-mini", 
                           openai_api_key: str = None
                           ):
@@ -62,29 +63,36 @@ def initialize_rag_system(documents_dir: list,
     print('Loading documents...')
     docs = []
     for directory in documents_dir:
+        # docs += load_files(directory, kind=directory.strip('docs/'))
         docs += load_files(directory, kind=directory.strip('docs/'))
     print('Documents loaded.')
     
     # Step 2: Preprocess documents
     text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
     split_docs = text_splitter.split_documents([Document(page_content=doc) for doc in docs])
+    print('Documents split.')
     
     # Step 3: Initialize embeddings
     embeddings = OllamaEmbeddings(model="llama3.1")
+    print('Embeddings initialized.')
     
     # Create a FAISS vector store from the documents and their embeddings
     vector_store = FAISS.from_documents(split_docs, embeddings)
+    print('Vector store created.')
     
     # Step 4: Initialize LLM
-    llm = CodeQwenLLM()
-    # llm = OpenAILLM(openai_model, openai_api_key)
-    # llm = TransformersLLM(
-    #     model_id="Qwen/Qwen2.5-Coder-14B-Instruct",
-    #     device="auto",          # 自动选择设备
-    #     load_in_4bit=False,      # 4-bit量化
-    #     # load_in_8bit=True,      # 8-bit量化
-    #     torch_dtype="bfloat16"  # 使用 bfloat16 精度
-    # )
+    # llm = CodeQwenLLM()
+    if is_local:
+        llm = TransformersLLM(
+            model_id="Qwen/Qwen2.5-Coder-14B-Instruct",
+            device="auto",          # 自动选择设备
+            load_in_4bit=False,      # 4-bit量化
+            # load_in_8bit=True,      # 8-bit量化
+            torch_dtype="bfloat16"  # 使用 bfloat16 精度
+        )
+    else:
+        llm = OpenAILLM(openai_model, openai_api_key)
+    print('LLM initialized.')
     
     # Step 5: Establish RAG pipeline
     prompt_template = """
@@ -157,7 +165,7 @@ if __name__ == "__main__":
     print("Type 'exit' or 'quit' to terminate the program.\n")
 
     # directories = ['docs/pytorch', 'docs/jax', 'docs/mindspore', 'docs/jittor']
-    directories = ['docs/jittor']
+    directories = ['demo_docs']
 
     qa_chain, vector_store = initialize_rag_system(directories)
 
