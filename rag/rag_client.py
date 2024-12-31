@@ -150,6 +150,7 @@ class RagClient:
 
 if __name__ == "__main__":
     # 初始化 RagClient
+    # 模型和文档路径需要在 gen_api.py 中设置
     client = RagClient(base_url="http://localhost:8000")
     
     messages = [
