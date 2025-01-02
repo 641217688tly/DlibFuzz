@@ -59,19 +59,27 @@ def get_libs_info():  # 该函数将返回数据库中待测试的深度学习�
         db_session.close()
 
 
-def validate_api_existence(module_name, api_name):  # 验证API是否存在的函数
+def validate_api_existence(module_name: str, api_name: str):  # 验证API是否存在的函数
     # module_name, api_name = full_api_name.rsplit('.', 1)
     try:
-        # 先检查模块是否存在
+        # 先检查来源库是否为Pytorch, JAX, MindSpore或Jittor中的任意一个
+        api_lib = module_name.split('.')[0]  # 用"."分割module_name, 然后取第一个部分作为库名
+        lib = map_module2lib(api_lib)
+        if lib == 'Unknown':
+            return False
+        # 然后检查模块是否存在
         module = importlib.import_module(module_name)
         # 再检查API是否存在
         func = getattr(module, api_name, None)
+        if func is None:
+            return False
         if inspect.ismodule(func):
             return False
-        if inspect.isclass(func):
-            return False
+        # if inspect.isclass(func): # 诸如torch.nn.CrossEntropyLoss等用类封装的API将无法被测试, 因此选择注释掉
+        #     return True
         return True
-    except (ModuleNotFoundError, AttributeError, ImportError, ValueError, Exception):
+    except (ModuleNotFoundError, AttributeError, ImportError, ValueError, Exception) as e:
+        # print(f"validate_api_existence() encounters an error: {e}")
         return False
 
 
@@ -303,26 +311,23 @@ def count_api_nums_with_history_errors(lib):
 
 if __name__ == '__main__':
     # list = [
-    #     'jax.nn.relu',
-    #     'jax.nn.leaky_relu',
-    #     'jax.nn.sigmoid',
-    #     'jax.nn.tanh',
-    #     'jax.nn.gelu',
-    #     'jax.nn.softplus',
-    #     'jax.nn.elu',
-    #     'jax.nn.selu',
-    #     'jax.nn.softsign',
-    #     'jax.nn.swish',
+    #    'torch.nn.functional.relu',
+    #    'torch.nn.ReLU',
+    #    'mindspore.ops.relu',
+    #    'mindspore.nn.ReLU',
+    #    'jax.nn.relu',
+    #    'jittor.init.calculate_gain',
+    # ]
+    # list = [
+    #     'torch.nn.functional.cross_entropy',
+    #     'torch.nn.CrossEntropyLoss',
+    #     'mindspore.nn.CrossEntropyLoss',
+    #     "mindspore.ops.cross_entropy",
     # ]
     # for api in list:
     #     module_name, api_name = api.rsplit('.', 1)
     #     print(validate_api_existence(module_name, api_name))
-    # module_name = 'torch._C'
-    # api_name = '_autograd_init'
-    # module = importlib.import_module(module_name)  # 动态导入模块
-    # func = getattr(module, api_name)  # 从模块中获取函数对象
-    # if validate_api_availability(func) is True:  # 验证API是否为被弃用的函数
-    #     print(f"API {api_name} is deprecated.")
-    count_api_nums_with_history_errors('Pytorch')
-    count_api_nums_with_history_errors('JAX')
-    count_api_nums_with_history_errors('MindSpore')
+
+    count_api_nums_with_history_errors('Pytorch') # 85/890(旧); 461/1201(旧); 597/1335(新)
+    count_api_nums_with_history_errors('JAX') # 269/961(旧); 306/974(旧); 463/1015(新)
+    count_api_nums_with_history_errors('MindSpore') # 248/2378(新)
