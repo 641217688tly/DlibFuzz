@@ -101,13 +101,16 @@ def validate_api_availability(function):  # 验证API是否为被弃用的函数
 
 def map_module2lib(module_name):
     lib_map = {
+        'Pytorch': 'Pytorch',
         'torch': 'Pytorch',
+        'JAX': 'JAX',
         'jax': 'JAX',
         'jaxlib': 'JAX',
-        'tensorflow': 'Tensorflow',
-        'tf': 'Tensorflow',
+        'MindSpore': 'MindSpore',
         'ms': 'MindSpore',
-        'mindspore': 'MindSpore'
+        'mindspore': 'MindSpore',
+        'Jittor': 'Jittor',
+        'jittor': 'Jittor',
     }
     return lib_map.get(module_name, 'Unknown')
 
@@ -328,6 +331,12 @@ if __name__ == '__main__':
     #     module_name, api_name = api.rsplit('.', 1)
     #     print(validate_api_existence(module_name, api_name))
 
-    count_api_nums_with_history_errors('Pytorch') # 85/890(旧); 461/1201(旧); 597/1335(新)
-    count_api_nums_with_history_errors('JAX') # 269/961(旧); 306/974(旧); 463/1015(新)
-    count_api_nums_with_history_errors('MindSpore') # 248/2378(新)
+    # count_api_nums_with_history_errors('Pytorch') # 85/890(旧); 461/1201(旧); 597/1335(新)
+    # count_api_nums_with_history_errors('JAX') # 269/961(旧); 306/974(旧); 463/1015(新)
+    # count_api_nums_with_history_errors('MindSpore') # 248/2378(新)
+
+    session = get_session()
+    # 从数据库中获取API中version为""的api
+    apis = session.query(API).filter_by(version="").all()
+    for api in apis:
+        print(api.full_name)
