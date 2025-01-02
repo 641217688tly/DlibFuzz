@@ -296,7 +296,6 @@ Target Libraries:
             接收并处理clusterer的响应结果, 创建cluster聚类和关联的API组合
         """
         try:
-            self.api.is_clustered = True
             # 1. 解析返回的JSON数据并检查Pytorch和JAX中的所有API名,如果API表中没有对应的条目,则先在对应表中创建对应的数据
             libs_apis_group_objects = {}  # {"Pytorch" : [[API1],[API2, API3]], "JAX" : [[API1],[API2, API3]], ...}
             for lib, dict_api_groups in json_data.items():
@@ -353,6 +352,7 @@ Target Libraries:
                         )
                         self.session.add(group)
                         self.session.flush()
+            self.api.is_clustered_by_value = True
             self.session.commit()
         except Exception as e:
             self.session.rollback()  # 回滚在异常中的任何数据库更改
@@ -370,18 +370,18 @@ Target Libraries:
 def run_randomly():  # 随机挑选未聚类的API进行聚类
     # 创建数据库连接
     session = get_session()
-    openai_client = get_llm_client()
+    llm_client = get_llm_client('gpt4o-mini-with-rag')
 
     # 对未聚类的PytorchAPI进行聚类
-    uncluttered_torch_apis = session.query(API).filter_by(is_clustered=False).all()
+    uncluttered_torch_apis = session.query(API).filter_by(is_clustered_by_value=False).all()
     while uncluttered_torch_apis:
         print("----------------------------------------------------------------------------------")
         # 随机选择一个未聚类的API
         uncluttered_torch_api = random.choice(uncluttered_torch_apis)
-        cluster = ValueEquivalentCluster(uncluttered_torch_api, session, openai_client)
+        cluster = ValueEquivalentCluster(uncluttered_torch_api, session, llm_client)
         cluster.cluster_api()
 
-        uncluttered_torch_apis = session.query(API).filter_by(is_clustered=False).all()
+        uncluttered_torch_apis = session.query(API).filter_by(is_clustered_by_value=False).all()
         total_apis_num = session.query(API).count()
         unclustered_torch_apis_num = len(uncluttered_torch_apis)
         print(f"Unclustered / Total: {unclustered_torch_apis_num} / {total_apis_num}")
@@ -390,14 +390,14 @@ def run_randomly():  # 随机挑选未聚类的API进行聚类
 def run_linearly():  # 线性地对未聚类的API进行聚类
     # 创建数据库连接
     session = get_session()
-    openai_client = get_llm_client()
+    llm_client = get_llm_client('gpt4o-mini-with-rag')
 
     # 对未聚类的API进行聚类
-    uncluttered_torch_apis = session.query(API).filter_by(is_clustered=False).all()
+    uncluttered_torch_apis = session.query(API).filter_by(is_clustered_by_value=False).all()
     for i, uncluttered_torch_api in enumerate(uncluttered_torch_apis):
         print("----------------------------------------------------------------------------------")
         # 选择一个未聚类的TensorflowAPI
-        cluster = ValueEquivalentCluster(uncluttered_torch_api, session, openai_client)
+        cluster = ValueEquivalentCluster(uncluttered_torch_api, session, llm_client)
         cluster.cluster_api()
         print(f"Unclustered / Total: {len(uncluttered_torch_apis) - i - 1} / {len(uncluttered_torch_apis)}" + "\n")
 

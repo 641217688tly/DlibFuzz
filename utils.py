@@ -331,9 +331,9 @@ if __name__ == '__main__':
     #     module_name, api_name = api.rsplit('.', 1)
     #     print(validate_api_existence(module_name, api_name))
 
-    # count_api_nums_with_history_errors('Pytorch') # 85/890(旧); 461/1201(旧); 597/1335(新)
-    # count_api_nums_with_history_errors('JAX') # 269/961(旧); 306/974(旧); 463/1015(新)
-    # count_api_nums_with_history_errors('MindSpore') # 248/2378(新)
+    count_api_nums_with_history_errors('Pytorch') # 85/890(旧); 461/1201(旧); 597/1335(新)
+    count_api_nums_with_history_errors('JAX') # 269/961(旧); 306/974(旧); 463/1015(新)
+    count_api_nums_with_history_errors('MindSpore') # 248/2378(新)
 
     session = get_session()
     # 从数据库中获取API中version为""的api
