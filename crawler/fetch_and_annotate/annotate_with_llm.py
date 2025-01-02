@@ -1,6 +1,7 @@
 import os
 import re
 
+import httpx
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -9,7 +10,11 @@ load_dotenv()
 
 # 初始化 OpenAI 客户端，api_key 从环境变量中读取
 client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY", "")
+    api_key=os.getenv("OPENAI_API_KEY", ""),
+    http_client= httpx.Client(proxies={
+        "http://": "http://127.0.0.1:7890",
+        "https://": "http://127.0.0.1:7890"
+    })
 )
 
 
@@ -144,7 +149,7 @@ if __name__ == "__main__":
         prompt_template = f.read()
 
     # 使用抽取出的函数来分别标注 PyTorch、JAX、MindSpore 的 issues
-    read_and_annotate_issues("pytorch", prompt_template, uid)
-    read_and_annotate_issues("jax", prompt_template, uid)
+    #read_and_annotate_issues("pytorch", prompt_template, uid)
+    #read_and_annotate_issues("jax", prompt_template, uid)
     read_and_annotate_issues("mindspore", prompt_template, uid)
     print("Done!")

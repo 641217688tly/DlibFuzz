@@ -71,17 +71,22 @@ class StateEquivalentCluster:
         try:
             module_name, api_name = full_api_name.rsplit('.', 1)
             module_name = self.handle_module_alias(module_name)
+            # 先检查来源库是否为Pytorch, JAX, MindSpore或Jittor中的任意一个
+            lib_name = module_name.split('.')[0]  # 用"."分割module_name, 然后取第一个部分作为库名
+            lib = map_module2lib(lib_name)
+            if lib == 'Unknown':
+                raise Exception(f"{full_api_name} does not belong to Pytorch, JAX, MindSpore or Jittor.")
             module = importlib.import_module(module_name)
             func = getattr(module, api_name, None)
-            # if func is None or not callable(func):
-            #    self.errors.append(f"{full_api_name} is not callable or does not exist.")
-            #    return False
+            if func is None:
+               self.errors.append(f"{full_api_name} does not exist.")
+               return False
             if inspect.ismodule(func):
                 self.errors.append(f"{full_api_name} is a module, not a function.")
                 return False
-            if inspect.isclass(func):
-                self.errors.append(f"{full_api_name} is a class, not a function.")
-                return False
+            # if inspect.isclass(func): # # 诸如torch.nn.CrossEntropyLoss等用类封装的API将无法被测试, 因此选择注释掉
+            #     self.errors.append(f"{full_api_name} is a class, not a function.")
+            #     return False
             # if validate_api_availability(func):
             #    self.errors.append(f"{full_api_name} is deprecated.")
             #    return False

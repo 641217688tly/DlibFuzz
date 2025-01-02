@@ -230,14 +230,14 @@ Issue Code:
 """
         # 构建最终提示词
         prompt = f"""
-触发问题的代码调用样例:
+Example code snippets that trigger the issue:
 {issue_examples_prompt}
 
-待测试的API信息:
+Information about the API to be called:
 {api_info_prompt}
 
-任务要求:
-参考上述样本中的API参数的输入值和API的组合调用, 生成调用{base_api.full_name}的代码片段
+Task Requirements:
+Please refer to the input values for API parameters and the API call combinations in the examples above, and generate a code snippet that calls {base_api.full_name}.
 """
 
         base_seed_code = self.query_llm(prompt)
@@ -287,24 +287,25 @@ API Description: {twin_api.description}
         if len(twin_api_group.apis) == 1:
             twin_api = twin_api_group.apis[0]
             background_knowledge_prompt = f"""
-来自{twin_api.lib}(v{twin_api.version})库的API {twin_api.signature} 与来自{base_api.lib}(v{base_api.version})库的API {base_api.signature} 拥有相同的函数功能.
+The API ({twin_api.signature}) from library {twin_api.lib}(v{twin_api.version}) has the same function as the API ({base_api.signature}) from library {base_api.lib}(v{base_api.version}).
 """
         else:
             background_knowledge_prompt = f"""
-通过组合调用{api_group_brief_info}中的API, 可以与来自{base_api.lib}(v{base_api.version})库的API {base_api.signature}一样的函数功能.
+By combining the APIs in {api_group_brief_info}, it can achieve the same functionality as the API {base_api.signature} from library {base_api.lib}(v{base_api.version}).
 """
 
         # 构建最终提示词
         prompt = f"""
-待测试的API{'group' if len(twin_api_group.apis) > 1 else ''}的信息:
+Information of the API {'group' if len(twin_api_group.apis) > 1 else ''} to be called:
 {api_group_info_prompt}        
 
-背景知识:
+Background knowledge:
 {background_knowledge_prompt}
 
-任务要求:
-下方的代码片段是对({base_api.signature})的调用. 请你生成使用{api_group_brief_info}替代({base_api.full_name})的代码片段, 要求参数的输入值和最终的输出值保持一致.
-{base_api_seed.valid_code} 
+Task requirements:
+Below is a code snippet calling ({base_api.signature}). Please generate a code snippet that replaces ({base_api.full_name}) with {api_group_brief_info}, 
+ensuring that the input parameters and final output values remain unchanged.
+{base_api_seed.valid_code}
 """
         twin_seed_code = self.query_llm(prompt)
         if twin_seed_code is None:
