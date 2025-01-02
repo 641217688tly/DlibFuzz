@@ -29,6 +29,8 @@ def execute_pytorch_code(code_path):
     with open(code_path, 'r', encoding='utf-8') as f:
         code_lines = f.readlines()
     modified_pytorch_code, output_vars = extract_and_modify_print_statements(code_lines, "output_pt")
+    # 输出修改后的代码，保存至output中
+
 
     # 通过在临时目录创建一个脚本文件，再 exec 到本进程中的方式来执行
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -45,9 +47,10 @@ def execute_pytorch_code(code_path):
                         output = exec_locals[var]
                         outputs[var] = serialize_output(output)
                     except Exception as e:
-                        outputs[var] = f"Here Unserializable output of type {type(output).__name__}: {str(e)}"
+                        outputs[var] = f"Output serialization failed: {str(e)}"
             return outputs if outputs else {"error": "No valid output found"}
         except Exception as e:
+            # 捕获异常，返回错误信息
             exc_type, exc_value, _ = sys.exc_info()
             return {"error": f"Pytorch code execution failed: {exc_type.__name__}: {exc_value}"}
         finally:
@@ -229,7 +232,6 @@ def summarize_output(output, sample_num=5):
     summary = {}
 
     try:
-        # np.ndarray
         if isinstance(output, np.ndarray):
             size = output.size
             ndim = output.ndim
@@ -276,11 +278,9 @@ def summarize_output(output, sample_num=5):
                     else:
                         row_data.append(float(val))
                 samples.append(row_data)
-
             summary["samples"] = samples
             return summary
 
-        # torch.Tensor
         elif isinstance(output, torch.Tensor):
             cpu_tensor = output.detach().cpu()
             size = cpu_tensor.numel()  # 元素数量 (包括所有维度)
@@ -319,13 +319,12 @@ def summarize_output(output, sample_num=5):
                     row_slice = cpu_tensor[i, :cols]
 
                 row_data = []
-                for val in row_slice.flatten():
+                for val in row_slice:
                     if torch.is_complex(val):
                         row_data.append((val.real.item(), val.imag.item()))
                     else:
                         row_data.append(float(val.item()))
                 samples.append(row_data)
-
             summary["samples"] = samples
 
         elif isinstance(output, (list, tuple)):
@@ -351,7 +350,7 @@ def summarize_output(output, sample_num=5):
             summary["samples"] = [str(k) for k in keys]
 
         elif isinstance(output, (int, float, str, bool, type(None))):
-            return output
+            return _safe_str(output)
 
         # 其他类型
         else:
@@ -377,7 +376,9 @@ def _safe_float(val):
 
 
 def _safe_str(obj):
-    """ 对象转字符串时，若是浮点 inf/nan，也转换成可写入 JSON 的形式。 """
+    """
+    对象转字符串时，若是浮点 inf/nan，也转换成可写入 JSON 的形式。
+    """
     if isinstance(obj, float):
         if np.isnan(obj):
             return "NaN"
