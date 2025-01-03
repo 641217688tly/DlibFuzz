@@ -44,8 +44,8 @@ class ValueEquivalentCluster:
             module = importlib.import_module(module_name)
             func = getattr(module, api_name, None)
             if func is None:
-               self.errors.append(f"{full_api_name} does not exist.")
-               return False
+                self.errors.append(f"{full_api_name} does not exist.")
+                return False
             if func is None:
                 return False
             if inspect.ismodule(func):
@@ -247,7 +247,8 @@ Target Libraries:
                     return json.loads(response)
                 else:
                     attempt_num = attempt_num + 1
-                    self.messages.append({"role": "user", "content": f"The JSON data you generated has the following errors: \n{self.errors} \n Please try again."})
+                    self.messages.append({"role": "user",
+                                          "content": f"The JSON data you generated has the following errors: \n{self.errors} \n Please try again."})
                     print(
                         f"Incorrect JSON format or invalid API.\n Error Details: \n {self.errors} \nRetrying(Current attempt: {attempt_num})...")
                     self.errors = []  # 清空错误列表
@@ -289,7 +290,14 @@ Target Libraries:
                     self.session.flush()
                 api_list.append(api)  # [constant, softmax_cross_entropy_with_logits]
             api_group_objects.append(api_list)
+        # 检查api_group_objects最终是否有包含[self.api], 如果没有则手动添加
+        if [self.api] not in api_group_objects:
+            api_group_objects.append([self.api])
         return api_group_objects  # [['CategoricalCrossentropy'], ['constant', 'softmax_cross_entropy_with_logits']]
+
+    def verify_equivalence(self):  # 验证API组合的等价关系是否成立(值等价/状态等价/无等价关系)
+        # TODO
+        pass
 
     def save_cluster(self, json_data):
         """
@@ -302,39 +310,36 @@ Target Libraries:
                 apis_group_objects = self.supplement_apis(dict_api_groups)
                 libs_apis_group_objects[lib] = apis_group_objects
 
-            # 2. 如果libs_apis_group_objects中至少有2个库的apis_group_objects不为空, 那么查找已经存在的Cluster对象或创建Cluster对象:
-            if len([lib for lib, apis_group_objects in libs_apis_group_objects.items() if
-                    apis_group_objects]) >= 2:
-                # 从{"Pytorch": [["API1"], ["API2", "API3"]], "JAX": [["API4"], ["API5", "API6"]], ...}中获取由单独的API组成的API组合:[["API1"], ["API4"]]
-                single_api_groups = [sublist for dictionary in libs_apis_group_objects.values() for sublist
-                                     in dictionary if len(sublist) == 1]
-                if len(single_api_groups) > 0:
-                    cluster_dict = {}
-                    for single_api_group in single_api_groups:
-                        api = single_api_group[0]
-                        api_obj_groups = (self.session.query(APIGroup)
-                                          .join(APIGroup.apis)
-                                          .filter(
-                            Cluster.type == 'ValueEquivalent')  # group.cluster.type == 'ValueEquivalent'
-                                          .group_by(APIGroup.id)
-                                          .having(func.count(API.id) == 1,  # 确保当前Group内只包含一个API
-                                                  func.min(API.id) == api.id)  # 确保当前Group内包含的API是api
-                                          .all())
-                        for api_obj_group in api_obj_groups:
-                            cluster = api_obj_group.cluster
-                            cluster_dict[cluster] = cluster_dict.get(cluster, 0) + 1
-                    if cluster_dict:
-                        # Case 2.1
-                        value_equivalent_cluster = max(cluster_dict, key=cluster_dict.get)
-                    else:
-                        # Case 2.2
-                        value_equivalent_cluster = Cluster(
-                            type='ValueEquivalent',
-                            energy=5,
-                        )
-                        self.session.add(value_equivalent_cluster)
-                        self.session.flush()
-                else:
+            api_groups = [api_group for api_groups in libs_apis_group_objects.values() for api_group in api_groups]
+            if len(api_groups) < 2:
+                if len(api_groups[0]) == 1 and api_groups[0][0] == self.api:  # 没有匹配到等价API
+                    self.api.is_clustered_by_value = True
+                    self.session.commit()
+                    return None
+
+            # 2. libs_apis_group_objects中目前至少有2个API Group, 查找已经存在的Cluster对象或创建Cluster对象:
+            # 从{"Pytorch": [["API1"], ["API2", "API3"]], "JAX": [["API4"], ["API5", "API6"]], ...}中获取由单独的API组成的API组合:[["API1"], ["API4"]]
+            single_api_groups = [api_group for api_groups in libs_apis_group_objects.values() for api_group
+                                 in api_groups if len(api_group) == 1]
+            if len(single_api_groups) > 0:  # 如果存在由单独的API组成的API组合
+                cluster_dict = {}
+                for single_api_group in single_api_groups:
+                    single_api = single_api_group[0]
+                    api_obj_groups = (self.session.query(APIGroup)
+                                      .join(APIGroup.apis)
+                                      .filter(
+                        Cluster.type == 'ValueEquivalent')  # group.cluster.type == 'ValueEquivalent'
+                                      .group_by(APIGroup.id)
+                                      .having(func.count(API.id) == 1,  # 确保当前Group内只包含一个API
+                                              func.min(API.id) == single_api.id)  # 确保当前Group内包含的API是api
+                                      .all())
+                    for api_obj_group in api_obj_groups:
+                        cluster = api_obj_group.cluster
+                        cluster_dict[cluster] = cluster_dict.get(cluster, 0) + 1
+                if cluster_dict:  # 选择已有的值等价簇加入
+                    # Case 2.1
+                    value_equivalent_cluster = max(cluster_dict, key=cluster_dict.get)
+                else:  # 创建一个新的值等价簇并加入
                     # Case 2.2
                     value_equivalent_cluster = Cluster(
                         type='ValueEquivalent',
@@ -342,17 +347,28 @@ Target Libraries:
                     )
                     self.session.add(value_equivalent_cluster)
                     self.session.flush()
+            else:  # 创建一个新的值等价簇并加入
+                # Case 2.2
+                value_equivalent_cluster = Cluster(
+                    type='ValueEquivalent',
+                    energy=5,
+                )
+                self.session.add(value_equivalent_cluster)
+                self.session.flush()
 
-                # 3. 为每个API组合创建对应的APIgroup对象, 之后将它们与新创建的Cluster对象关联
-                for lib, apis_group_objects in libs_apis_group_objects.items():
-                    for api_group in apis_group_objects:  # 逐个访问每个API组合
-                        group = APIGroup(
-                            apis=api_group,
-                            cluster=value_equivalent_cluster
-                        )
-                        self.session.add(group)
-                        self.session.flush()
-            self.api.is_clustered_by_value = True
+            # 3. 为每个API组合创建对应的APIGroup对象, 之后将它们与新创建的Cluster对象关联
+            for lib, apis_group_objects in libs_apis_group_objects.items():
+                for api_group in apis_group_objects:  # 逐个访问每个API组合
+                    group = APIGroup(
+                        apis=api_group,
+                        cluster=value_equivalent_cluster
+                    )
+                    self.session.add(group)
+                    self.session.flush()
+
+            # 4. 将single_api_groups中的API标记为已经被聚类
+            for single_api_group in single_api_groups:
+                single_api_group[0].is_clustered_by_value = True
             self.session.commit()
         except Exception as e:
             self.session.rollback()  # 回滚在异常中的任何数据库更改
