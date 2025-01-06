@@ -55,9 +55,9 @@ excluded_modules = [
     'torch.nn.modules',
     'torch.profiler',
     'torch.onnx',  # 数量过多，暂时不包含
-    'torch.xpu',
-    'torch.testing',
-    'torch.windows',
+    # 'torch.xpu',
+    # 'torch.testing',
+    # 'torch.windows',
 ]
 
 MAX_DEPTH = 4
