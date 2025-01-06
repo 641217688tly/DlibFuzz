@@ -66,9 +66,7 @@ def get_full_api_names(module, prefix=''):
 
             # 遇到子模块，若子模块不在白名单范围，或已访问过，则跳过
             if inspect.ismodule(member):
-                if not is_allowed_module(full_name):
-                    continue
-                if member not in visited:
+                if is_allowed_module(full_name) and member not in visited:
                     stack.append((member, full_name))
                 continue
 
@@ -116,7 +114,7 @@ def get_full_api_names(module, prefix=''):
                     "module": current_prefix,
                     "fullName": full_name,
                     "signature": signature,
-                    "description": doc.split('\n')[0]
+                    "description": ' '.join(doc.replace('\n', ' ').split())
                 })
 
     return apis

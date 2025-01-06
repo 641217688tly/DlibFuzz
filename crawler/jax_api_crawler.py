@@ -1,4 +1,5 @@
 import json
+import os
 from functools import _lru_cache_wrapper
 from typing import _UnionGenericAlias
 import jax
@@ -61,7 +62,7 @@ def get_full_api_names(module, prefix=''):
                     "module": current_prefix,
                     "fullName": full_name,
                     "signature": signature,
-                    "description": doc.split('\n')[0]  # Take the first line of the docstring
+                    "description": ' '.join(doc.replace('\n', ' ').split())
                 })
 
     return apis
@@ -74,6 +75,8 @@ apis = get_full_api_names(jax, 'jax')
 print(f"Total APIs collected: {len(apis)}")
 
 # 将 API 写入 JSON 文件
+apis_dir = 'api_list'
+os.makedirs(apis_dir, exist_ok=True)
 apis_dict = {str(index + 1): api for index, api in enumerate(apis)}
-with open('jax_api_list.json', 'w') as f:
+with open(os.path.join(apis_dir, 'jax_api_list.json'), 'w') as f:
     json.dump(apis_dict, f, indent=2)
