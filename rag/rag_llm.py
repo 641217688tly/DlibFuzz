@@ -59,28 +59,26 @@ def create_vector_store_batched(documents, embeddings, batch_size=100):
     text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
     vector_store = None
     
-    for i in range(0, len(documents), batch_size):
-        batch = documents[i:i + batch_size]
-        split_docs = text_splitter.split_documents(
-            [Document(page_content=doc) for doc in batch]
-        )
-        
-        if vector_store is None:
-            vector_store = FAISS.from_documents(split_docs, embeddings)
-        else:
-            vector_store.add_documents(split_docs)
+    try:
+        for i in range(0, len(documents), batch_size):
+            batch = documents[i:i + batch_size]
+            split_docs = text_splitter.split_documents(
+                [Document(page_content=doc) for doc in batch]
+            )
             
-        print(f'Processed batch {i//batch_size + 1}/{len(documents)//batch_size + 1}')
-    
-    return vector_store
+            if vector_store is None:
+                vector_store = FAISS.from_documents(split_docs, embeddings)
+            else:
+                vector_store.add_documents(split_docs)
+                
+            print(f'Processed batch {i//batch_size + 1}/{len(documents)//batch_size + 1}')
+        
+        return vector_store
+    except Exception as e:
+        print(f"Error in create_vector_store_batched: {str(e)}")
+        return None
 
-def save_vector_store(vector_store, path):
-    '''Save the FAISS vector store'''
-    vector_store.save_local(path)
 
-def load_vector_store(path):
-    '''Load the FAISS vector store'''
-    return FAISS.load_local(path)
 
 
 def initialize_rag_system(documents_dir: list, 
@@ -89,11 +87,16 @@ def initialize_rag_system(documents_dir: list,
                           openai_api_key: str = None
                           ):
     
+    # Initialize embeddings
+    embeddings = OllamaEmbeddings(model="llama3.1")
+    print('Embeddings initialized.')
+
     if os.path.exists('vector_store.faiss'):
-        vector_store = load_vector_store('vector_store.faiss')
+        vector_store = FAISS.load_local('vector_store.faiss', embeddings=embeddings)
         print('Vector store loaded.')
     else:
-        # Step 1: Load documents
+        print('Vector store not found. Creating new vector store...')
+        # Load documents
         print('Loading documents...')
         docs = []
         for directory in documents_dir:
@@ -101,13 +104,19 @@ def initialize_rag_system(documents_dir: list,
             docs += load_files(directory, kind=directory.strip('docs/'))
         print('Documents loaded.')
 
-        # Step 2: Initialize embeddings
-        embeddings = OllamaEmbeddings(model="llama3.1")
-        print('Embeddings initialized.')
-        
+        # text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+        # split_docs = text_splitter.split_documents([Document(page_content=doc) for doc in docs])
+        # print('Documents split.')
+    
+    
         # Create a FAISS vector store from the documents and their embeddings
+        # vector_store = FAISS.from_documents(split_docs, embeddings)
         vector_store = create_vector_store_batched(docs, embeddings)
-        save_vector_store(vector_store, 'vector_store.faiss')
+        print('Vector store created.')
+
+        vector_store.save_local('vector_store.faiss')
+        print('Vector store saved.')
+
     
     
     # Step 4: Initialize LLM
@@ -194,10 +203,10 @@ if __name__ == "__main__":
     print("Welcome to the RAG System!")
     print("Type 'exit' or 'quit' to terminate the program.\n")
 
-    # directories = ['docs/pytorch', 'docs/jax', 'docs/mindspore', 'docs/jittor']
-    directories = ['demo_docs']
+    directories = ['docs/pytorch', 'docs/jax', 'docs/mindspore', 'docs/jittor']
+    # directories = ['demo_docs']
 
-    qa_chain, vector_store = initialize_rag_system(directories)
+    qa_chain, vector_store = initialize_rag_system(directories, is_local=True)
 
     while True:
         query = input("Enter your code-related query: ")
