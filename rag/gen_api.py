@@ -43,7 +43,6 @@ def generate_code(request: QueryRequest):
         return QueryResponse(answer=answer)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    return QueryResponse(answer='Hello, World!')
 
 
 @app.post("/generate_without_rag", response_model=QueryResponse)
