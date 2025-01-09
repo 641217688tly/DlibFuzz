@@ -1,6 +1,7 @@
 import datetime
 import os
 import time
+import pickle
 from bs4 import BeautifulSoup
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.vectorstores import FAISS
@@ -53,32 +54,61 @@ def load_files(directory: str, kind: str):
         
     return documents
 
+def create_vector_store_batched(documents, embeddings, batch_size=100):
+    """Batch process documents to create vector store"""
+    text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+    vector_store = None
+    
+    for i in range(0, len(documents), batch_size):
+        batch = documents[i:i + batch_size]
+        split_docs = text_splitter.split_documents(
+            [Document(page_content=doc) for doc in batch]
+        )
+        
+        if vector_store is None:
+            vector_store = FAISS.from_documents(split_docs, embeddings)
+        else:
+            vector_store.add_documents(split_docs)
+            
+        print(f'Processed batch {i//batch_size + 1}/{len(documents)//batch_size + 1}')
+    
+    return vector_store
+
+def save_vector_store(vector_store, path):
+    '''Save the FAISS vector store'''
+    vector_store.save_local(path)
+
+def load_vector_store(path):
+    '''Load the FAISS vector store'''
+    return FAISS.load_local(path)
+
 
 def initialize_rag_system(documents_dir: list, 
                           is_local: bool,
                           openai_model: str = "gpt-4o-mini", 
                           openai_api_key: str = None
                           ):
-    # Step 1: Load documents
-    print('Loading documents...')
-    docs = []
-    for directory in documents_dir:
-        # docs += load_files(directory, kind=directory.strip('docs/'))
-        docs += load_files(directory, kind=directory.strip('docs/'))
-    print('Documents loaded.')
     
-    # Step 2: Preprocess documents
-    text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-    split_docs = text_splitter.split_documents([Document(page_content=doc) for doc in docs])
-    print('Documents split.')
+    if os.path.exists('vector_store.faiss'):
+        vector_store = load_vector_store('vector_store.faiss')
+        print('Vector store loaded.')
+    else:
+        # Step 1: Load documents
+        print('Loading documents...')
+        docs = []
+        for directory in documents_dir:
+            # docs += load_files(directory, kind=directory.strip('docs/'))
+            docs += load_files(directory, kind=directory.strip('docs/'))
+        print('Documents loaded.')
+
+        # Step 2: Initialize embeddings
+        embeddings = OllamaEmbeddings(model="llama3.1")
+        print('Embeddings initialized.')
+        
+        # Create a FAISS vector store from the documents and their embeddings
+        vector_store = create_vector_store_batched(docs, embeddings)
+        save_vector_store(vector_store, 'vector_store.faiss')
     
-    # Step 3: Initialize embeddings
-    embeddings = OllamaEmbeddings(model="llama3.1")
-    print('Embeddings initialized.')
-    
-    # Create a FAISS vector store from the documents and their embeddings
-    vector_store = FAISS.from_documents(split_docs, embeddings)
-    print('Vector store created.')
     
     # Step 4: Initialize LLM
     # llm = CodeQwenLLM()
