@@ -88,7 +88,7 @@ def initialize_rag_system(documents_dir: list,
                           ):
     
     # Initialize embeddings
-    embeddings = OllamaEmbeddings(model="llama3.1")
+    embeddings = OllamaEmbeddings(model="bge-m3")
     print('Embeddings initialized.')
 
     if os.path.exists('vector_store.faiss'):
