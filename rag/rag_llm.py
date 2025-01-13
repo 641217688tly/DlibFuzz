@@ -1,15 +1,11 @@
 import datetime
 import os
 import time
-import pickle
 from bs4 import BeautifulSoup
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain.schema import Document
-from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
-from langchain_core.output_parsers import StrOutputParser
 from llm import CodeQwenLLM, OpenAILLM
 from transformers_llm import TransformersLLM
 from embeddings import OllamaEmbeddings
@@ -92,7 +88,7 @@ def initialize_rag_system(documents_dir: list,
     print('Embeddings initialized.')
 
     if os.path.exists('vector_store.faiss'):
-        vector_store = FAISS.load_local('vector_store.faiss', embeddings=embeddings)
+        vector_store = FAISS.load_local('vector_store.faiss', embeddings=embeddings, allow_dangerous_deserialization=True)
         print('Vector store loaded.')
     else:
         print('Vector store not found. Creating new vector store...')
@@ -200,10 +196,10 @@ def retrieve_documents_only(query: str, vector_store):
 
 
 if __name__ == "__main__":
-    print("Welcome to the RAG System!")
+    print("RAG Module Activated.\n")
     print("Type 'exit' or 'quit' to terminate the program.\n")
 
-    directories = ['docs/pytorch', 'docs/jax', 'docs/mindspore', 'docs/jittor']
+    directories = ['docs/pytorch', 'docs/jax', 'docs/mindspore', 'docs/jittor'] # 目前一共有3551个文档
     # directories = ['demo_docs']
 
     qa_chain, vector_store = initialize_rag_system(directories, is_local=True)
