@@ -22,10 +22,13 @@ Requirements:
 
 
 class APITestSeedValidator:
-    def __init__(self, session, openai_client, seed: APITestSeed):
+    def __init__(self, llm_client, session=None, seed: APITestSeed = None, raw_code=""):
+        if seed and session is None:
+            raise ValueError("session is required when seed is provided")
         self.session = session
-        self.openai_client = openai_client
+        self.llm_client = llm_client
         self.seed = seed
+        self.raw_code = raw_code
 
     def eliminate_markdown(self, raw_code):  # 去除raw_code中的markdown语法
         code_lines = raw_code.split('\n')  # 将代码按行分割成列表
@@ -90,7 +93,54 @@ class APITestSeedValidator:
         os.remove(file_path)  # 删除临时文件
         return is_valid, error_details
 
-    def validate(self, max_retry=5):  # 修复代码中的错误
+    def validate4code(self, max_retry=5):
+        code_without_markdown = self.eliminate_markdown(self.raw_code)
+        code_complemented_import = self.insert_possible_imports(code_without_markdown)
+        is_valid, error_details = self.static_analysis(code_complemented_import)
+
+        if is_valid:  # 如果代码没有错误, 则结束修复
+            return code_complemented_import  # 返回有效的代码
+
+        print(f"\nError Details:\n {error_details}")
+
+        prompt = construct_prompt(code_complemented_import, error_details)
+        messages = [
+            {"role": "system", "content": "You're an AI assistant adept at debugging code."},
+            {"role": "user", "content": prompt}
+        ]
+        attempt_num = 0
+        while attempt_num < max_retry:
+            print(f"Try to fix the code snippet. Current attempt times: {attempt_num + 1}/{max_retry}")
+            try:
+                response = self.llm_client.chat.completions.create(
+                    model="gpt-4o-mini",  # gpt-4o-mini  gpt-3.5-turbo
+                    messages=messages,
+                    temperature=0,
+                )
+                validated_code = response.choices[0].message.content
+                messages.append({"role": "system", "content": validated_code})
+
+                # 检查LLM返回的种子是否有效
+                code_without_markdown = self.eliminate_markdown(validated_code)  # 去除code中的markdown语法
+                code_complemented_import = self.insert_possible_imports(code_without_markdown)  # 向code中插入可能的导入语句
+                validated_code = code_complemented_import
+                print(f"Verified Code:\n {validated_code}")
+
+                is_valid, error_details = self.static_analysis(validated_code)
+                if is_valid:
+                    return validated_code  # 返回修复后的有效代码
+                else:
+                    print(f"\nError Details:\n {error_details}")
+                    prompt = construct_prompt(validated_code, error_details)
+                    messages.append({"role": "user", "content": prompt})
+                    attempt_num = attempt_num + 1
+            except Exception as e:
+                attempt_num = attempt_num + 1
+                print(f"An unexpected error occurred: {e}")
+        print(f"Max attempts reached. Failed to fix the code snippet.")
+        return None
+
+    def validate4seed(self, max_retry=5):  # 修复代码中的错误
         code_without_markdown = self.eliminate_markdown(self.seed.raw_code)  # 去除code中的markdown语法
         code_complemented_import = self.insert_possible_imports(code_without_markdown)  # 向code中插入可能的导入语句
         is_valid, error_details = self.static_analysis(code_complemented_import)
@@ -111,7 +161,7 @@ class APITestSeedValidator:
         while attempt_num < max_retry:
             print(f"Try to fix the code snippet. Current attempt times: {attempt_num + 1}/{max_retry}")
             try:
-                response = self.openai_client.chat.completions.create(
+                response = self.llm_client.chat.completions.create(
                     model="gpt-4o-mini",  # gpt-4o-mini  gpt-3.5-turbo
                     messages=messages,
                     temperature=0,
@@ -145,9 +195,9 @@ class APITestSeedValidator:
 
 
 class ClusterTestSeedValidator:
-    def __init__(self, session, openai_client, seed: ClusterTestSeed):
+    def __init__(self, session, llm_client, seed: ClusterTestSeed):
         self.session = session
-        self.openai_client = openai_client
+        self.llm_client = llm_client
         self.seed = seed
 
     def validate(self):
@@ -157,8 +207,8 @@ class ClusterTestSeedValidator:
         api_seeds_waiting_validate = self.seed.api_seeds.filter(APITestSeed.is_validated == False).all()
         if_success = True
         for api_seed in api_seeds_waiting_validate:
-            api_seed_validator = APITestSeedValidator(self.session, self.openai_client, api_seed)
-            validated_code = api_seed_validator.validate()
+            api_seed_validator = APITestSeedValidator(session=self.session, llm_client=self.llm_client, seed=api_seed)
+            validated_code = api_seed_validator.validate4seed()
             if validated_code is None:
                 if_success = False
         if if_success:
@@ -171,14 +221,14 @@ def export_valid_cluster_seed(seed: ClusterTestSeed):  # 导出种子中各个�
     if seed.is_validated:
         cluster_folder_path = 'seeds/validated_seeds/'
         # 首先区分是否利用了历史错误
-        #if seed.type == 'WithHistoryError':  # 利用了历史错误
+        # if seed.type == 'WithHistoryError':  # 利用了历史错误
         #    cluster_folder_path = cluster_folder_path + 'WithHistoryError/'
         #    # 然后区分值等价和状态等价
         #    if seed.cluster.type == 'ValueEquivalent':
         #        cluster_folder_path = cluster_folder_path + 'ValueEquivalent/'
         #    else:  # 状态等价
         #        cluster_folder_path = cluster_folder_path + 'StateEquivalent/'
-        #else:  # 没有利用历史错误
+        # else:  # 没有利用历史错误
         #    cluster_folder_path = cluster_folder_path + 'WithoutHistoryError/'
         #    # 然后区分值等价和状态等价
         #    if seed.cluster.type == 'ValueEquivalent':

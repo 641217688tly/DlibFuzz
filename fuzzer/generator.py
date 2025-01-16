@@ -252,7 +252,7 @@ Please refer to the input values for API parameters and the API call combination
         self.session.flush()
 
         # 对基底API进行修复
-        valid_code = APITestSeedValidator(self.session, self.llm_client, base_seed).validate()
+        valid_code = APITestSeedValidator(self.session, self.llm_client, base_seed).validate4seed()
         if valid_code is None:
             raise Exception("Failed to generate base seed for base API.")
         base_seed.valid_code = valid_code
@@ -303,8 +303,7 @@ Background knowledge:
 {background_knowledge_prompt}
 
 Task requirements:
-Below is a code snippet calling ({base_api.signature}). Please generate a code snippet that replaces ({base_api.full_name}) with {api_group_brief_info}, 
-ensuring that the input parameters and final output values remain unchanged.
+Below is a code snippet calling ({base_api.signature}). Please generate a code snippet that replaces ({base_api.full_name}) with {api_group_brief_info}, ensuring that the input parameters and final output values remain unchanged.
 {base_api_seed.valid_code}
 """
         twin_seed_code = self.query_llm(prompt)
