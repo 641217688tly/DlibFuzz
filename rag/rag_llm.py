@@ -6,8 +6,8 @@ from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain.schema import Document
 from langchain_core.prompts import ChatPromptTemplate
-from llm import CodeQwenLLM, OpenAILLM
-from transformers_llm import TransformersLLM
+from llm import OpenAILLM
+# from transformers_llm import TransformersLLM
 from embeddings import OllamaEmbeddings
 from langchain.chains import RetrievalQA
 
@@ -118,13 +118,14 @@ def initialize_rag_system(documents_dir: list,
     # Step 4: Initialize LLM
     # llm = CodeQwenLLM()
     if is_local:
-        llm = TransformersLLM(
-            model_id="Qwen/Qwen2.5-Coder-14B-Instruct",
-            device="auto",          # 自动选择设备
-            load_in_4bit=False,      # 4-bit量化
-            # load_in_8bit=True,      # 8-bit量化
-            torch_dtype="bfloat16"  # 使用 bfloat16 精度
-        )
+        print("Local LLM not implemented yet.")
+        # llm = TransformersLLM(
+        #     model_id="Qwen/Qwen2.5-Coder-14B-Instruct",
+        #     device="auto",          # 自动选择设备
+        #     load_in_4bit=False,      # 4-bit量化
+        #     # load_in_8bit=True,      # 8-bit量化
+        #     torch_dtype="bfloat16"  # 使用 bfloat16 精度
+        # )
     else:
         llm = OpenAILLM(openai_model, openai_api_key)
     print('LLM initialized.')

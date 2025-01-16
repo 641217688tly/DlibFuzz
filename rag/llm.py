@@ -1,52 +1,54 @@
 import os
 import logging
 from typing import Any, ClassVar, Dict, List, Optional
+
+import httpx
 from pydantic import PrivateAttr
 from langchain.llms.base import LLM
-from llama_cpp import Llama
+# from llama_cpp import Llama
 from openai import OpenAI
 from langchain.schema import BaseMessage, AIMessage, HumanMessage, SystemMessage, ChatMessage
-
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class CodeQwenLLM(LLM):
-    model_path: ClassVar[str] = "models/qwen2.5-coder-14b-instruct-q4_k_m.gguf"
-    _llm: Llama = PrivateAttr()  # Define as a private attribute
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)  # Initialize the superclass
-        self._llm = Llama(
-            model_path=self.model_path,
-            n_ctx=2048,
-            n_parts=-1,
-            seed=0,
-            n_gpu_layers=15000,
-            n_batch=512,
-            f16_kv=False,
-            logits_all=False,
-            vocab_only=False,
-            use_mlock=False,  # Set to False to avoid memory locking issues
-            embedding=False,
-            **kwargs
-        )
-
-    @property
-    def _llm_type(self):
-        return "llama_cpp"
-
-    def _call(self, prompt, stop=None):
-        response = self._llm.create_chat_completion(
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            stop=stop
-        )
-        return response['choices'][0]['message']['content']
+# class CodeQwenLLM(LLM):
+#     model_path: ClassVar[str] = "models/qwen2.5-coder-14b-instruct-q4_k_m.gguf"
+#     _llm: Llama = PrivateAttr()  # Define as a private attribute
+#
+#     def __init__(self, **kwargs):
+#         super().__init__(**kwargs)  # Initialize the superclass
+#         self._llm = Llama(
+#             model_path=self.model_path,
+#             n_ctx=2048,
+#             n_parts=-1,
+#             seed=0,
+#             n_gpu_layers=15000,
+#             n_batch=512,
+#             f16_kv=False,
+#             logits_all=False,
+#             vocab_only=False,
+#             use_mlock=False,  # Set to False to avoid memory locking issues
+#             embedding=False,
+#             **kwargs
+#         )
+#
+#     @property
+#     def _llm_type(self):
+#         return "llama_cpp"
+#
+#     def _call(self, prompt, stop=None):
+#         response = self._llm.create_chat_completion(
+#             messages=[
+#                 {
+#                     "role": "user",
+#                     "content": prompt
+#                 }
+#             ],
+#             stop=stop
+#         )
+#         return response['choices'][0]['message']['content']
 
 
 class OpenAILLM(LLM):
@@ -65,12 +67,19 @@ class OpenAILLM(LLM):
         self.model_name = kwargs.get('model_name', self.model_name)
         self.temperature = kwargs.get('temperature', self.temperature)
         self.max_tokens = kwargs.get('max_tokens', self.max_tokens)
-        
+
         if not self.api_key:
-            raise ValueError("OpenAI API key must be provided either through kwargs or OPENAI_API_KEY environment variable")
-        
+            raise ValueError(
+                "OpenAI API key must be provided either through kwargs or OPENAI_API_KEY environment variable")
+
         try:
-            self._client = OpenAI(api_key=self.api_key)
+            self._client = OpenAI(
+                api_key=self.api_key,
+                http_client=httpx.Client(proxies={
+                    "http://": "http://127.0.0.1:7890",
+                    "https://": "http://127.0.0.1:7890"
+                })
+            )
             logger.info(f"OpenAILLM initialized successfully with model: {self.model_name}")
         except Exception as e:
             logger.error(f"Failed to initialize OpenAILLM: {e}")
@@ -83,7 +92,7 @@ class OpenAILLM(LLM):
     def _convert_messages_to_chat(self, messages: List[BaseMessage]) -> List[Dict[str, str]]:
         """Convert LangChain message types to OpenAI chat format."""
         converted_messages = []
-        
+
         for message in messages:
             if isinstance(message, SystemMessage):
                 role = "system"
@@ -93,12 +102,12 @@ class OpenAILLM(LLM):
                 role = "user"
             else:
                 role = "user"  # Default to user for other message types
-                
+
             converted_messages.append({
                 "role": role,
                 "content": message.content
             })
-            
+
         return converted_messages
 
     def _call(self, prompt: str, stop: Optional[List[str]] = None, **kwargs: Any) -> str:
@@ -145,11 +154,10 @@ class OpenAILLM(LLM):
         """
         # Simple approximation: ~4 characters per token
         return len(text) // 4
-        
 
-if __name__ == "__main__":
-    llm = CodeQwenLLM()
-    prompt = "Generate a python program to draw a line"
-    response = llm.invoke(prompt)
-
-    print(f"response: {response}")
+# if __name__ == "__main__":
+#     llm = CodeQwenLLM()
+#     prompt = "Generate a python program to draw a line"
+#     response = llm.invoke(prompt)
+#
+#     print(f"response: {response}")

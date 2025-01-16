@@ -37,8 +37,7 @@ class API(Base):
     example = Column(Text, nullable=True)  # 该API的示例调用代码
     version = Column(String(255), nullable=True)  # API的版本
     embedding = Column(Text, nullable=True)  # 该API的嵌入向量, 包括函数名和功能描述
-    is_clustered_by_value = Column(Boolean, default=False)  # 该API是否已经被执行值等价聚类
-    is_clustered_by_state = Column(Boolean, default=False)  # 该API是否已经被执行状态等价聚类
+    is_clustered = Column(Boolean, default=False)  # 该API是否已经被执行匹配
     history_errors = relationship('APIHistoryError', back_populates='api')  # 一个API可能有多个触发bug的代码片段
 
 
