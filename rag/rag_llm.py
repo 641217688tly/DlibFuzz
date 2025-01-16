@@ -80,7 +80,7 @@ def create_vector_store_batched(documents, embeddings, batch_size=100):
 def initialize_rag_system(documents_dir: list, 
                           is_local: bool,
                           openai_model: str = "gpt-4o-mini", 
-                          openai_api_key: str = None
+                          openai_api_key: str = ''
                           ):
     
     # Initialize embeddings
@@ -88,7 +88,9 @@ def initialize_rag_system(documents_dir: list,
     print('Embeddings initialized.')
 
     if os.path.exists('vector_store.faiss'):
-        vector_store = FAISS.load_local('vector_store.faiss', embeddings=embeddings, allow_dangerous_deserialization=True)
+        vector_store = FAISS.load_local('vector_store.faiss', 
+                                        embeddings=embeddings, 
+                                        allow_dangerous_deserialization=True)
         print('Vector store loaded.')
     else:
         print('Vector store not found. Creating new vector store...')
@@ -100,11 +102,6 @@ def initialize_rag_system(documents_dir: list,
             docs += load_files(directory, kind=directory.strip('docs/'))
         print('Documents loaded.')
 
-        # text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-        # split_docs = text_splitter.split_documents([Document(page_content=doc) for doc in docs])
-        # print('Documents split.')
-    
-    
         # Create a FAISS vector store from the documents and their embeddings
         # vector_store = FAISS.from_documents(split_docs, embeddings)
         vector_store = create_vector_store_batched(docs, embeddings)
