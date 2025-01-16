@@ -74,7 +74,7 @@ def add_apis_from_json(db_session, file_path, lib, version):
         print(f"{lib} API data loaded successfully!")
 
 
-def attach_history_errors(db_session, dir_path, lib):
+def attach_history_errors(db_session, dir_path, lib, whether_supplement_api=False):
     # 获取所有.json文件的列表
     json_files = [f for f in os.listdir(dir_path) if f.endswith('.json')]
     files_num = len(json_files)  # 总文件数
@@ -89,7 +89,7 @@ def attach_history_errors(db_session, dir_path, lib):
             # 尝试解析JSON文件, 如果解析失败则跳过
             try:
                 data = json.load(file)
-            except Exception as e:
+            except Exception:
                 continue
             apis = data.get("API", [])
             title = data.get("Title", "")
@@ -109,7 +109,7 @@ def attach_history_errors(db_session, dir_path, lib):
                     module_name, api_name = full_api_name.rsplit('.', 1)
                     if utils.validate_api_existence(module_name, api_name):  # 验证API在当前Python环境中的当前版本的DL库内是否存在
                         api = db_session.query(API).filter_by(lib=lib, full_name=full_api_name).first()
-                        if not api:
+                        if not api and whether_supplement_api: # 如果API不存在且需要补充API
                             api_info = utils.inspect_api_info(module_name, api_name)
                             api = API(
                                 name=api_name,
@@ -122,7 +122,8 @@ def attach_history_errors(db_session, dir_path, lib):
                             )
                             db_session.add(api)
                             db_session.flush()  # 确保api对象有id
-
+                        elif not api and not whether_supplement_api:  # 如果API不存在且不允许补充API
+                            continue
                         # 检查api.history_errors中是否已经存在相同的错误触发代码
                         existing_trigger = db_session.query(APIHistoryError).filter_by(
                             api_id=api.id,
@@ -161,10 +162,10 @@ if __name__ == '__main__':
 
     # 如果JAX/Tensorflow/Pytorch数据库中为空则添加数据
     # torch_version="1.12", tf_version="2.10", jax_version="0.4.13", ms_version="2.4.0", jittor_version = ""1.3.9.10""
-    add_apis_from_json(session, 'cluster/apis/pytorch/torch_apis.json', 'Pytorch', "1.12")
-    add_apis_from_json(session, 'cluster/apis/jax/jax_apis.json', 'JAX', "0.4.13")
-    add_apis_from_json(session, 'cluster/apis/mindspore/ms_apis.json', 'MindSpore', "2.4.0")
-    add_apis_from_json(session, 'cluster/apis/jittor/jt_apis.json', 'Jittor', "1.3.9.10")
+    add_apis_from_json(session, 'data/apis/pytorch/torch_apis.json', 'Pytorch', "1.12")
+    add_apis_from_json(session, 'data/apis/jax/jax_apis.json', 'JAX', "0.4.13")
+    add_apis_from_json(session, 'data/apis/mindspore/ms_apis.json', 'MindSpore', "2.4.0")
+    add_apis_from_json(session, 'data/apis/jittor/jt_apis.json', 'Jittor', "1.3.9.10")
 
     # 将错误触发代码附加到Pytorch/JAX API下
     torch_dir = 'data/history_errors/pytorch_issues'

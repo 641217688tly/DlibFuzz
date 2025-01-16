@@ -9,7 +9,7 @@ langchain-community==0.3.0
 langchain-core==0.3.0
 langchain-text-splitters==0.3.0
 langsmith==0.1.121
-llama_cpp_python==0.2.90
+#llama_cpp_python==0.2.90
 pydantic==2.8.2
 pydantic-settings==2.5.2
 pydantic_core==2.20.1

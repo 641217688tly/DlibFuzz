@@ -158,7 +158,6 @@ if __name__ == "__main__":
         {"role": "user", "content": "How do I use PyTorch's DataLoader?"}
     ]
     
-    
     response = client.chat.completions.create(
         messages=messages,
         model="gpt-4" # 这个参数没有用，仅仅是为了兼容性
