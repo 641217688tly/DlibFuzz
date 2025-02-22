@@ -188,11 +188,6 @@ def retrieve_documents(query: str, vector_store):
     return retrieved_docs
 
 
-def retrieve_documents_only(query: str, vector_store):
-    retrieved_docs = vector_store.as_retriever().invoke(query)
-    return retrieved_docs
-
-
 if __name__ == "__main__":
     print("RAG Module Activated.\n")
     print("Type 'exit' or 'quit' to terminate the program.\n")
