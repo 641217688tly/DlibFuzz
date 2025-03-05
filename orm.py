@@ -27,16 +27,17 @@ api_group_association = Table('api_group_association', Base.metadata,
 class API(Base):
     __tablename__ = 'api'
     id = Column(Integer, primary_key=True)
-    lib = Column(String(255), nullable=False)  # API所属的库: Pytorch, Tensorflow, JAX, MindSpore
     name = Column(String(255), nullable=False)  # API名
-    module = Column(String(255), nullable=True)  # API所在的模块
-    full_name = Column(String(255), nullable=True)  # API的完整名字 = 模块名.API名
-    signature = Column(Text, nullable=True)  # API函数签名
-    doc_url = Column(String(255), nullable=True)  # 该API的官方文档的URL
+    lib = Column(String(255), nullable=False)  # API所属的库: Pytorch, Tensorflow, JAX, MindSpore
+    version = Column(String(255), nullable=True)  # API的版本, 比如2.10
+    module = Column(String(255), nullable=True)  # API所在的模块, 比如torch.nn.functional
+    full_name = Column(String(255), nullable=True)  # API的完整名字 = 模块名.API名, 比如torch.nn.functional.softmax
+    signature = Column(Text, nullable=True)  # API函数签名, 比如torch.nn.functional.softmax(input, dim=None, _stacklevel=3, dtype=None) -> Tensor
+    parameters = Column(Text, nullable=True)  # API的参数信息, 比如input: Tensor, dim: Optional[int] = None, _stacklevel: int = 3, dtype: Optional[int] = None
+    attributes = Column(Text, nullable=True) # 如果API的类型是class, 则使用该字段存储类的属性信息
+    output = Column(Text, nullable=True)  # API的返回值信息, 比如Tensor, Shape: torch.Size([N, *])
     description = Column(Text, nullable=True)  # 对该API功能的描述
     example = Column(Text, nullable=True)  # 该API的示例调用代码
-    version = Column(String(255), nullable=True)  # API的版本
-    embedding = Column(Text, nullable=True)  # 该API的嵌入向量, 包括函数名和功能描述
     is_clustered = Column(Boolean, default=False)  # 该API是否已经被执行匹配
     history_errors = relationship('APIHistoryError', back_populates='api')  # 一个API可能有多个触发bug的代码片段
 

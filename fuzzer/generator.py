@@ -134,29 +134,6 @@ class Fuzzer:  # 以Cluster为单位生成测试种子
             draw_count_map[chosen_candidate] += 1
         return chosen
 
-    def query_llm(self, prompt, max_retry=5, model="gpt-4o-mini"):
-        attempt_num = 0
-        while attempt_num < max_retry:  # 设置最大尝试次数以避免无限循环
-            try:
-                response = self.llm_client.chat.completions.create(
-                    model=model,  # gpt-4o-mini  gpt-3.5-turbo
-                    messages=[
-                        {"role": "system",
-                         "content": "You're an AI assistant adept at using multiple deep learning libraries"},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.4,
-                )
-                response_data = response.choices[0].message.content
-                return response_data
-            except Exception as e:
-                print(f"Failed to get response due to: \n{e} \nRetrying(Current attempt: {attempt_num + 1})...")
-                attempt_num += 1
-                self.session.rollback()  # 回滚在异常中的任何数据库更改
-        if attempt_num >= 5:  # 设置最大尝试次数以避免无限循环
-            print("Max attempts reached. Unable to get valid JSON data.")
-            return None
-
     def fuzz_equivalent_cluster(self, cluster: Cluster):
         if cluster.is_tested:
             return
@@ -206,30 +183,58 @@ class Fuzzer:  # 以Cluster为单位生成测试种子
             cluster.is_tested = True
             self.session.commit()
 
-    def generate_seed4base(self, base_api_group: APIGroup, cluster_seed: ClusterTestSeed):
-        # 基底API的详情
+    def construct_messages4base(self, base_api_group: APIGroup):
         base_api = base_api_group.apis[0]
-        api_info_prompt = f"""
-API Signature: {base_api.signature}
-API Description: {base_api.description}
-API Library: {base_api.lib} 
-API Library Version: {base_api.version}
+
+        system_prompt = """
+(1) Role Definition
+You are an AI assistant specialized in deep learning framework APIs (e.g., PyTorch, JAX, MindSpore and Jittor).
+(2) Output Format 
+Example:
+{
+"Code": "import torch; import torch.nn.functional as F; logits = torch.randn(4, 5, requires_grad=True); target = torch.tensor([1, 4, 3, 0]); loss = F.cross_entropy(input=logits, target=target, weight=torch.tensor([1.0, 2.0, 0.5, 0.8, 1.2]), ignore_index=-1, reduction='mean', label_smoothing=0.1); loss.backward(); print(loss.item())",
+"APIs": ["torch.nn.functional.F.cross_entropy", "torch.randn", "torch.tensor"],
+}
 """
+
+        # Example 1
+        context_query_prompt1 = f"""
+        
+"""
+        context_answer_prompt1 = f"""
+        
+"""
+
+        # Example 2
+        context_query_prompt2 = f"""
+        
+"""
+        context_answer_prompt2 = f"""
+        
+"""
+        # 基底API的详情
+        api_info_prompt = f"""
+- API Name: {base_api.full_name}
+- API Library: {base_api.lib} (version{base_api.version})
+- API Signature: {base_api.signature}
+{'- Function Description: ' + base_api.description if base_api.description else ''}
+{'- Usage Example:' + base_api.example if base_api.example else ''}
+        """
         # 触发问题的代码调用样例
         issue_examples = [item for value_list in self.sample_errors(base_api).values() for item in value_list]
         issue_examples_prompt = ""
         for count, issue_example in enumerate(issue_examples):
             issue_examples_prompt = issue_examples_prompt + f"""
 History Issue Example{count + 1}:
-Issue Title: {issue_example.title}
-Issue Description: {issue_example.description}
-Issue Trigger API: {issue_example.api.signature}
-Issue Code: 
+- Issue Title: {issue_example.title}
+- Issue Description: {issue_example.description}
+- Issue Trigger API: {issue_example.api.signature}
+- Issue Code: 
 {issue_example.code}         
 
 """
-        # 构建最终提示词
-        prompt = f"""
+        # 构建最终查询提示词
+        query_prompt = f"""
 Example code snippets that trigger the issue:
 {issue_examples_prompt}
 
@@ -238,9 +243,40 @@ Information about the API to be called:
 
 Task Requirements:
 Please refer to the input values for API parameters and the API call combinations in the examples above, and generate a code snippet that calls {base_api.full_name}.
-"""
+        """
 
-        base_seed_code = self.query_llm(prompt)
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": context_query_prompt1},
+            {"role": "assistant", "content": context_answer_prompt1},
+            {"role": "user", "content": context_query_prompt2},
+            {"role": "assistant", "content": context_answer_prompt2},
+            {"role": "user", "content": query_prompt},
+        ]
+        return messages
+
+    def query_llm4base(self, messages, max_retry=5, model="gpt-4o-mini"):
+        attempt_num = 0
+        while attempt_num < max_retry:  # 设置最大尝试次数以避免无限循环
+            try:
+                response = self.llm_client.chat.completions.create(
+                    model=model,  # gpt-4o-mini  gpt-3.5-turbo
+                    messages=messages,
+                    temperature=0.4,
+                )
+                response_data = response.choices[0].message.content
+                return response_data
+            except Exception as e:
+                print(f"Failed to get response due to: \n{e} \nRetrying(Current attempt: {attempt_num + 1})...")
+                attempt_num += 1
+                self.session.rollback()  # 回滚在异常中的任何数据库更改
+        if attempt_num >= 5:  # 设置最大尝试次数以避免无限循环
+            print("Max attempts reached. Unable to get valid JSON data.")
+            return None
+
+    def generate_seed4base(self, base_api_group: APIGroup, cluster_seed: ClusterTestSeed):
+        messages = self.construct_messages4base(base_api_group)
+        base_seed_code = self.query_llm4base(messages)
         if base_seed_code is None:
             raise Exception("Failed to generate base seed for base API.")
         base_seed = APITestSeed(
@@ -259,7 +295,14 @@ Please refer to the input values for API parameters and the API call combination
         self.session.flush()
         return base_seed
 
-    def generate_seed4twin(self, twin_api_group: APIGroup, base_api_seed: APITestSeed, cluster_seed: ClusterTestSeed):
+
+    def construct_messages4twin(self, twin_api_group, base_api_seed):
+        system_prompt = """
+(1) Role Definition
+You are an AI assistant specialized in deep learning framework APIs (e.g., PyTorch, JAX, MindSpore and Jittor).
+        
+"""
+
         # API Group的详情
         if len(twin_api_group.apis) == 1:
             twin_api = twin_api_group.apis[0]
@@ -295,7 +338,7 @@ By combining the APIs in {api_group_brief_info}, it can achieve the same functio
 """
 
         # 构建最终提示词
-        prompt = f"""
+        query_prompt = f"""
 Information of the API {'group' if len(twin_api_group.apis) > 1 else ''} to be called:
 {api_group_info_prompt}        
 
@@ -306,7 +349,35 @@ Task requirements:
 Below is a code snippet calling ({base_api.signature}). Please generate a code snippet that replaces ({base_api.full_name}) with {api_group_brief_info}, ensuring that the input parameters and final output values remain unchanged.
 {base_api_seed.valid_code}
 """
-        twin_seed_code = self.query_llm(prompt)
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": query_prompt},
+        ]
+        return messages
+
+    def query_llm4twin(self, messages, max_retry=5, model="gpt-4o-mini"):
+        attempt_num = 0
+        while attempt_num < max_retry:  # 设置最大尝试次数以避免无限循环
+            try:
+                response = self.llm_client.chat.completions.create(
+                    model=model,  # gpt-4o-mini  gpt-3.5-turbo
+                    messages=messages,
+                    temperature=0.4,
+                )
+                response_data = response.choices[0].message.content
+                return response_data
+            except Exception as e:
+                print(f"Failed to get response due to: \n{e} \nRetrying(Current attempt: {attempt_num + 1})...")
+                attempt_num += 1
+                self.session.rollback()  # 回滚在异常中的任何数据库更改
+        if attempt_num >= 5:  # 设置最大尝试次数以避免无限循环
+            print("Max attempts reached. Unable to get valid JSON data.")
+            return None
+
+    def generate_seed4twin(self, twin_api_group: APIGroup, base_api_seed: APITestSeed, cluster_seed: ClusterTestSeed):
+        messages  = self.construct_messages4twin(twin_api_group, base_api_seed)
+        twin_seed_code = self.query_llm4twin(messages)
         if twin_seed_code is None:
             raise Exception("Failed to generate seed for equivalent API.")
         twin_seed = APITestSeed(
@@ -336,9 +407,10 @@ Below is a code snippet calling ({base_api.signature}). Please generate a code s
             self.fuzz_equivalent_cluster(untested_cluster)
             untested_clusters = self.session.query(Cluster).filter_by(is_tested=False, type='StateEquivalent').all()
 
+
 if __name__ == '__main__':
     session = utils.get_session()
-    llm_client = utils.get_llm_client()
+    llm_client = utils.get_llm_client(llm='gpt4o-mini')
     fuzzer = Fuzzer(session, llm_client)
     fuzzer.fuzz_value_equivalent_clusters()
     fuzzer.fuzz_state_equivalent_clusters()

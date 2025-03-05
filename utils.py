@@ -3,8 +3,8 @@ import inspect
 import warnings
 import httpx
 import jax
-import jittor
 import mindspore
+import jittor
 import numpy as np
 import torch
 from openai import OpenAI

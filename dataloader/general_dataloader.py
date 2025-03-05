@@ -162,15 +162,15 @@ if __name__ == '__main__':
 
     # 如果JAX/Tensorflow/Pytorch数据库中为空则添加数据
     # torch_version="1.12", tf_version="2.10", jax_version="0.4.13", ms_version="2.4.0", jittor_version = ""1.3.9.10""
-    add_apis_from_json(session, 'data/apis/pytorch/torch_apis.json', 'Pytorch', "1.12")
-    add_apis_from_json(session, 'data/apis/jax/jax_apis.json', 'JAX', "0.4.13")
-    add_apis_from_json(session, 'data/apis/mindspore/ms_apis.json', 'MindSpore', "2.4.0")
-    add_apis_from_json(session, 'data/apis/jittor/jt_apis.json', 'Jittor', "1.3.9.10")
+    add_apis_from_json(session, '../data/apis/pytorch/torch_apis.json', 'Pytorch', "1.12")
+    add_apis_from_json(session, '../data/apis/jax/jax_apis.json', 'JAX', "0.4.13")
+    add_apis_from_json(session, '../data/apis/mindspore/ms_apis.json', 'MindSpore', "2.4.0")
+    add_apis_from_json(session, '../data/apis/jittor/jt_apis.json', 'Jittor', "1.3.9.10")
 
     # 将错误触发代码附加到Pytorch/JAX API下
-    torch_dir = 'data/history_errors/pytorch_issues'
-    jax_dir = 'data/history_errors/jax_issues'
-    ms_dir = 'data/history_errors/mindspore_issues'
+    torch_dir = '../data/history_errors/pytorch_issues'
+    jax_dir = '../data/history_errors/jax_issues'
+    ms_dir = '../data/history_errors/mindspore_issues'
     jt_dir =  'data/history_errors/jittor_issues'
     added_torch_errors_num = attach_history_errors(session, torch_dir, 'Pytorch')
     added_jax_errors_num = attach_history_errors(session, jax_dir, 'JAX')
