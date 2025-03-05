@@ -58,7 +58,7 @@ class PytorchAPILoader:
         with open(self.output_path, 'w', encoding='utf-8') as output_file:
             output_file.write(final_html)
 
-    def extract_api_info(self):
+    def extract_api_info(self): # TODO 提取不到Shape
         """
         从HTML中提取API的信息:
         1. name - API名称
@@ -118,11 +118,21 @@ class PytorchAPILoader:
         desc_element = soup.find('dd')
         if desc_element:
             # 提取主要描述文本
-            paragraphs = desc_element.find_all('p', recursive=False)
             description_text = []
+
+            # 获取所有直接子p元素，这些通常是主要描述
+            paragraphs = desc_element.find_all('p', recursive=False)
             for p in paragraphs:
                 if not p.find('dl'):  # 避免包含参数列表
                     description_text.append(p.get_text(strip=True))
+
+            # 提取数学公式和其他说明文本
+            math_sections = desc_element.find_all('div', {'class': 'math'})
+            for math in math_sections:
+                if not math.parent.name == 'dd' or not math.parent.parent.name == 'dl':  # 避免提取参数或返回值中的公式
+                    math_text = math.get_text(strip=True)
+                    if math_text:
+                        description_text.append(f"Formula: {math_text}")
 
             # 提取注意事项
             notes = desc_element.find_all('div', {'class': 'admonition note'})
@@ -201,6 +211,24 @@ class PytorchAPILoader:
 
             api_info['attributes'] = '\n'.join(attributes) if attributes else None
 
+            # 提取Shape信息作为output
+            shape_section = desc_element.find('dl')
+            if shape_section:
+                dt_elements = shape_section.find_all('dt')
+                for dt in dt_elements:
+                    if 'Shape:' in dt.get_text():
+                        shape_info = []
+                        # 找到Shape后的所有dd元素
+                        dd = dt.find_next('dd')
+                        if dd:
+                            # 提取Shape信息中的列表项
+                            shape_items = dd.find_all('li')
+                            for item in shape_items:
+                                shape_info.append(item.get_text(strip=True))
+
+                            api_info['output'] = '\n'.join(shape_info) if shape_info else None
+                        break
+
         # 提取示例代码
         example_section = soup.find('div', {'class': 'highlight-default notranslate'})
         if example_section:
@@ -215,7 +243,6 @@ class PytorchAPILoader:
         elif is_class:
             if not api_info['signature']:  # 如果signature为空，则默认full_name为signature
                 api_info['signature'] = f"{api_info['full_name']}"
-
 
         return api_info
 
