@@ -109,7 +109,7 @@ def attach_history_errors(db_session, dir_path, lib, whether_supplement_api=Fals
                     module_name, api_name = full_api_name.rsplit('.', 1)
                     if utils.validate_api_existence(module_name, api_name):  # 验证API在当前Python环境中的当前版本的DL库内是否存在
                         api = db_session.query(API).filter_by(lib=lib, full_name=full_api_name).first()
-                        if not api and whether_supplement_api: # 如果API不存在且需要补充API
+                        if not api and whether_supplement_api:  # 如果API不存在且需要补充API
                             api_info = utils.inspect_api_info(module_name, api_name)
                             api = API(
                                 name=api_name,
@@ -150,7 +150,8 @@ def attach_history_errors(db_session, dir_path, lib, whether_supplement_api=Fals
                     db_session.rollback()  # 出现异常时回滚
                     print(f"An error occurred: {e}")
             # 检索APIHistoryError表, 查找当前History Error是否已经被添加
-            existing_error = db_session.query(APIHistoryError).filter_by(title=title, code=code, description=description).first()
+            existing_error = db_session.query(APIHistoryError).filter_by(title=title, code=code,
+                                                                         description=description).first()
             if existing_error:
                 added_errors_num = added_errors_num + 1
         print(f"Processed {count}/{files_num} files")
@@ -162,7 +163,7 @@ if __name__ == '__main__':
 
     # 如果JAX/Tensorflow/Pytorch数据库中为空则添加数据
     # torch_version="1.12", tf_version="2.10", jax_version="0.4.13", ms_version="2.4.0", jittor_version = ""1.3.9.10""
-    add_apis_from_json(session, '../data/apis/pytorch/torch_apis.json', 'Pytorch', "1.12")
+    # add_apis_from_json(session, '../data/apis/pytorch/torch_apis.json', 'Pytorch', "1.12")
     add_apis_from_json(session, '../data/apis/jax/jax_apis.json', 'JAX', "0.4.13")
     add_apis_from_json(session, '../data/apis/mindspore/ms_apis.json', 'MindSpore', "2.4.0")
     add_apis_from_json(session, '../data/apis/jittor/jt_apis.json', 'Jittor', "1.3.9.10")
@@ -171,11 +172,11 @@ if __name__ == '__main__':
     torch_dir = '../data/history_errors/pytorch_issues'
     jax_dir = '../data/history_errors/jax_issues'
     ms_dir = '../data/history_errors/mindspore_issues'
-    jt_dir =  'data/history_errors/jittor_issues'
+    jt_dir = 'data/history_errors/jittor_issues'
     added_torch_errors_num = attach_history_errors(session, torch_dir, 'Pytorch')
     added_jax_errors_num = attach_history_errors(session, jax_dir, 'JAX')
     added_ms_errors_num = attach_history_errors(session, ms_dir, 'MindSpore')
-    #added_jittor_errors_num = attach_history_errors(session, jt_dir, 'Jittor')
+    # added_jittor_errors_num = attach_history_errors(session, jt_dir, 'Jittor')
     print(f"Total number of added Pytorch history issues: {added_torch_errors_num}")  # 93(旧) 1419(新)
     print(f"Total number of added JAX history issues: {added_jax_errors_num}")  # 562(旧) 1476(新)
     print(f"Total number of added MindSpore history issues: {added_ms_errors_num}")  # 350

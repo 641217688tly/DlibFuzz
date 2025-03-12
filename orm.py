@@ -38,7 +38,6 @@ class API(Base):
     output = Column(Text, nullable=True)  # API的返回值信息, 比如Tensor, Shape: torch.Size([N, *])
     description = Column(Text, nullable=True)  # 对该API功能的描述
     example = Column(Text, nullable=True)  # 该API的示例调用代码
-    is_example_handled = Column(Boolean, default=False)  # 该API的示例代码是否已经被处理过了
     is_clustered = Column(Boolean, default=False)  # 该API是否已经被执行匹配
     history_errors = relationship('APIHistoryError', back_populates='api')  # 一个API可能有多个触发bug的代码片段
 
