@@ -34,7 +34,7 @@ class API(Base):
     full_name = Column(String(255), nullable=True)  # API的完整名字 = 模块名.API名, 比如torch.nn.functional.softmax
     signature = Column(Text, nullable=True)  # API函数签名, 比如torch.nn.functional.softmax(input, dim=None, _stacklevel=3, dtype=None) -> Tensor
     parameters = Column(Text, nullable=True)  # API的参数信息, 比如input: Tensor, dim: Optional[int] = None, _stacklevel: int = 3, dtype: Optional[int] = None
-    attributes = Column(Text, nullable=True) # 如果API的类型是class, 则使用该字段存储类的属性信息
+    attributes = Column(Text, nullable=True) # 如果API的类型是class, 则使用该字段存储类的属性和方法信息
     output = Column(Text, nullable=True)  # API的返回值信息, 比如Tensor, Shape: torch.Size([N, *])
     description = Column(Text, nullable=True)  # 对该API功能的描述
     example = Column(Text, nullable=True)  # 该API的示例调用代码

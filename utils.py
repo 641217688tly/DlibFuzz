@@ -84,7 +84,7 @@ def validate_api_existence(module_name: str, api_name: str):  # 验证API是否�
         #     return True
         return True
     except (ModuleNotFoundError, AttributeError, ImportError, ValueError, Exception) as e:
-        # print(f"validate_api_existence() encounters an error: {e}")
+        print(f"validate_api_existence() encounters an error: {e}")
         return False
 
 
@@ -140,7 +140,7 @@ def inspect_api_info(module_name, api_name):
     try:
         description = inspect.getdoc(func)
     except Exception as e:
-        print(f"Error getting doc for {module_name}.{api_name}: {e}")
+        print(f"inspect_api_info(): Error getting doc for {module_name}.{api_name} due to: {e}")
 
     # 获取API所属的库
     api_lib = module_name.split('.')[0]  # 用"."分割module_name, 然后取第一个部分作为库名
@@ -164,45 +164,6 @@ def inspect_api_info(module_name, api_name):
         "version": version
     }
     return api_info
-
-
-def check_api_list(file_path):  # 检查每个API是否存在
-    with open(file_path, 'r') as file:
-        api_names = [line.strip() for line in file.readlines()]
-    results = {}
-    exists_count = 0
-    not_exists_count = 0
-    for full_api_name in api_names:
-        module_name, api_name = full_api_name.rsplit('.', 1)
-        try:
-            existence = validate_api_existence(module_name, api_name)
-            results[full_api_name] = existence
-            if existence:
-                exists_count += 1
-            else:
-                not_exists_count += 1
-        except ModuleNotFoundError:
-            results[full_api_name] = False
-            not_exists_count += 1
-    return results, exists_count, not_exists_count
-
-
-def check_all_api_lists():
-    file_path1 = 'cluster/apis/jax/jax_valid_apis.txt'
-    file_path2 = 'cluster/apis/pytorch/torch_valid_apis.txt'
-    file_path3 = 'cluster/apis/tensorflow/tf_valid_apis.txt'
-    api_check_results1, exists_count1, not_exists_count1 = check_api_list(file_path1)
-    # for api, exists in api_check_results.items():
-    #     print(f"{api}: {'Exists' if exists else 'Does not exist'}")
-    print(f"\nNumber of JAX APIs that exist: {exists_count1}")
-    print(f"Number of JAX APIs that do not exist: {not_exists_count1}")
-    api_check_results2, exists_count2, not_exists_count2 = check_api_list(file_path2)
-    print(f"\nNumber of Pytorch APIs that exist: {exists_count2}")
-    print(f"Number of Pytorch APIs that do not exist: {not_exists_count2}")
-    api_check_results3, exists_count3, not_exists_count3 = check_api_list(file_path3)
-    print(f"\nNumber of Tensorflow APIs that exist: {exists_count3}")
-    print(f"Number of Tensorflow APIs that do not exist: {not_exists_count3}")
-
 
 def get_api_signature(full_api_name):
     """
