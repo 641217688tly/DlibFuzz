@@ -264,8 +264,8 @@ if __name__ == "__main__":
     # for pr in pr_torch:
     #     save_to_file(save_directory, 'pytorch_pr', str(index_pytorch_pr), pr)
     #     index_pytorch_pr += 1
-    
-    
+
+
     # fetch issues and pull requests from JAX
     print('Fetching issues from JAX...')
     issues_jax = fetch_issues(saving_directory=save_directory, 
@@ -295,7 +295,7 @@ if __name__ == "__main__":
                              label='all'
                              )
 
-    
+
     # fetch issues from MindSpore's Gitee repository
     print('Fetching issues from MindSpore...')
     issues_ms_gitee = fetch_issues_gitee(saving_directory=save_directory, 
@@ -307,7 +307,6 @@ if __name__ == "__main__":
                                          )
 
 
-
     # print('Fetching pull requests from MindSpore...')
     # pr_ms = fetch_pull_requests('mindspore-ai', 'mindspore', num_results=1000)
 
@@ -317,5 +316,27 @@ if __name__ == "__main__":
     #     save_to_file(save_directory, 'ms_pr', str(index_ms_pr), pr)
     #     index_ms_pr += 1
 
+ 
+    # fetch issues and pull requests from Jittor
+    print('Fetching issues from Jittor...')
+    issues_jt = fetch_issues(saving_directory=save_directory, 
+                             dir_prefix='jittor_issues', 
+                             repo_owner='Jittor', 
+                             repo_name='jittor', 
+                             num_results=5000, 
+                             label='all'
+                             )
+
+
+    # print('Fetching pull requests from Jittor...')
+    # pr_jt = fetch_pull_requests('Jittor', 'jittor', num_results=1000)
+
+    # print('Saving the results to "jt_pr"...')
+    # index_jt_pr = 0
+    # for pr in pr_jt:
+    #     save_to_file(save_directory, 'ms_jt', str(index_jt_pr), pr)
+    #     index_ms_jt += 1
+
 
     print('Done!')
+
