@@ -80,7 +80,8 @@ def create_vector_store_batched(documents, embeddings, batch_size=100):
 def initialize_rag_system(documents_dir: list, 
                           is_local: bool,
                           openai_model: str = "gpt-4o-mini", 
-                          openai_api_key: str = ''
+                          openai_api_key: str = '',
+                          instructions_template: str = None
                           ):
     
     # Initialize embeddings
@@ -128,17 +129,30 @@ def initialize_rag_system(documents_dir: list,
     print('LLM initialized.')
     
     # Step 5: Establish RAG pipeline
-    prompt_template = """
-    Instructions:
-    You are an AI assistant specialized in processing deep learning code based on user requirements.
-    Answer the User Query using the following retrieved documents. If the documents are not relevant, rely on your training data.
 
-    Retrieved Documents:
-    {context}
-    
-    User Query:
-    {question}
-    """
+    if instructions_template is None:
+        prompt_template = """
+        Instructions:
+        You are an AI assistant specialized in processing deep learning code based on user requirements.
+        Answer the User Query using the following retrieved documents. If the documents are not relevant, rely on your training data.
+
+        Retrieved Documents:
+        {context}
+        
+        User Query:
+        {question}
+
+        """
+    else:
+        prompt_template = "Instrustions:\n" + instructions_template + """
+
+        Retrieved Documents:
+        {context}
+        
+        User Query:
+        {question}
+
+        """
 
     prompt = ChatPromptTemplate.from_template(prompt_template) # PROMPT?
 
