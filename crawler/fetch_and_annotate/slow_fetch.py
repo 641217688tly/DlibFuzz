@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from urllib3 import Retry
 
+
 load_dotenv()
 
 def create_session_with_retries():
@@ -35,8 +36,6 @@ def fetch_issues(saving_directory: str,
     headers = {'Authorization': os.getenv('GITHUB_TOKEN', '')}
     print(f"token: {os.getenv('GITHUB_TOKEN', '')}")
 
-
-        
 
     while len(issues) < num_results:
         url =f'https://api.github.com/repos/{repo_owner}/{repo_name}/issues'
@@ -77,6 +76,7 @@ def fetch_issues(saving_directory: str,
                            'state':state, 
                            'content': content
                            })
+            print(f"Processed issue from {issue_url}")
             if len(issues) >= num_results:
                 break
         page += 1
@@ -125,6 +125,8 @@ def fetch_pull_requests(saving_directory: str,
                                   'url': pr_url, 
                                   'content': content
                                   })
+
+            print(f"Processed pull request from {pr_url}")
             if len(pull_requests) >= num_results:
                 break
         page += 1
@@ -187,6 +189,7 @@ def fetch_issues_gitee(saving_directory: str,
                            'state': state, 
                            'content': content
                            })
+            print(f"Processed issue from {issue_url}")
             if len(issues) >= num_results:
                 break
         page += 1
@@ -200,7 +203,8 @@ def fetch_issue_content(issue_url: str) -> str:
         return 'Failed to fetch issue content.'
     
     soup = BeautifulSoup(response.text, 'html.parser')
-    content_div = soup.find('div', {'class': 'edit-comment-hide'})
+    # content_div = soup.find('div', {'class': 'edit-comment-hide'})
+    content_div = soup.find('div', {'class': 'Box-sc-g0xbh4-0 bDlPR react-issue-body'})
     content = content_div.text.strip() if content_div else 'No content found...'
     return content
 
