@@ -830,14 +830,13 @@ if __name__ == '__main__':
     # process_unhandled_docs() # done
 
     # 向数据库中添加API信息
-    # core_html_file_folder = './../data/docs/ms/2.5.0/api mapping docs/2.5.0/handled/'
-    # add_mindspore_apis_from_doc(core_html_file_folder)  # 共1889个Pytorch文档, 其中能够被正确导入的API有1059个
-
+    core_html_file_folder = './../data/docs/ms/2.5.0/api mapping docs/2.5.0/handled/'
+    add_mindspore_apis_from_doc(core_html_file_folder)
     #file_path = './../data/docs/ms/2.5.0/api mapping docs/2.5.0/handled/mindspore.dataset.vision.Normalize.html'
     #file_path = './../data/docs/ms/2.5.0/api mapping docs/2.5.0/handled/mindspore.communication.comm_func.all_gather_into_tensor.html'
-    file_path = './../data/docs/ms/2.5.0/api mapping docs/2.5.0/handled/mindspore.dataset.audio.SlidingWindowCmn.html'
-    loader = MindsporeAPILoader(file_path, get_session())
-    api_info = loader.extract_api_info()
-    for key, value in api_info.items():
-        print(f"{key}: \n{value}")
-        print("=" * 50)
+    #file_path = './../data/docs/ms/2.5.0/api mapping docs/2.5.0/handled/mindspore.dataset.audio.SlidingWindowCmn.html'
+    #loader = MindsporeAPILoader(file_path, get_session())
+    #api_info = loader.extract_api_info()
+    #for key, value in api_info.items():
+    #    print(f"{key}: \n{value}")
+    #    print("=" * 50)
