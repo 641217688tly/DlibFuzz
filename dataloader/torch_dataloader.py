@@ -152,9 +152,60 @@ class PytorchDocumentationHandler:
         with open(self.plain_text_file_path, 'w', encoding='utf-8') as output_file:
             output_file.write(final_text)
 
+def process_unhandled_docs(raw_dir='./../data/docs/torch/docs/2.3/raw/',
+                           handled_dir='./../data/docs/torch/docs/2.3/handled/',
+                           plain_text_dir='./../rag/docs/pytorch/2.3'):
+    """
+    查找raw_dir中未同时在handled_dir和plain_text_dir中处理过的文档，并进行处理
+    """
+    # 确保输出目录存在
+    os.makedirs(handled_dir, exist_ok=True)
+    os.makedirs(plain_text_dir, exist_ok=True)
+
+    # 获取已处理的HTML文件列表
+    handled_files = set()
+    if os.path.exists(handled_dir):
+        handled_files = {f for f in os.listdir(handled_dir) if f.endswith('.html')}
+
+    # 获取已处理的纯文本文件列表（注意：需要将.txt转换为.html以便比较）
+    plain_text_files = set()
+    if os.path.exists(plain_text_dir):
+        plain_text_files = {f.replace('.txt', '.html') for f in os.listdir(plain_text_dir) if f.endswith('.txt')}
+
+    # 获取原始文件列表
+    raw_files = set()
+    if os.path.exists(raw_dir):
+        raw_files = {f for f in os.listdir(raw_dir) if f.endswith('.html')}
+
+    # 找出未在两个目录中同时处理的文件
+    # 文件必须同时不在handled_dir和plain_text_dir中，或者只在其中一个目录中存在
+    unhandled_files = []
+    for f in raw_files:
+        is_in_handled = f in handled_files
+        is_in_plain_text = f in plain_text_files
+
+        # 如果文件不是同时存在于两个目录，则需要处理
+        if not (is_in_handled and is_in_plain_text):
+            unhandled_files.append(f)
+
+    print(f"发现 {len(unhandled_files)} 个需要处理的文件")
+    print(f"总文件数: {len(raw_files)}, 已处理HTML文件: {len(handled_files)}, 已处理文本文件: {len(plain_text_files)}")
+
+    # 处理未完全处理的文件
+    for file, i in zip(unhandled_files, range(len(unhandled_files))):
+        raw_file_path = os.path.join(raw_dir, file)
+        try:
+            handler = PytorchDocumentationHandler(raw_file_path=raw_file_path)
+            print(f"进度: {i + 1}/{len(unhandled_files)}")
+        except Exception as e:
+            print(f"处理文件 {file} 时出错: {str(e)}")
+            # 打印详细的堆栈跟踪以便调试
+            import traceback
+            traceback.print_exc()
+    print("所有需要处理的文件已处理完成")
 
 class PytorchAPILoader:
-    def __init__(self, core_html_file_path, db_session, lib_ver="2.3"):
+    def __init__(self, core_html_file_path, db_session, lib_ver="2.3.0"):
         self.file_path = core_html_file_path
         self.session = db_session
         self.lib_ver = lib_ver
@@ -488,60 +539,6 @@ class PytorchAPILoader:
             print(f"Error: {e}")
             self.session.rollback()
 
-
-def process_unhandled_docs(raw_dir='./../data/docs/torch/docs/2.3/raw/',
-                           handled_dir='./../data/docs/torch/docs/2.3/handled/',
-                           plain_text_dir='./../rag/docs/pytorch/2.3'):
-    """
-    查找raw_dir中未同时在handled_dir和plain_text_dir中处理过的文档，并进行处理
-    """
-    # 确保输出目录存在
-    os.makedirs(handled_dir, exist_ok=True)
-    os.makedirs(plain_text_dir, exist_ok=True)
-
-    # 获取已处理的HTML文件列表
-    handled_files = set()
-    if os.path.exists(handled_dir):
-        handled_files = {f for f in os.listdir(handled_dir) if f.endswith('.html')}
-
-    # 获取已处理的纯文本文件列表（注意：需要将.txt转换为.html以便比较）
-    plain_text_files = set()
-    if os.path.exists(plain_text_dir):
-        plain_text_files = {f.replace('.txt', '.html') for f in os.listdir(plain_text_dir) if f.endswith('.txt')}
-
-    # 获取原始文件列表
-    raw_files = set()
-    if os.path.exists(raw_dir):
-        raw_files = {f for f in os.listdir(raw_dir) if f.endswith('.html')}
-
-    # 找出未在两个目录中同时处理的文件
-    # 文件必须同时不在handled_dir和plain_text_dir中，或者只在其中一个目录中存在
-    unhandled_files = []
-    for f in raw_files:
-        is_in_handled = f in handled_files
-        is_in_plain_text = f in plain_text_files
-
-        # 如果文件不是同时存在于两个目录，则需要处理
-        if not (is_in_handled and is_in_plain_text):
-            unhandled_files.append(f)
-
-    print(f"发现 {len(unhandled_files)} 个需要处理的文件")
-    print(f"总文件数: {len(raw_files)}, 已处理HTML文件: {len(handled_files)}, 已处理文本文件: {len(plain_text_files)}")
-
-    # 处理未完全处理的文件
-    for file, i in zip(unhandled_files, range(len(unhandled_files))):
-        raw_file_path = os.path.join(raw_dir, file)
-        try:
-            handler = PytorchDocumentationHandler(raw_file_path=raw_file_path)
-            print(f"进度: {i + 1}/{len(unhandled_files)}")
-        except Exception as e:
-            print(f"处理文件 {file} 时出错: {str(e)}")
-            # 打印详细的堆栈跟踪以便调试
-            import traceback
-            traceback.print_exc()
-    print("所有需要处理的文件已处理完成")
-
-
 def add_pytorch_apis_from_doc(folder_path):
     # 先获取folder_path下的所有HTML文件
     html_files = [f for f in os.listdir(folder_path) if f.endswith('.html')]
@@ -563,7 +560,7 @@ if __name__ == "__main__":
     # process_unhandled_docs() # done
 
     # 向数据库中添加API信息
-    core_html_file_folder = './../data/docs/torch/docs/2.3/handled/'
+    core_html_file_folder = './../data/docs/torch/docs/2.3.0/handled/'
     add_pytorch_apis_from_doc(core_html_file_folder)  # 共1889个Pytorch文档, 其中能够被正确导入的API有1059个
 
     # # file_path = './../data/docs/torch/docs/2.3/raw/torch._assert.html'

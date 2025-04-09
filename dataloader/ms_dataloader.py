@@ -377,6 +377,121 @@ def process_unhandled_docs(raw_dir='./../data/docs/ms/2.5.0/api mapping docs/2.5
     print("所有需要处理的文件已处理完成")
 
 
+class MindsporeAPILoader:
+    def __init__(self, core_html_file_path, db_session, lib_ver="2.5.0"):
+        self.file_path = core_html_file_path
+        self.session = db_session
+        self.lib_ver = lib_ver
+        self.api_full_name = core_html_file_path.split('/')[-1].replace('.html', '')
+        self.save2db(self.extract_api_info())
+
+    def extract_api_info(self):
+        """
+        从HTML中提取API的信息:
+        1. name - API名称
+        2. module - 所属模块
+        3. full_name - 完整名称
+        4. lib - 固定为Mindspore
+        5. version - API版本
+        6. signature - 函数签名
+        7. parameters - 参数信息
+        8. attributes - 类属性(如果是类)和类方法
+        9. output - 返回值信息
+        10. description - API描述
+        11. example - 使用示例
+        """
+        with open(self.file_path, 'r', encoding='utf-8') as file:
+            html_content = file.read()
+
+        soup = BeautifulSoup(html_content, 'html.parser')
+
+        # 基本信息提取
+        full_name = self.api_full_name
+        name_parts = full_name.split('.')
+
+        api_info = {
+            'name': name_parts[-1],
+            'lib': 'MindSpore',
+            'version': self.lib_ver,
+            'module': '.'.join(name_parts[:-1]) if len(name_parts) > 1 else name_parts[0],
+            'full_name': full_name,
+            'parameters': "",
+            'attributes': "",
+            'output': "",
+            'description': "",
+            'example': "",
+            'signature': ""
+        }
+
+        # TODO
+
+        # 对提取到的API数据进行后处理
+        # 1. 处理signature
+        if is_function:
+            if not api_info['signature']:  # 如果signature为空，则默认full_name()为signature
+                api_info['signature'] = f"{api_info['full_name']}()"
+            if api_info['output']:
+                api_info['signature'] = f"{api_info['signature']} -> ({api_info['output']})"
+        elif is_class:
+            if not api_info['signature']:  # 如果signature为空，则默认full_name为signature
+                api_info['signature'] = f"{api_info['full_name']}"
+        # 2. 使用Inspect库获取更多参数信息
+        additional_api_info = inspect_api_info(api_info['module'], api_info['name'])
+        # 逐一检查additional_api_info中的条目, 如果api_info中对应的条目为空，则使用additional_api_info中的内容替换
+        for key, value in additional_api_info.items():
+            if not api_info[key]:
+                api_info[key] = value
+        return api_info
+
+    def save2db(self, api_info):
+        try:
+            # 检查数据库中是否已存在该API
+            api_exists = self.session.query(API).filter_by(full_name=api_info['full_name'], lib='Mindspore',
+                                                           version=self.lib_ver).first()
+            if api_exists:
+                return
+
+            # 创建API实例并添加到session
+            new_api = API(
+                name=api_info['name'],
+                lib=api_info['lib'],
+                version=api_info['version'],
+                module=api_info['module'],
+                full_name=api_info['full_name'],
+                signature=api_info['signature'],
+                parameters=api_info['parameters'],
+                attributes=api_info['attributes'],
+                output=api_info['output'],
+                description=api_info['description'],
+                example=api_info['example']
+            )
+            self.session.add(new_api)
+            self.session.commit()
+        except Exception as e:
+            print(f"Error: {e}")
+            self.session.rollback()
+
+
+def add_mindspore_apis_from_doc(folder_path):
+    # 先获取folder_path下的所有HTML文件
+    html_files = [f for f in os.listdir(folder_path) if f.endswith('.html')]
+    for file, i in zip(html_files, range(len(html_files))):
+        file_path = os.path.join(folder_path, file)
+        try:
+            full_api_name = file.replace('.html', '')
+            module_name = '.'.join(full_api_name.split('.')[:-1])
+            api_name = full_api_name.split('.')[-1]
+            if validate_api_existence(module_name, api_name):  # 如果API能够被正确导入
+                loader = MindsporeAPILoader(file_path, get_session())
+            print(f"进度: {i + 1}/{len(html_files)}")
+        except Exception as e:
+            print(f"处理文件 {file} 时出错: {str(e)}")
+
+
 if __name__ == '__main__':
     # 处理未处理的文档
-    process_unhandled_docs()
+    # process_unhandled_docs() # done
+
+    # 向数据库中添加API信息
+    core_html_file_folder = './../data/docs/ms/2.5.0/api mapping docs/2.5.0/handled/'
+    add_mindspore_apis_from_doc(core_html_file_folder)  # 共1889个Pytorch文档, 其中能够被正确导入的API有1059个
