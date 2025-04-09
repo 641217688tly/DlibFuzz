@@ -32,7 +32,7 @@ Definition of Equivalent API:
 - State Equivalent: Given the same parameter inputs, calling an API and its state-equivalent API may produce different return values or perform different in-place operations on the initial input. However, their runtime states after being called should be identical (for example, both should execute normally or both should encounter a crash).
 - Non-Equivalent: For APIs that modify the global or contextual environment (such as setting random seeds, configuring GPUs, configuring logs, etc.), we define that these APIs do not have equivalent APIs.
 Definition of Equivalent API Groups:
--If the functionality of an API can be achieved by calling a group of APIs, then this group of APIs is defined as an "Equivalent API Group".
+- If the functionality of an API can be achieved by calling a group of APIs, then this group of APIs is defined as an "Equivalent API Group".
 (3) Output Format
 Provide the answer in JSON format:
 - Key: The name of the deep learning library where the target API resides.

@@ -66,9 +66,8 @@ def parse_jax_api(html_content, module_name):
 
     return {
         "name": api_name,
-        "lib": "Jittor",
-        # "version": jax.__version__,
-        "version": None,
+        "lib": "JAX",
+        "version": "0.4.13",
         "module": module_name,
         "full_name": full_name,
         "signature": signature,

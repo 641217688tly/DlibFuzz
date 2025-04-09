@@ -167,11 +167,11 @@ if __name__ == '__main__':
     # add_apis_from_json(session, '../data/apis/mindspore/ms_apis.json', 'MindSpore', "2.4.0")
     # add_apis_from_json(session, '../data/apis/jittor/jt_apis.json', 'Jittor', "1.3.9.10")
 
-    # 将错误触发代码附加到Pytorch/JAX API下
+    # 将错误触发代码附加到Pytorch/JAX/MindSpore/Jittor APIs下
     torch_dir = '../data/history_errors/pytorch_issues'
     jax_dir = '../data/history_errors/jax_issues'
     ms_dir = '../data/history_errors/mindspore_issues'
-    jt_dir = 'data/history_errors/jittor_issues'
+    jt_dir = '../data/history_errors/jittor_issues'
     added_torch_errors_num = attach_history_errors(session, torch_dir, 'Pytorch')
     added_jax_errors_num = attach_history_errors(session, jax_dir, 'JAX')
     added_ms_errors_num = attach_history_errors(session, ms_dir, 'MindSpore')
@@ -179,4 +179,4 @@ if __name__ == '__main__':
     print(f"Total number of added Pytorch history issues: {added_torch_errors_num}")  # 93(旧) 1419(新)
     print(f"Total number of added JAX history issues: {added_jax_errors_num}")  # 562(旧) 1476(新)
     print(f"Total number of added MindSpore history issues: {added_ms_errors_num}")  # 350
-    print(f"Total number of added Jittor error triggers: {added_jittor_errors_num}")  #
+    print(f"Total number of added Jittor error triggers: {added_jittor_errors_num}")  # 41

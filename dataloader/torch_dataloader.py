@@ -560,7 +560,7 @@ if __name__ == "__main__":
     # process_unhandled_docs() # done
 
     # 向数据库中添加API信息
-    core_html_file_folder = './../data/docs/torch/docs/2.3.0/handled/'
+    core_html_file_folder = './../data/docs/torch/2.3.0/handled/'
     add_pytorch_apis_from_doc(core_html_file_folder)  # 共1889个Pytorch文档, 其中能够被正确导入的API有1059个
 
     # # file_path = './../data/docs/torch/docs/2.3/raw/torch._assert.html'
