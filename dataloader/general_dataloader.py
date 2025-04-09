@@ -143,8 +143,7 @@ def attach_history_errors(db_session, dir_path, lib, whether_supplement_api=Fals
                             db_session.add(new_errors)
                         print(f"Successfully processed {full_api_name}\n")
                     else:
-                        print(
-                            f"WARNING: The {full_api_name} does not exist or is deprecated in the current version of the library!\n")
+                        print(f"WARNING: The {full_api_name} does not exist or is deprecated in the current version of the library!\n")
                     db_session.commit()  # 提交所有更改
                 except Exception as e:
                     db_session.rollback()  # 出现异常时回滚

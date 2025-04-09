@@ -151,5 +151,5 @@ if __name__ == "__main__":
     # 使用抽取出的函数来分别标注 PyTorch、JAX、MindSpore 的 issues
     #read_and_annotate_issues("pytorch", prompt_template, uid)
     #read_and_annotate_issues("jax", prompt_template, uid)
-    read_and_annotate_issues("mindspore", prompt_template, uid)
+    read_and_annotate_issues("jittor", prompt_template, uid)
     print("Done!")

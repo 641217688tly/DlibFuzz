@@ -76,7 +76,7 @@ def parse_jittor_api(html_content, module_name):
     return api_list
 
 
-def process_jittor_api(root_dir): # add jittor api from html folder
+def process_jittor_api(root_dir):  # add jittor api from html folder
     """
     遍历指定目录下所有 Jittor HTML 文件（每个文件代表一个模块）
     """
@@ -113,6 +113,89 @@ def process_jittor_api(root_dir): # add jittor api from html folder
                     print(f"Inserted Jittor API: {api_entry.full_name}")
 
 
+def export_plain_text_file(input_folder, output_folder):
+    """
+    将input_folder下的所有jittor文档(html文件)转换为纯文本格式，
+    只保留API文档相关内容，并保存到output_folder下的同名.txt文件中
+
+    Args:
+        input_folder (str): 输入文件夹路径，包含HTML文件
+        output_folder (str): 输出文件夹路径，将保存转换后的TXT文件
+    """
+    # 确保输出文件夹存在
+    os.makedirs(output_folder, exist_ok=True)
+
+    # 获取输入文件夹中的所有HTML文件
+    html_files = [f for f in os.listdir(input_folder) if f.endswith('.html')]
+
+    # 处理每个HTML文件
+    for html_file in html_files:
+        input_path = os.path.join(input_folder, html_file)
+        output_file = os.path.splitext(html_file)[0] + '.txt'
+        output_path = os.path.join(output_folder, output_file)
+
+        try:
+            # 读取HTML文件
+            with open(input_path, 'r', encoding='utf-8') as file:
+                html_content = file.read()
+
+            # 使用BeautifulSoup解析HTML
+            soup = BeautifulSoup(html_content, 'html.parser')
+
+            # 只提取主要内容区域，通常是包含API文档的部分
+            main_content = soup.find('div', {'role': 'main'})
+
+            if main_content:
+                # 移除可能存在的页脚、翻页按钮等无关元素
+                for element in main_content.find_all(['footer', 'nav']):
+                    element.decompose()
+
+                # 提取标题和API文档内容
+                title = soup.find('title')
+                title_text = title.get_text() if title else ""
+
+                # 提取文本内容
+                content_text = main_content.get_text(separator='\n', strip=True)
+
+                # 清理文本（移除多余的空行和空格）
+                content_text = re.sub(r'\n\s*\n', '\n\n', content_text)
+
+                # 组合最终文本
+                final_text = f"{title_text}\n\n{content_text}" if title_text else content_text
+
+                # 写入到输出文件
+                with open(output_path, 'w', encoding='utf-8') as file:
+                    file.write(final_text)
+
+                print(f"已转换: {html_file} -> {output_file}")
+            else:
+                # 如果找不到主要内容区域，则提取整个body的内容
+                body = soup.find('body')
+                if body:
+                    # 移除导航栏、页脚等元素
+                    for nav in body.find_all(['nav', 'footer', 'div'], class_=['wy-nav-side', 'rst-footer-buttons']):
+                        nav.decompose()
+
+                    # 提取文本
+                    body_text = body.get_text(separator='\n', strip=True)
+                    body_text = re.sub(r'\n\s*\n', '\n\n', body_text)
+
+                    # 写入到输出文件
+                    with open(output_path, 'w', encoding='utf-8') as file:
+                        file.write(body_text)
+
+                    print(f"已转换(使用body内容): {html_file} -> {output_file}")
+                else:
+                    print(f"警告: 无法在 {html_file} 中找到有效内容")
+
+        except Exception as e:
+            print(f"处理文件 {html_file} 时出错: {str(e)}")
+
+    print(f"完成! 共处理 {len(html_files)} 个HTML文件")
+
+
 if __name__ == "__main__":
     jittor_docs_folder_path = "./../data/docs/jittor/1.3.9.2/handled"
-    process_jittor_api(jittor_docs_folder_path)
+    rag_docs_folder_path = "./../rag/docs/jittor/1.3.9.2/"
+    # process_jittor_api(jittor_docs_folder_path)
+    export_plain_text_file(jittor_docs_folder_path, rag_docs_folder_path)
