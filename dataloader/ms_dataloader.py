@@ -391,7 +391,7 @@ class MindsporeAPILoader:
         1. name - API名称
         2. module - 所属模块
         3. full_name - 完整名称
-        4. lib - 固定为Mindspore
+        4. lib - 固定为MindSpore
         5. version - API版本
         6. signature - 函数签名
         7. parameters - 参数信息
@@ -423,30 +423,367 @@ class MindsporeAPILoader:
             'signature': ""
         }
 
-        # TODO
+        # 确定API类型(函数或类)
+        is_class = bool(soup.find('dl', {'class': 'py class'}))
+        is_function = bool(soup.find('dl', {'class': 'py function'}))
 
-        # 对提取到的API数据进行后处理
-        # 1. 处理signature
-        if is_function:
-            if not api_info['signature']:  # 如果signature为空，则默认full_name()为signature
-                api_info['signature'] = f"{api_info['full_name']}()"
-            if api_info['output']:
-                api_info['signature'] = f"{api_info['signature']} -> ({api_info['output']})"
-        elif is_class:
-            if not api_info['signature']:  # 如果signature为空，则默认full_name为signature
-                api_info['signature'] = f"{api_info['full_name']}"
-        # 2. 使用Inspect库获取更多参数信息
-        additional_api_info = inspect_api_info(api_info['module'], api_info['name'])
-        # 逐一检查additional_api_info中的条目, 如果api_info中对应的条目为空，则使用additional_api_info中的内容替换
-        for key, value in additional_api_info.items():
-            if not api_info[key]:
-                api_info[key] = value
-        return api_info
+        # 提取signature(函数签名)
+        sig_element = soup.find('dt', {'class': 'sig sig-object py'})
+        if sig_element:
+            # 获取原始签名文本
+            raw_signature = sig_element.get_text(strip=True)
+
+            # 移除[source]¶和其他可能的无关内容
+            if '[source]' in raw_signature:
+                raw_signature = raw_signature.split('[source]')[0]
+            if '¶' in raw_signature:
+                raw_signature = raw_signature.split('¶')[0]
+            if raw_signature.startswith('class'):
+                raw_signature = raw_signature[5:].strip()  # 移除"class"及其后面的空格
+
+            api_info['signature'] = raw_signature
+
+        # 提取description(描述)
+        desc_element = soup.find('dd')
+        if desc_element:
+            # 提取主要描述文本
+            description_text = []
+
+            # 获取所有直接子p元素，这些通常是主要描述
+            paragraphs = desc_element.find_all('p', recursive=False)
+            for p in paragraphs:
+                if not p.find('dl') and not p.find_parent('div', {'class': 'admonition note'}):  # 避免包含参数列表和注释
+                    description_text.append(p.get_text(strip=True))
+
+            # 提取数学公式和其他说明文本
+            math_sections = desc_element.find_all('div', {'class': 'math'})
+            for math in math_sections:
+                if not math.parent.name == 'dd' or not math.parent.parent.name == 'dl':  # 避免提取参数或返回值中的公式
+                    math_text = math.get_text(strip=True)
+                    if math_text:
+                        description_text.append(f"Formula: {math_text}")
+
+            # 提取注意事项 - 只提取不在Examples部分的注意事项
+            notes = desc_element.find_all('div', {'class': 'admonition note'})
+            for note in notes:
+                # 检查这个note是否在Examples部分
+                is_in_examples = False
+                prev_elem = note.previous_sibling
+                while prev_elem:
+                    if hasattr(prev_elem, 'name') and prev_elem.name == 'p' and 'Examples' in prev_elem.get_text():
+                        is_in_examples = True
+                        break
+                    prev_elem = prev_elem.previous_sibling
+
+                if not is_in_examples:
+                    note_content = note.find_all('p')
+                    if len(note_content) > 1:  # 跳过只有标题的注释
+                        note_text = ' '.join([p.get_text(strip=True) for p in note_content[1:]])
+                        description_text.append(f"Note: {note_text}")
+
+            api_info['description'] = '\n'.join(description_text) if description_text else ""
+
+            # 根据API类型提取不同信息
+            if is_function:
+                # 函数参数提取
+                param_section = desc_element.find('dl', {'class': 'field-list simple'})
+                if param_section:
+                    param_items = []
+                    param_terms = param_section.find_all('dt')
+                    param_descs = param_section.find_all('dd')
+
+                    for i, term in enumerate(param_terms):
+                        if 'Parameters' in term.get_text():
+                            if i < len(param_descs):
+                                param_list = param_descs[i].find_all('li')
+                                for param in param_list:
+                                    param_items.append(param.get_text(strip=True))
+
+                    api_info['parameters'] = '\n'.join(param_items) if param_items else ""
+
+                # 返回值提取
+                return_section = desc_element.find_all('dt')
+                for section in return_section:
+                    if 'Returns' in section.get_text():
+                        next_dd = section.find_next('dd')
+                        if next_dd:
+                            api_info['output'] = next_dd.get_text(strip=True)
+                    elif 'Return type' in section.get_text():
+                        next_dd = section.find_next('dd')
+                        if next_dd and not api_info['output']:
+                            api_info['output'] = next_dd.get_text(strip=True)
+
+                # 如果有Shape信息，也添加到output
+                shape_section = desc_element.find('dl')
+                if shape_section and 'Shape:' in shape_section.get_text():
+                    shape_text = []
+                    shape_items = shape_section.find_all(['dt', 'dd'])
+                    for item in shape_items:
+                        shape_text.append(item.get_text(strip=True))
+
+                    if api_info['output']:
+                        api_info['output'] += '\nShape: ' + ' '.join(shape_text)
+                    else:
+                        api_info['output'] = 'Shape: ' + ' '.join(shape_text)
+
+            elif is_class:
+                # 类参数提取
+                param_section = desc_element.find('dl', {'class': 'field-list simple'})
+                if param_section:
+                    param_items = []
+                    param_terms = param_section.find_all('dt')
+                    param_descs = param_section.find_all('dd')
+
+                    for i, term in enumerate(param_terms):
+                        if 'Parameters' in term.get_text():
+                            if i < len(param_descs):
+                                param_list = param_descs[i].find_all('li')
+                                for param in param_list:
+                                    param_items.append(param.get_text(strip=True))
+
+                    api_info['parameters'] = '\n'.join(param_items) if param_items else ""
+
+                # 类属性和方法提取
+                attributes = []
+
+                # 1. 提取类属性 (如果有的话)
+                attr_sections = desc_element.find_all(['dl', 'div'], {'class': ['field-list', 'attribute']})
+                for section in attr_sections:
+                    if 'Attributes' in section.get_text():
+                        attr_items = section.find_all('li')
+                        for attr in attr_items:
+                            attributes.append(f"Attribute: {attr.get_text(strip=True)}")
+
+                # 2. 提取类方法 - 查找所有 py method 元素
+                method_sections = soup.find_all('dl', {'class': 'py method'})
+                for method_section in method_sections:
+                    # 获取方法签名
+                    method_sig = method_section.find('dt', {'class': 'sig sig-object py'})
+                    if method_sig:
+                        method_signature = method_sig.get_text(strip=True)
+
+                        # 移除[source]¶和其他可能的无关内容
+                        if '[source]' in method_signature:
+                            method_signature = method_signature.split('[source]')[0]
+                        if '¶' in method_signature:
+                            method_signature = method_signature.split('¶')[0]
+
+                        # 获取方法描述
+                        method_desc = method_section.find('dd')
+                        method_desc_text = ""
+                        if method_desc:
+                            method_desc_paras = method_desc.find_all('p', recursive=False)
+                            if method_desc_paras:
+                                method_desc_text = " ".join([p.get_text(strip=True) for p in method_desc_paras])
+
+                        # 将方法信息添加到属性列表
+                        method_info = f"Method: {method_signature}"
+                        if method_desc_text:
+                            method_info += f" - {method_desc_text}"
+
+                        attributes.append(method_info)
+
+                api_info['attributes'] = '\n'.join(attributes) if attributes else ""
+
+                # 提取Shape信息作为output
+                shape_section = desc_element.find('dl')
+                if shape_section:
+                    dt_elements = shape_section.find_all('dt')
+                    for dt in dt_elements:
+                        if 'Shape:' in dt.get_text():
+                            shape_info = []
+                            # 找到Shape后的所有dd元素
+                            dd = dt.find_next('dd')
+                            if dd:
+                                # 提取Shape信息中的列表项
+                                shape_items = dd.find_all('li')
+                                for item in shape_items:
+                                    shape_info.append(item.get_text(strip=True))
+
+                                api_info['output'] = '\n'.join(shape_info) if shape_info else ""
+                            break
+
+            # 提取示例代码及其注释
+            # 首先找到Examples标题
+            examples_section = None
+            examples_title = None
+            for p in desc_element.find_all('p', recursive=True):
+                if 'Examples' in p.get_text() and not p.find_parent('div', {'class': 'admonition'}):
+                    examples_title = p
+                    break
+
+            if examples_title:
+                # 收集Examples部分的所有内容
+                examples_content = []
+
+                # 添加标题
+                examples_content.append(examples_title.get_text(strip=True))
+                examples_content.append("")  # 空行
+
+                # 查找Examples部分的注释
+                current = examples_title.next_sibling
+                while current:
+                    if hasattr(current, 'name'):
+                        if current.name == 'div' and 'admonition note' in current.get('class', []):
+                            # 提取注释内容
+                            note_title = current.find('p', {'class': 'admonition-title'})
+                            if note_title:
+                                examples_content.append(note_title.get_text(strip=True) + ":")
+
+                            # 提取注释正文
+                            for p in current.find_all('p'):
+                                if not p.has_attr('class') or 'admonition-title' not in p['class']:
+                                    examples_content.append(p.get_text(strip=True))
+
+                            examples_content.append("")  # 空行
+                        elif current.name == 'div' and 'doctest highlight-default notranslate' in current.get('class',
+                                                                                                              []):
+                            # 已经到了代码块，跳出循环
+                            break
+                    current = current.next_sibling
+
+                # 提取代码示例
+                code_examples = []
+                # 1. 查找所有 doctest 示例代码块
+                doctest_sections = desc_element.find_all('div', {'class': 'doctest highlight-default notranslate'})
+                for section in doctest_sections:
+                    # 获取代码块中的内容
+                    code_block = section.find('pre')
+                    if code_block:
+                        code_examples.append(code_block.get_text(strip=False))
+
+                if not code_examples:
+                    # 2. 查找所有普通 highlight 示例代码块
+                    highlight_sections = desc_element.find_all('div', {'class': 'highlight-default notranslate'})
+                    for section in highlight_sections:
+                        # 确保不重复添加已经作为doctest添加的代码块
+                        if section not in doctest_sections:
+                            code_block = section.find('pre')
+                            if code_block:
+                                code_examples.append(code_block.get_text(strip=False))
+
+                if not code_examples:
+                    # 3. 查找其他可能的代码示例格式
+                    other_code_blocks = desc_element.find_all('pre')
+                    for block in other_code_blocks:
+                        # 确保不重复添加已经处理过的代码块
+                        if not block.parent.has_attr('class') or not any(
+                                cls in ['doctest highlight-default notranslate', 'highlight-default notranslate']
+                                for cls in block.parent.get('class', [])):
+                            # 检查是否看起来像代码示例（包含>>>前缀）
+                            if '>>>' in block.get_text():
+                                code_examples.append(block.get_text(strip=False))
+
+                # 添加代码示例到内容中
+                if code_examples:
+                    examples_content.extend(code_examples)
+
+                # 合并所有示例内容
+                if examples_content:
+                    api_info['example'] = '\n'.join(examples_content)
+
+            # 提取Shape段落
+            # 方法1: 查找专门的Shape部分 - 通常是一个dl元素，其中dt元素包含"Shape:"文本
+            shape_dl = None
+            # 首先，直接查找包含"Shape:"的dt元素
+            shape_dt = desc_element.find('dt', string=lambda text: text and 'Shape:' in text)
+            if shape_dt:
+                shape_dl = shape_dt.parent
+            # 如果没找到，尝试查找所有dl元素，检查其中是否有包含"Shape:"的dt
+            if not shape_dl:
+                for dl in desc_element.find_all('dl'):
+                    if dl.find('dt', string=lambda text: text and 'Shape:' in text):
+                        shape_dl = dl
+                        break
+
+            if shape_dl:
+                shape_info = []
+                # 提取Shape部分的所有信息
+                # 首先获取dt元素(通常是"Shape:")
+                dt = shape_dl.find('dt', string=lambda text: text and 'Shape:' in text)
+                if dt:
+                    shape_info.append(dt.get_text(strip=True))
+                    # 然后获取对应的dd元素(包含实际的shape描述)
+                    dd = dt.find_next('dd')
+                    if dd:
+                        # 如果dd中有列表项，逐个提取
+                        list_items = dd.find_all('li')
+                        if list_items:
+                            for item in list_items:
+                                shape_info.append(f"  - {item.get_text(strip=True)}")
+                        else:
+                            # 如果没有列表项，提取整个dd的文本
+                            shape_info.append(dd.get_text(strip=True))
+                # 将shape信息添加到output
+                shape_text = '\n'.join(shape_info)
+                if api_info['output']:
+                    api_info['output'] += f"\n{shape_text}"
+                else:
+                    api_info['output'] = shape_text
+
+            # 方法2: 查找可能包含Shape信息的其他格式
+            # 有时Shape信息可能在一个普通的段落或其他元素中
+            shape_p = desc_element.find('p', string=lambda text: text and 'Shape:' in text)
+            if shape_p:
+                if api_info['output']:
+                    api_info['output'] += f"\n{shape_p.get_text(strip=True)}"
+                else:
+                    api_info['output'] = shape_p.get_text(strip=True)
+
+            # 提取Supported Platforms信息
+            platforms_dl = desc_element.find_all('dl', {'class': 'simple'})
+            for dl in platforms_dl:
+                dt = dl.find('dt')
+                if dt and 'Supported Platforms' in dt.get_text():
+                    dd = dt.find_next('dd')
+                    if dd:
+                        platform_text = dd.get_text(strip=True)
+                        # 将平台信息添加到description
+                        if api_info['description']:
+                            api_info['description'] += f"\nSupported Platforms: {platform_text}"
+                        else:
+                            api_info['description'] = f"Supported Platforms: {platform_text}"
+
+            # 提取Raises信息
+            raises_section = desc_element.find_all('dt')
+            for section in raises_section:
+                if 'Raises' in section.get_text():
+                    next_dd = section.find_next('dd')
+                    if next_dd:
+                        raises_items = next_dd.find_all('li')
+                        raises_text = []
+                        for item in raises_items:
+                            raises_text.append(f"- {item.get_text(strip=True)}")
+
+                        # 将异常信息添加到description
+                        if raises_text:
+                            if api_info['description']:
+                                api_info['description'] += f"\n\nRaises:\n" + '\n'.join(raises_text)
+                            else:
+                                api_info['description'] = f"Raises:\n" + '\n'.join(raises_text)
+
+            # 对提取到的API数据进行后处理
+            # 1. 处理signature - 修复: 不要将返回值添加到签名中
+            if is_function:
+                if not api_info['signature']:  # 如果signature为空，则默认full_name()为signature
+                    api_info['signature'] = f"{api_info['full_name']}()"
+            elif is_class:
+                if not api_info['signature']:  # 如果signature为空，则默认full_name为signature
+                    api_info['signature'] = f"{api_info['full_name']}"
+
+            # 2. 使用Inspect库获取更多参数信息
+            additional_api_info = inspect_api_info(api_info['module'], api_info['name'])
+            # 逐一检查additional_api_info中的条目, 如果api_info中对应的条目为空，则使用additional_api_info中的内容替换
+            for key, value in additional_api_info.items():
+                if not api_info[key]:
+                    api_info[key] = value
+
+            return api_info
 
     def save2db(self, api_info):
         try:
             # 检查数据库中是否已存在该API
-            api_exists = self.session.query(API).filter_by(full_name=api_info['full_name'], lib='Mindspore',
+            api_exists = self.session.query(API).filter_by(full_name=api_info['full_name'], lib='MindSpore',
                                                            version=self.lib_ver).first()
             if api_exists:
                 return
@@ -493,5 +830,14 @@ if __name__ == '__main__':
     # process_unhandled_docs() # done
 
     # 向数据库中添加API信息
-    core_html_file_folder = './../data/docs/ms/2.5.0/api mapping docs/2.5.0/handled/'
-    add_mindspore_apis_from_doc(core_html_file_folder)  # 共1889个Pytorch文档, 其中能够被正确导入的API有1059个
+    # core_html_file_folder = './../data/docs/ms/2.5.0/api mapping docs/2.5.0/handled/'
+    # add_mindspore_apis_from_doc(core_html_file_folder)  # 共1889个Pytorch文档, 其中能够被正确导入的API有1059个
+
+    #file_path = './../data/docs/ms/2.5.0/api mapping docs/2.5.0/handled/mindspore.dataset.vision.Normalize.html'
+    #file_path = './../data/docs/ms/2.5.0/api mapping docs/2.5.0/handled/mindspore.communication.comm_func.all_gather_into_tensor.html'
+    file_path = './../data/docs/ms/2.5.0/api mapping docs/2.5.0/handled/mindspore.dataset.audio.SlidingWindowCmn.html'
+    loader = MindsporeAPILoader(file_path, get_session())
+    api_info = loader.extract_api_info()
+    for key, value in api_info.items():
+        print(f"{key}: \n{value}")
+        print("=" * 50)
