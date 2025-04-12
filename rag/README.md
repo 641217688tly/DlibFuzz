@@ -14,8 +14,7 @@ RAG 模块目前主要有 5 个主要的文件，分别是：
 
 这是 RAG 模块的核心代码，定义了整个 RAG 管线，包括创建向量嵌入、检索和生成等等。
 
-在首次使用时，应该调用 `build_embeddings` 函数来创建向量数据库。该函数接受 1 个参数：`documents_dir`。
-    - `documents_dir` 是知识库的文件的路径。不同的深度学习库的文档应该放在以其名字命名的子路径下面。例如 PyTorch 的路径就应该是 `/docs/pytorch/`。
+在首次使用时，应该调用 `build_embeddings` 函数来创建向量数据库。该函数接受 1 个参数：`documents_dir`。其中，`documents_dir` 是知识库的文件的路径。不同的深度学习库的文档应该放在以其名字命名的子路径下面。例如 PyTorch 的路径就应该是 `/docs/pytorch/`。
 
 如果想测试 RAG 模块，可以直接在命令行中运行该文件。
 
