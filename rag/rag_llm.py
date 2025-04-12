@@ -75,17 +75,38 @@ def create_vector_store_batched(documents, embeddings, batch_size=100):
         return None
 
 
+def build_embeddings(documents_dir: list):
+    embeddings = OllamaEmbeddings(model='bge-m3')
+    if os.path.exists('vector_store.faiss'):
+        print('Vector store already existed.')
+        return
+
+    print('--------------Creating vector store--------------')
+
+    docs = []
+    for directory in documents_dir:
+        docs += load_files(directory, kind=directory.strip('docs/'))
+    print('Documents Loaded')
+
+    # Create a FAISS vector store from the documents and their embeddings
+    # vector_store = FAISS.from_documents(split_docs, embeddings)
+    vector_store = create_vector_store_batched(docs, embeddings)
+    print('Vector store created.')
+
+    vector_store.save_local('vector_store.faiss')
+    print('Vector store saved.')
+
+    return vector_store
 
 
-def initialize_rag_system(documents_dir: list, 
-                          is_local: bool,
+def initialize_rag_system(is_local: bool,
                           openai_model: str = "gpt-4o-mini", 
                           openai_api_key: str = '',
                           instructions_template: str = None
                           ):
     
     # Initialize embeddings
-    embeddings = OllamaEmbeddings(model="bge-m3")
+    embeddings = OllamaEmbeddings(model='bge-m3')
     print('Embeddings initialized.')
 
     if os.path.exists('vector_store.faiss'):
@@ -94,23 +115,10 @@ def initialize_rag_system(documents_dir: list,
                                         allow_dangerous_deserialization=True)
         print('Vector store loaded.')
     else:
-        print('Vector store not found. Creating new vector store...')
-        # Load documents
-        print('Loading documents...')
-        docs = []
-        for directory in documents_dir:
-            # docs += load_files(directory, kind=directory.strip('docs/'))
-            docs += load_files(directory, kind=directory.strip('docs/'))
-        print('Documents loaded.')
-
-        # Create a FAISS vector store from the documents and their embeddings
-        # vector_store = FAISS.from_documents(split_docs, embeddings)
-        vector_store = create_vector_store_batched(docs, embeddings)
-        print('Vector store created.')
-
-        vector_store.save_local('vector_store.faiss')
-        print('Vector store saved.')
-
+        # print('Vector store not found. Creating new vector store...')
+        # vector_store = build_embeddings(documents_dir=documents_dir,
+        #                                 embeddings=embeddings)
+        raise Exception('Vector store not found. Please invoke build_embeddings to build the vector store.')
     
     
     # Step 4: Initialize LLM
@@ -209,7 +217,8 @@ if __name__ == "__main__":
     directories = ['docs/pytorch', 'docs/jax', 'docs/mindspore', 'docs/jittor'] # 目前一共有3551个文档
     # directories = ['demo_docs']
 
-    qa_chain, vector_store = initialize_rag_system(directories, is_local=True)
+    build_embeddings(directories)
+    qa_chain, vector_store = initialize_rag_system(is_local=True)
 
     while True:
         query = input("Enter your code-related query: ")
