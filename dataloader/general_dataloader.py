@@ -176,7 +176,7 @@ if __name__ == '__main__':
     added_jax_errors_num = attach_history_errors(session, jax_dir, 'JAX')
     added_ms_errors_num = attach_history_errors(session, ms_dir, 'MindSpore')
     added_jittor_errors_num = attach_history_errors(session, jt_dir, 'Jittor')
-    print(f"Total number of added Pytorch history issues: {added_torch_errors_num}")  # 93(旧) 1419(新)
-    print(f"Total number of added JAX history issues: {added_jax_errors_num}")  # 562(旧) 1476(新)
-    print(f"Total number of added MindSpore history issues: {added_ms_errors_num}")  # 350
+    print(f"Total number of added Pytorch history issues: {added_torch_errors_num}")  # 1388
+    print(f"Total number of added JAX history issues: {added_jax_errors_num}")  # 1302
+    print(f"Total number of added MindSpore history issues: {added_ms_errors_num}")  # 151
     print(f"Total number of added Jittor error triggers: {added_jittor_errors_num}")  # 41

@@ -9,9 +9,10 @@ from fuzzer import validator
 
 # ----------------------------------------------Cluster----------------------------------------------
 class EquivalentCluster:
-    def __init__(self, api: API, session, llm_client):
+    def __init__(self, api: API, session, rag_client, llm_client):
         self.api = api
         self.session = session
+        self.rag_client = rag_client
         self.llm_client = llm_client
         self.error_log = []
         self.module_alias_mapper = {
@@ -47,13 +48,6 @@ API Information:
 - Version: 1.3.9.10
 - API Signature: jittor.nn.CrossEntropyLoss(weight=None, ignore_index=None)
 - Function Description: This class is used to compute the cross-entropy loss between the output values and the target values. Cross-entropy loss is a commonly used loss function for classification tasks, especially when dealing with multi-class problems.
-- Usage Example:
->>> m = nn.CrossEntropyLoss()
->>> output = jt.array([[1.5, 2.3, 0.7], [1.8, 0.5, 2.2]])
->>> target = jt.array([1, 2])
->>> loss_var = m(output, target)
->>> loss_var
-jt.Var([0.5591628], dtype=float32)
 
 Task:
 Search for an API or API group in the following deep learning libraries that is functionally equivalent to jittor.nn.CrossEntropyLoss.
@@ -91,13 +85,6 @@ API Information:
 - Version: 2.4.0
 - API Signature: mindspore.ops.relu(input)
 - Function Description: Computes the Rectified Linear Unit (ReLU) activation function on each element of the input tensor.
-- Usage Example:
-import mindspore
-import numpy as np
-from mindspore import Tensor, ops
-input = Tensor(np.array([[-1.0, 4.0, -8.0], [2.0, -5.0, 9.0]]), mindspore.float32)
-output = ops.relu(input)
-print(output) # [[0. 4. 0.], [2. 0. 9.]]
 
 Task:
 Search for an API or API group in the following deep learning libraries that is functionally equivalent to mindspore.ops.relu.
@@ -138,7 +125,9 @@ API Information:
 - Source Library: {api.lib} (version{api.version})
 - API Signature: {api.signature}
 {'- Function Description: ' + api.description if api.description else ''}
-{'- Usage Example:' + api.example if api.example else ''}
+{'- Parameters: ' + api.parameters if api.parameters else ''}
+{'- Attributes' + api.attributes if api.attributes else ''}
+{'- Output' + api.output if api.output else ''}
 
 Task:
 Search for the APIs or API groups in the following deep learning libraries that is functionally equivalent or similar to {api.full_name}.
@@ -148,10 +137,10 @@ Target Libraries:
 """
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": context_query_prompt1},
-            {"role": "assistant", "content": context_answer_prompt1},
-            {"role": "user", "content": context_query_prompt2},
-            {"role": "assistant", "content": context_answer_prompt2},
+            # {"role": "user", "content": context_query_prompt1},
+            # {"role": "assistant", "content": context_answer_prompt1},
+            # {"role": "user", "content": context_query_prompt2},
+            # {"role": "assistant", "content": context_answer_prompt2},
             {"role": "user", "content": query_prompt},
         ]
         return messages
@@ -160,13 +149,15 @@ Target Libraries:
         attempt_num = 0
         while attempt_num < max_try:  # 设置最大尝试次数以避免无限循环
             try:  # 假如返回的数据不符合JSON格式, 则重新调用OpenAI API, 直到返回的数据符合JSON格式为止
-                response = self.llm_client.chat.completions.create(
+                response = self.rag_client.chat.completions.create(
                     model="gpt-4o-mini",  # gpt-4o-mini  gpt-3.5-turbo
                     response_format={"type": "json_object"},
                     messages=messages,
                     temperature=0.4,
                 )
-                response = response.choices[0].message.content
+                # print(response.choices[0].message['content'])
+                # response = response.choices[0].message.content
+                response = response.choices[0].message['content']
                 messages.append({"role": "assistant", "content": response})
                 print(f"Clustered API: {self.api.full_name}\nResponse:\n{response}")
                 # 在此处需要检查: 1.响应的数据是否遵循JSON格式; 2.返回的是API的完整函数名(完整函数名 = 模块名.API名)而非函数签名 3.所有的API函数名必须有效(不是虚构的, 也不是被弃用的)
@@ -188,7 +179,7 @@ Target Libraries:
         print("Max attempts reached. Unable to get valid JSON data.")
         return None
 
-    def construct_verify_messages(self, base_api, twin_api_group): # twin_api_group = [API1, API2, ...]
+    def construct_verify_messages(self, base_api, twin_api_group):  # twin_api_group = [API1, API2, ...]
         # twin_api_group 的详情
         if len(twin_api_group) == 1:
             twin_api = twin_api_group[0]
@@ -197,7 +188,9 @@ Target Libraries:
 - API Library: {twin_api.lib} (version{twin_api.version})
 - API Signature: {twin_api.signature}
 {'- Function Description: ' + twin_api.description if twin_api.description else ''}
-{'- Usage Example:' + twin_api.example if twin_api.example else ''}
+{'- Parameters: ' + twin_api.parameters if twin_api.parameters else ''}
+{'- Attributes' + twin_api.attributes if twin_api.attributes else ''}
+{'- Output' + twin_api.output if twin_api.output else ''}
 """
         else:
             api_group_info_prompt = ""
@@ -207,7 +200,9 @@ Member{count + 1} of API Group:
 - API Name: {twin_api.full_name}
 - API Signature: {twin_api.signature}
 {'- Function Description: ' + twin_api.description if twin_api.description else ''}
-{'- Usage Example:' + twin_api.example if twin_api.example else ''}
+{'- Parameters: ' + twin_api.parameters if twin_api.parameters else ''}
+{'- Attributes' + twin_api.attributes if twin_api.attributes else ''}
+{'- Output' + twin_api.output if twin_api.output else ''}
 """
 
         # twin_api_group brief info
@@ -289,42 +284,24 @@ Below is a code snippet calling ({base_api.signature}). Please generate a code s
         return new_module_name
 
     def validate_api(self, full_api_name):
-        module_name = ""
-        api_name = ""
         try:
             module_name, api_name = full_api_name.rsplit('.', 1)
-            module_name = self.handle_module_alias(module_name)
-            # 先检查来源库是否为Pytorch, JAX, MindSpore或Jittor中的任意一个
-            lib_name = module_name.split('.')[0]  # 用"."分割module_name, 然后取第一个部分作为库名
-            lib = map_module2lib(lib_name)
-            if lib == 'Unknown':
+            module_list = module_name.split('.')
+            api_lib = self.handle_module_alias(module_list[0])
+            if map_module2lib(api_lib) == 'Unknown':
                 raise Exception(f"{full_api_name} does not belong to Pytorch, JAX, MindSpore or Jittor.")
-            module = importlib.import_module(module_name)
-            func = getattr(module, api_name, None)
-            if func is None:
-                self.error_log.append(f"{full_api_name} does not exist.")
+            module = importlib.import_module(api_lib)
+            if len(module_list) > 1:
+                # 将module_name_list进行切片, 只保留除第一个元素以外的部分
+                for submodule_name in module_list[1:]:
+                    module = getattr(module, submodule_name, None)
+                    if module is None:
+                        return False
+            api = getattr(module, api_name, None)
+            if api is None:
                 return False
-            if func is None:
-                return False
-            if inspect.ismodule(func):
-                self.error_log.append(f"{full_api_name} is a module, not a function.")
-                return False
-            # if inspect.isclass(func): # 诸如torch.nn.CrossEntropyLoss等用类封装的API将无法被测试, 因此选择注释掉
-            #     self.cluster_errors.append(f"{full_api_name} is a class, not a function.")
-            #     return False
-            # if validate_api_availability(func):
-            #    self.cluster_errors.append(f"{full_api_name} is deprecated.")
-            #    return False
-            return True
-        except ModuleNotFoundError as e:
-            self.error_log.append(f"Module {module_name} not found: {str(e)}")
-            return False
-        except ImportError as e:
-            self.error_log.append(f"Module {module_name} not found: {str(e)}")
-            return False
-        except AttributeError:
-            self.error_log.append(f"{api_name} does not exist in {module_name}.")
-            return False
+            else:
+                return True
         except Exception as e:
             self.error_log.append(str(e))
             return False
@@ -607,14 +584,15 @@ def run_randomly():  # 随机挑选未聚类的API进行聚类
 def run_linearly():  # 线性地对未聚类的API进行聚类
     # 创建数据库连接
     session = get_session()
-    llm_client = get_llm_client('gpt4o-mini-with-rag')
+    llm_client = get_llm_client('gpt4o-mini')
+    rag_client = get_llm_client('gpt4o-mini-with-rag')
 
     # 对未聚类的API进行聚类
     uncluttered_torch_apis = session.query(API).filter_by(is_clustered=False).all()
     for i, uncluttered_torch_api in enumerate(uncluttered_torch_apis):
         print("----------------------------------------------------------------------------------")
         # 选择一个未聚类的TensorflowAPI
-        cluster = EquivalentCluster(uncluttered_torch_api, session, llm_client)
+        cluster = EquivalentCluster(uncluttered_torch_api, session, rag_client, llm_client)
         cluster.cluster_api()
         print(f"Unclustered / Total: {len(uncluttered_torch_apis) - i - 1} / {len(uncluttered_torch_apis)}" + "\n")
 

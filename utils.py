@@ -65,13 +65,21 @@ def get_libs_info():  # 该函数将返回数据库中待测试的深度学习�
 
 
 def validate_api_existence(module_name: str, api_name: str):  # 验证API是否存在的函数
+    module_alias_mapper = {
+        "tf": "tensorflow",
+        "ms": "mindspore",
+        "np": "numpy",
+        "pd": "pandas",
+        "jt": "jittor",
+        "pytorch": "torch",
+    }
     try:
         module_list = module_name.split('.')
         # 先检查来源库是否为Pytorch, JAX, MindSpore或Jittor中的任意一个
         api_lib = module_list[0]
         if map_module2lib(api_lib) == 'Unknown':
             return False
-        module = importlib.import_module(api_lib)
+        module = importlib.import_module(module_alias_mapper.get(api_lib, api_lib))
         if len(module_list) > 1:
             # 将module_name_list进行切片, 只保留除第一个元素以外的部分
             for submodule_name in module_list[1:]:
@@ -106,6 +114,7 @@ def validate_api_availability(function):  # 验证API是否为被弃用的函数
 def map_module2lib(module_name):
     lib_map = {
         'Pytorch': 'Pytorch',
+        'pytorch': "Pytorch",
         'torch': 'Pytorch',
         'JAX': 'JAX',
         'jax': 'JAX',
