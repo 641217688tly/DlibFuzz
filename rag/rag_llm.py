@@ -9,7 +9,7 @@ from langchain.schema import Document
 from langchain_core.prompts import ChatPromptTemplate
 from llm import OpenAILLM
 # from transformers_llm import TransformersLLM
-from embeddings import OllamaEmbeddings
+from embeddings import OllamaEmbeddings, OpenAIEmbeddings
 from langchain.chains import RetrievalQA
 
 
@@ -18,7 +18,7 @@ def load_files(directory: str, kind: str):
     
     for root, _, files in os.walk(directory):
         for filename in files:
-            if filename.endswith(('.html', '.htm', '.md')):
+            if filename.endswith(('.html', '.htm', '.md', '.txt')):
                 filepath = os.path.join(root, filename)
                 try:
                     if filename.endswith(('.html', '.htm')):
@@ -55,49 +55,79 @@ def create_vector_store_batched(documents, embeddings, batch_size=100):
     """Batch process documents to create vector store"""
     text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
     vector_store = None
-    
+
     try:
         for i in range(0, len(documents), batch_size):
             batch = documents[i:i + batch_size]
             split_docs = text_splitter.split_documents(
                 [Document(page_content=doc) for doc in batch]
             )
-            
+
             if vector_store is None:
                 vector_store = FAISS.from_documents(split_docs, embeddings)
             else:
                 vector_store.add_documents(split_docs)
                 
             print(f'Processed batch {i//batch_size + 1}/{len(documents)//batch_size + 1}')
-        
+
         return vector_store
     except Exception as e:
         print(f"Error in create_vector_store_batched: {str(e)}")
         return None
 
 
-def build_embeddings(documents_dir: list):
-    embeddings = OllamaEmbeddings(model='bge-m3')
+def build_embeddings(documents_dir: list,
+                     use_third_party_hosted: bool = False,
+                     openai_api_key: str = ''):
+    if use_third_party_hosted:
+        try:
+            print('Using model from OpenAI for text embedding.')
+            embeddings = OpenAIEmbeddings(api_key=openai_api_key)
+        except Exception as e:
+            print(f"Error happend: {e}")
+    else:
+        print('Using self-hosted model for text embedding')
+        embeddings = OllamaEmbeddings(model='nomic-embed-text')
+
     if os.path.exists('vector_store.faiss'):
         print('Vector store already existed.')
         return
 
     print('--------------Creating vector store--------------')
 
-    docs = []
-    for directory in documents_dir:
-        docs += load_files(directory, kind=directory.strip('docs/'))
-    print('Documents Loaded')
+    try:
+        docs = []
+        for directory in documents_dir:
+            print(f"Loading from {directory}")
+            kind = directory.split('/')[-1] if '/' in directory else directory
+            loaded_docs = load_files(directory, kind=kind)
+            print(f"Loaded {len(loaded_docs)} from {directory}...")
+            docs += loaded_docs
 
-    # Create a FAISS vector store from the documents and their embeddings
-    # vector_store = FAISS.from_documents(split_docs, embeddings)
-    vector_store = create_vector_store_batched(docs, embeddings)
-    print('Vector store created.')
+        print(f'{len(docs)} documents loaded.')
 
-    vector_store.save_local('vector_store.faiss')
-    print('Vector store saved.')
+        # 创建FAISS向量存储
+        vector_store = create_vector_store_batched(docs, embeddings)
 
-    return vector_store
+        # 添加错误检查
+        if vector_store is None:
+            print("Error: Cannot build vectortore.")
+            return None
+
+        print('Vectorstore built as expected.')
+
+        # 保存向量存储
+        try:
+            vector_store.save_local('vector_store.faiss')
+            print('Vectorstore has been saved locally.')
+        except Exception as e:
+            print(f"Error when saving vectorstore: {str(e)}")
+            return None
+
+        return vector_store
+    except Exception as e:
+        print(f"Error when building embeddings: {str(e)}")
+        return None
 
 
 def initialize_rag_system(is_local: bool,
@@ -107,7 +137,7 @@ def initialize_rag_system(is_local: bool,
                           ):
     
     # Initialize embeddings
-    embeddings = OllamaEmbeddings(model='bge-m3')
+    embeddings = OllamaEmbeddings(model='nomic-embed-text')
     print('Embeddings initialized.')
 
     if os.path.exists('vector_store.faiss'):
@@ -203,8 +233,10 @@ if __name__ == "__main__":
     # directories = ['demo_docs']
 
     load_dotenv()
-    build_embeddings(directories)
-    qa_chain, vector_store = initialize_rag_system(openai_api_key=os.getenv('OPENAI_API_KEY', ''), is_local=False)
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+    print(f'The API Key is {OPENAI_API_KEY}')
+    build_embeddings(documents_dir=directories, use_third_party_hosted=False, openai_api_key=OPENAI_API_KEY)
+    qa_chain, vector_store = initialize_rag_system(openai_api_key=OPENAI_API_KEY, is_local=False)
 
     while True:
         query = input("Enter your code-related query: ")

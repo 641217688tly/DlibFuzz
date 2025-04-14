@@ -75,10 +75,6 @@ class OpenAILLM(LLM):
         try:
             self._client = OpenAI(
                 api_key=self.api_key,
-                http_client=httpx.Client(proxies={
-                    "http://": "http://127.0.0.1:7890",
-                    "https://": "http://127.0.0.1:7890"
-                })
             )
             logger.info(f"OpenAILLM initialized successfully with model: {self.model_name}")
         except Exception as e:
