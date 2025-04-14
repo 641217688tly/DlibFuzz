@@ -65,26 +65,26 @@ def get_libs_info():  # 该函数将返回数据库中待测试的深度学习�
 
 
 def validate_api_existence(module_name: str, api_name: str):  # 验证API是否存在的函数
-    # module_name, api_name = full_api_name.rsplit('.', 1)
     try:
+        module_list = module_name.split('.')
         # 先检查来源库是否为Pytorch, JAX, MindSpore或Jittor中的任意一个
-        api_lib = module_name.split('.')[0]  # 用"."分割module_name, 然后取第一个部分作为库名
-        lib = map_module2lib(api_lib)
-        if lib == 'Unknown':
+        api_lib = module_list[0]
+        if map_module2lib(api_lib) == 'Unknown':
             return False
-        # 然后检查模块是否存在
-        module = importlib.import_module(module_name)
-        # 再检查API是否存在
-        func = getattr(module, api_name, None)
-        if func is None:
+        module = importlib.import_module(api_lib)
+        if len(module_list) > 1:
+            # 将module_name_list进行切片, 只保留除第一个元素以外的部分
+            for submodule_name in module_list[1:]:
+                module = getattr(module, submodule_name, None)
+                if module is None:
+                    return False
+        api = getattr(module, api_name, None)
+        if api is None:
             return False
-        if inspect.ismodule(func):
-            return False
-        # if inspect.isclass(func): # 诸如torch.nn.CrossEntropyLoss等用类封装的API将无法被测试, 因此选择注释掉
-        #     return True
-        return True
+        else:
+            return True
     except (ModuleNotFoundError, AttributeError, ImportError, ValueError, Exception) as e:
-        print(f"validate_api_existence() encounters an error: {e}")
+        print(f"validate_api_existence({module_name}, {api_name}) Error: {e}")
         return False
 
 
@@ -93,7 +93,6 @@ def validate_api_availability(function):  # 验证API是否为被弃用的函数
     docstring = inspect.getdoc(function)
     if docstring and ('deprecated' and 'removed') in docstring.lower():
         return True
-
     # Capture DeprecationWarning
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter('always', DeprecationWarning)
@@ -122,15 +121,19 @@ def map_module2lib(module_name):
 
 def inspect_api_info(module_name, api_name):
     if validate_api_existence(module_name, api_name) is False:  # 验证API是否存在
-        print(f"API {api_name} does not exist.")
+        print(f"inspect_api_info({module_name}, {api_name}) Error: API {api_name} does not exist.")
         return None
 
-    module = importlib.import_module(module_name)  # 动态导入模块
-    func = getattr(module, api_name)  # 从模块中获取函数对象
+    module_list = module_name.split('.')
+    module = importlib.import_module(module_list[0])
+    if len(module_list) > 1:
+        for submodule_name in module_list[1:]:
+            module = getattr(module, submodule_name, None)
+    api = getattr(module, api_name, None)
 
-    # if validate_api_availability(func) is True:  # 验证API是否为被弃用的函数
-    #     print(f"API {api_name} is deprecated.")
-    #     return None
+    # 获取API所属的库
+    api_lib = module_list[0]  # 用"."分割module_name, 然后取第一个部分作为库名
+    lib = map_module2lib(api_lib)
 
     # 获取函数签名
     signature = get_api_signature(f"{module_name}.{api_name}")
@@ -138,13 +141,9 @@ def inspect_api_info(module_name, api_name):
     # 获取函数文档
     description = ""
     try:
-        description = inspect.getdoc(func)
+        description = inspect.getdoc(api)
     except Exception as e:
-        print(f"inspect_api_info(): Error getting doc for {module_name}.{api_name} due to: {e}")
-
-    # 获取API所属的库
-    api_lib = module_name.split('.')[0]  # 用"."分割module_name, 然后取第一个部分作为库名
-    lib = map_module2lib(api_lib)
+        print(f"inspect_api_info({module_name}, {api_name}) Warning: inspect.getdoc({api_name}) encountered '{e}'")
 
     # 获取API的版本
     version = ""
@@ -164,6 +163,7 @@ def inspect_api_info(module_name, api_name):
         "version": version
     }
     return api_info
+
 
 def get_api_signature(full_api_name):
     """
@@ -199,13 +199,15 @@ def get_api_signature(full_api_name):
 
     try:
         # 分割全名以获得模块和属性名
-        module_name, attribute_name = full_api_name.rsplit('.', 1)
-        # 动态导入模块
-        module = importlib.import_module(module_name)
-        # 获取属性（函数、类等）
-        attribute = getattr(module, attribute_name)
+        module_name, api_name = full_api_name.rsplit('.', 1)
+        module_list = module_name.split('.')
+        module = importlib.import_module(module_list[0])
+        if len(module_list) > 1:
+            for submodule_name in module_list[1:]:
+                module = getattr(module, submodule_name, None)
+        api = getattr(module, api_name, None)
         # 获取签名
-        raw_signature = str(inspect.signature(attribute))
+        raw_signature = str(inspect.signature(api))
         # 处理签名
         signature = process_signature(full_api_name, raw_signature)
         return signature

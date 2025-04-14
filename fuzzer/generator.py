@@ -295,7 +295,6 @@ Please refer to the input values for API parameters and the API call combination
         self.session.flush()
         return base_seed
 
-
     def construct_messages4twin(self, twin_api_group, base_api_seed):
         system_prompt = """
 (1) Role Definition
@@ -376,7 +375,7 @@ Below is a code snippet calling ({base_api.signature}). Please generate a code s
             return None
 
     def generate_seed4twin(self, twin_api_group: APIGroup, base_api_seed: APITestSeed, cluster_seed: ClusterTestSeed):
-        messages  = self.construct_messages4twin(twin_api_group, base_api_seed)
+        messages = self.construct_messages4twin(twin_api_group, base_api_seed)
         twin_seed_code = self.query_llm4twin(messages)
         if twin_seed_code is None:
             raise Exception("Failed to generate seed for equivalent API.")
