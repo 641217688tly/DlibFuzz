@@ -68,7 +68,7 @@ class OpenAIEmbeddings(Embeddings):
         
         if not self.api_key:
             raise ValueError(
-                "OpenAI API密钥必须通过参数或OPENAI_API_KEY环境变量提供")
+                "OpenAI API Key must be provided via parameters or the environment variable OPENAI_API_KEY.")
         
         self.client = None
         try:
@@ -76,7 +76,7 @@ class OpenAIEmbeddings(Embeddings):
             self.client = OpenAI(api_key=self.api_key)
         except ImportError:
             raise ImportError(
-                "OpenAI Python包未安装。请使用 'pip install openai' 安装。")
+                "OpenAI Python package not installed.")
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """
@@ -98,7 +98,7 @@ class OpenAIEmbeddings(Embeddings):
             return embeddings
             
         except Exception as e:
-            print(f"获取OpenAI嵌入时出错: {str(e)}")
+            print(f"Error when obtaining OpenAI embeddings: {str(e)}")
             raise
 
     def embed_query(self, text: str) -> List[float]:
@@ -125,3 +125,4 @@ class OpenAIEmbeddings(Embeddings):
             "text-embedding-ada-002": 1536
         }
         return dimensions.get(self.model, 1536)  # 默认返回1536
+
