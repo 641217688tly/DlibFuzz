@@ -1,6 +1,7 @@
 import datetime
 import os
 import time
+from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.vectorstores import FAISS
@@ -100,7 +101,7 @@ def build_embeddings(documents_dir: list):
 
 
 def initialize_rag_system(is_local: bool,
-                          openai_model: str = "gpt-4o-mini", 
+                          openai_model: str = 'gpt-4o-mini', 
                           openai_api_key: str = '',
                           instructions_template: str = None
                           ):
@@ -133,7 +134,7 @@ def initialize_rag_system(is_local: bool,
         #     torch_dtype="bfloat16"  # 使用 bfloat16 精度
         # )
     else:
-        llm = OpenAILLM(openai_model, openai_api_key)
+        llm = OpenAILLM(model_name=openai_model, api_key=openai_api_key)
     print('LLM initialized.')
     
     # Step 5: Establish RAG pipeline
@@ -177,22 +178,6 @@ def initialize_rag_system(is_local: bool,
     def format_docs(docs):
         return "\n\n".join(doc.page_content for doc in docs)
     
-    # # Create a stuff chain with the custom prompt
-    # combine_documents_chain = create_stuff_documents_chain(
-    #     llm=llm,
-    #     prompt=prompt,
-    # )
-    
-    # qa_chain = (
-    #     {
-    #         "context": vector_store.as_retriever() | format_docs,
-    #         "question": RunnablePassthrough(),
-    #     } 
-    #     | prompt 
-    #     | llm 
-    #     # | StrOutputParser()
-    # )
-    
     return qa_chain, vector_store
 
 
@@ -217,8 +202,9 @@ if __name__ == "__main__":
     directories = ['docs/pytorch', 'docs/jax', 'docs/mindspore', 'docs/jittor'] # 目前一共有3551个文档
     # directories = ['demo_docs']
 
+    load_dotenv()
     build_embeddings(directories)
-    qa_chain, vector_store = initialize_rag_system(is_local=True)
+    qa_chain, vector_store = initialize_rag_system(openai_api_key=os.getenv('OPENAI_API_KEY', ''), is_local=False)
 
     while True:
         query = input("Enter your code-related query: ")
@@ -260,11 +246,3 @@ if __name__ == "__main__":
             print(f"An error occurred: {e}")
             print("\n" + "=" * 50 + "\n")
 
-    # directories = ['docs/pytorch', 'docs/jax', 'docs/mindspore', 'docs/jittor']
-    # with open('documents3.txt', 'w') as f:
-    #     docs = []
-    #     for directory in directories:
-    #         docs += load_files(directory, kind=directory.strip('docs/'))
-    #     for doc in docs:
-    #         f.write(doc)
-    #         f.write('\n\n')

@@ -6,16 +6,19 @@ Start the server by running `uvicorn gen_api:app --reload` in the terminal.
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from rag_llm import initialize_rag_system, rag_generate, retrieve_documents, bare_llm_generate, build_embeddings
+import os
+from dotenv import load_dotenv
 
 
 app = FastAPI()
 
+load_dotenv()
 # Initialize RAG system at startup
 directories = ['docs/pytorch', 'docs/jax', 'docs/mindspore', 'docs/jittor']
 build_embeddings(documents_dir=directories)
 qa_chain, vector_store = initialize_rag_system(is_local=False,
                                                openai_model='gpt4o-mini', 
-                                               openai_api_key=''
+                                               openai_api_key=os.getenv('OPENAI_API_KEY', '')
                                                )
 
 
