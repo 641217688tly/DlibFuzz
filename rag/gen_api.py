@@ -13,12 +13,13 @@ from dotenv import load_dotenv
 app = FastAPI()
 
 load_dotenv()
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
 # Initialize RAG system at startup
 directories = ['docs/pytorch', 'docs/jax', 'docs/mindspore', 'docs/jittor']
 build_embeddings(documents_dir=directories)
 qa_chain, vector_store = initialize_rag_system(is_local=False,
-                                               openai_model='gpt4o-mini', 
-                                               openai_api_key=os.getenv('OPENAI_API_KEY', '')
+                                               openai_model='gpt-4o-mini',
+                                               openai_api_key=OPENAI_API_KEY
                                                )
 
 
@@ -73,3 +74,4 @@ def retrieve_documents_api(request: QueryRequest):
         return RetrieveDocumentsResponse(documents=[doc.page_content for doc in retrieved_docs])
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
