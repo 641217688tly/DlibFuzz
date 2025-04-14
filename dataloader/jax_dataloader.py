@@ -104,6 +104,10 @@ def process_jax_api(root_dir):  # add jax api from html folder
                     print(f"Failed to parse API details from {file_path}")
                     continue
 
+                api_exists = session.query(API).filter_by(full_name=api_info['full_name'], lib='JAX', version=api_info["version"]).first()
+                if api_exists:
+                    continue
+
                 # 创建数据库记录
                 api_entry = API(
                     name=api_info["name"],

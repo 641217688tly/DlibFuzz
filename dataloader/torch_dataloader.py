@@ -198,11 +198,10 @@ def process_unhandled_docs(raw_dir='./../data/docs/torch/docs/2.3/raw/',
             handler = PytorchDocumentationHandler(raw_file_path=raw_file_path)
             print(f"进度: {i + 1}/{len(unhandled_files)}")
         except Exception as e:
-            print(f"处理文件 {file} 时出错: {str(e)}")
+            print(f"process_unhandled_docs({file}) Error: {str(e)}")
             # 打印详细的堆栈跟踪以便调试
             import traceback
             traceback.print_exc()
-    print("所有需要处理的文件已处理完成")
 
 class PytorchAPILoader:
     def __init__(self, core_html_file_path, db_session, lib_ver="2.3.0"):
@@ -550,9 +549,9 @@ def add_pytorch_apis_from_doc(folder_path):
             api_name = full_api_name.split('.')[-1]
             if validate_api_existence(module_name, api_name):  # 如果API能够被正确导入
                 loader = PytorchAPILoader(file_path, get_session())
-            print(f"进度: {i + 1}/{len(html_files)}")
+            print(f"add_pytorch_apis_from_doc(): {i + 1}/{len(html_files)}")
         except Exception as e:
-            print(f"处理文件 {file} 时出错: {str(e)}")
+            print(f"add_pytorch_apis_from_doc({file}) Error: {str(e)}")
 
 
 if __name__ == "__main__":

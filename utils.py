@@ -207,21 +207,23 @@ def get_api_signature(full_api_name):
                 module = getattr(module, submodule_name, None)
         api = getattr(module, api_name, None)
         # 获取签名
-        raw_signature = str(inspect.signature(api))
+        raw_signature = ""
+        if inspect.isbuiltin(api) is False and callable(api):
+            str(inspect.signature(api))
         # 处理签名
         signature = process_signature(full_api_name, raw_signature)
         return signature
     except ImportError as e:
-        print(f"get_api_signature() encounters an ImportError: {e}")
+        print(f"get_api_signature({full_api_name}) ImportError: {e}")
         return f"{full_api_name}()"
     except AttributeError as e:
-        print(f"get_api_signature() encounters an AttributeError: {e}")
+        print(f"get_api_signature({full_api_name}) AttributeError: {e}")
         return f"{full_api_name}()"
     except ValueError as e:
-        print(f"get_api_signature() encounters a ValueError: {e}")
+        print(f"get_api_signature({full_api_name}) ValueError: {e}")
         return f"{full_api_name}()"
     except Exception as e:
-        print(f"get_api_signature() encounters an unexpected error: {e}")
+        print(f"get_api_signature({full_api_name}) Error: {e}")
         return f"{full_api_name}()"
 
 
