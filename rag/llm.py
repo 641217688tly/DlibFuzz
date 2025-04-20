@@ -1,54 +1,15 @@
 import os
 import logging
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List, Optional, Union
 
 import httpx
 from pydantic import PrivateAttr
 from langchain.llms.base import LLM
-# from llama_cpp import Llama
 from openai import OpenAI
 from langchain.schema import BaseMessage, AIMessage, HumanMessage, SystemMessage, ChatMessage
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-# class CodeQwenLLM(LLM):
-#     model_path: ClassVar[str] = "models/qwen2.5-coder-14b-instruct-q4_k_m.gguf"
-#     _llm: Llama = PrivateAttr()  # Define as a private attribute
-#
-#     def __init__(self, **kwargs):
-#         super().__init__(**kwargs)  # Initialize the superclass
-#         self._llm = Llama(
-#             model_path=self.model_path,
-#             n_ctx=2048,
-#             n_parts=-1,
-#             seed=0,
-#             n_gpu_layers=15000,
-#             n_batch=512,
-#             f16_kv=False,
-#             logits_all=False,
-#             vocab_only=False,
-#             use_mlock=False,  # Set to False to avoid memory locking issues
-#             embedding=False,
-#             **kwargs
-#         )
-#
-#     @property
-#     def _llm_type(self):
-#         return "llama_cpp"
-#
-#     def _call(self, prompt, stop=None):
-#         response = self._llm.create_chat_completion(
-#             messages=[
-#                 {
-#                     "role": "user",
-#                     "content": prompt
-#                 }
-#             ],
-#             stop=stop
-#         )
-#         return response['choices'][0]['message']['content']
 
 
 class OpenAILLM(LLM):
@@ -106,12 +67,13 @@ class OpenAILLM(LLM):
 
         return converted_messages
 
-    def _call(self, prompt: str, stop: Optional[List[str]] = None, **kwargs: Any) -> str:
+    def _call(self, prompt: Union[str, List[Dict[str, str]], List[BaseMessage]], 
+              stop: Optional[List[str]] = None, **kwargs: Any) -> str:
         """
         Call the OpenAI API with the given prompt.
         
         Args:
-            prompt: The input text to send to the model
+            prompt: The input text or message list to send to the model
             stop: Optional list of stop sequences
             **kwargs: Additional keyword arguments
             
@@ -119,12 +81,22 @@ class OpenAILLM(LLM):
             Generated text from the model
         """
         try:
-            # Handle both string prompts and message lists
+            # Handle different prompt types
             messages = []
+
+            # Case 1: prompt is a string
             if isinstance(prompt, str):
                 messages = [{"role": "user", "content": prompt}]
-            elif isinstance(prompt, list):
+
+            # Case 2: prompt is a list of dictionary messages (like from RagClient)
+            elif isinstance(prompt, list) and prompt and isinstance(prompt[0], dict) and "role" in prompt[0]:
+                messages = prompt
+
+            # Case 3: prompt is a list of LangChain BaseMessage objects
+            elif isinstance(prompt, list) and prompt and isinstance(prompt[0], BaseMessage):
                 messages = self._convert_messages_to_chat(prompt)
+
+            # Default case: convert to string and pass as user message
             else:
                 messages = [{"role": "user", "content": str(prompt)}]
 
@@ -150,11 +122,4 @@ class OpenAILLM(LLM):
         """
         # Simple approximation: ~4 characters per token
         return len(text) // 4
-
-# if __name__ == "__main__":
-#     llm = CodeQwenLLM()
-#     prompt = "Generate a python program to draw a line"
-#     response = llm.invoke(prompt)
-#
-#     print(f"response: {response}")
 

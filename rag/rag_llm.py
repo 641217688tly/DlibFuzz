@@ -8,9 +8,9 @@ from langchain_community.vectorstores import FAISS
 from langchain.schema import Document
 from langchain_core.prompts import ChatPromptTemplate
 from llm import OpenAILLM
-# from transformers_llm import TransformersLLM
 from embeddings import OllamaEmbeddings, OpenAIEmbeddings
 from langchain.chains import RetrievalQA
+from typing import List, Dict, Optional, Any, Union
 
 
 def load_files(directory: str, kind: str):
@@ -146,29 +146,16 @@ def initialize_rag_system(is_local: bool,
                                         allow_dangerous_deserialization=True)
         print('Vector store loaded.')
     else:
-        # print('Vector store not found. Creating new vector store...')
-        # vector_store = build_embeddings(documents_dir=documents_dir,
-        #                                 embeddings=embeddings)
         raise Exception('Vector store not found. Please invoke build_embeddings to build the vector store.')
     
-    
-    # Step 4: Initialize LLM
-    # llm = CodeQwenLLM()
+    # Initialize LLM
     if is_local:
         print("Local LLM not implemented yet.")
-        # llm = TransformersLLM(
-        #     model_id="Qwen/Qwen2.5-Coder-14B-Instruct",
-        #     device="auto",          # 自动选择设备
-        #     load_in_4bit=False,      # 4-bit量化
-        #     # load_in_8bit=True,      # 8-bit量化
-        #     torch_dtype="bfloat16"  # 使用 bfloat16 精度
-        # )
     else:
         llm = OpenAILLM(model_name=openai_model, api_key=openai_api_key)
     print('LLM initialized.')
     
-    # Step 5: Establish RAG pipeline
-
+    # Establish RAG pipeline
     if instructions_template is None:
         prompt_template = """
         Instructions:
@@ -183,7 +170,7 @@ def initialize_rag_system(is_local: bool,
 
         """
     else:
-        prompt_template = "Instrustions:\n" + instructions_template + """
+        prompt_template = "Instructions:\n" + instructions_template + """
 
         Retrieved Documents:
         {context}
@@ -193,7 +180,7 @@ def initialize_rag_system(is_local: bool,
 
         """
 
-    prompt = ChatPromptTemplate.from_template(prompt_template) # PROMPT?
+    prompt = ChatPromptTemplate.from_template(prompt_template)
 
     qa_chain = RetrievalQA.from_chain_type(
         llm=llm, 
@@ -202,25 +189,116 @@ def initialize_rag_system(is_local: bool,
         chain_type_kwargs={"prompt": prompt}
     )
 
-    
-    # prompt = ChatPromptTemplate.from_template(prompt_template)
-    
-    def format_docs(docs):
-        return "\n\n".join(doc.page_content for doc in docs)
-    
     return qa_chain, vector_store
 
 
-def rag_generate(query: str, qa_chain):
+def extract_query_and_context_from_messages(messages: List[Dict[str, str]]) -> Dict[str, str]:
+    """
+    Extract the query and relevant context from a list of messages.
+
+    Args:
+        messages: A list of message dictionaries with 'role' and 'content'
+
+    Returns:
+        A dictionary with 'query' and 'context' keys
+    """
+    if not messages:
+        return {"query": "", "context": ""}
+
+    # Extract system message if present
+    system_content = ""
+    system_messages = [msg["content"] for msg in messages if msg["role"] == "system"]
+    if system_messages:
+        system_content = system_messages[0]
+
+    # Find all user messages
+    user_message_indices = [i for i, msg in enumerate(messages) if msg["role"] == "user"]
+    if not user_message_indices:
+        return {"query": "", "context": system_content}
+
+    # Get the last user message as the query
+    last_user_idx = user_message_indices[-1]
+    query = messages[last_user_idx]["content"]
+
+    # Build context from conversation history
+    context_parts = []
+    if system_content:
+        context_parts.append(f"System: {system_content}")
+
+    # Get conversation history (limit to a few turns before the query)
+    if last_user_idx > 0:
+        # Get up to 3 conversation turns before the latest query
+        start_idx = max(0, last_user_idx - 6)  # Get up to 3 turns (6 messages)
+        for i in range(start_idx, last_user_idx):
+            msg = messages[i]
+            prefix = "User: " if msg["role"] == "user" else "Assistant: "
+            context_parts.append(f"{prefix}{msg['content']}")
+
+    context = "\n\n".join(context_parts) if context_parts else ""
+
+    return {"query": query, "context": context}
+
+
+def rag_generate(query_or_messages: Union[str, List[Dict[str, str]]], qa_chain):
+    """
+    Generate a response using the RAG system.
+
+    Args:
+        query_or_messages: Either a query string or a list of message dictionaries
+        qa_chain: The retrieval QA chain to use
+
+    Returns:
+        The generated response
+    """
+    # Check if input is messages or a direct query
+    if isinstance(query_or_messages, list):
+        # Extract query and context from messages
+        extracted = extract_query_and_context_from_messages(query_or_messages)
+        query = extracted["query"]
+
+        # If there's significant context, we could modify the query to include it
+        # For now, we'll keep it simple and just use the extracted query
+    else:
+        query = query_or_messages
+
+    # Generate the response using the retrieval QA chain
     answer = qa_chain.run(query)
     return answer
 
-def bare_llm_generate(query: str, llm):
-    answer = llm.run(query)
+
+def bare_llm_generate(query_or_messages: Union[str, List[Dict[str, str]]], llm):
+    """
+    Generate a response without using retrieval.
+
+    Args:
+        query_or_messages: Either a query string or a list of message dictionaries
+        llm: The language model to use
+
+    Returns:
+        The generated response
+    """
+    # Check if input is messages or a direct query
+    if isinstance(query_or_messages, list):
+        # Process messages format
+        answer = llm._call(query_or_messages)
+    else:
+        # Process direct query
+        answer = llm.run(query_or_messages)
+
     return answer
 
 
 def retrieve_documents(query: str, vector_store):
+    """
+    Retrieve relevant documents for a query.
+
+    Args:
+        query: The query to retrieve documents for
+        vector_store: The vector store to retrieve from
+
+    Returns:
+        A list of retrieved documents
+    """
     retrieved_docs = vector_store.as_retriever().invoke(query)
     return retrieved_docs
 
@@ -229,8 +307,7 @@ if __name__ == "__main__":
     print("RAG Module Activated.\n")
     print("Type 'exit' or 'quit' to terminate the program.\n")
 
-    directories = ['docs/pytorch', 'docs/jax', 'docs/mindspore', 'docs/jittor'] # 目前一共有3551个文档
-    # directories = ['demo_docs']
+    directories = ['docs/pytorch', 'docs/jax', 'docs/mindspore', 'docs/jittor']
 
     load_dotenv()
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
@@ -239,7 +316,7 @@ if __name__ == "__main__":
     qa_chain, vector_store = initialize_rag_system(openai_api_key=OPENAI_API_KEY, is_local=False)
 
     while True:
-        query = input("Enter your code-related query: ")
+        query = input("Enter your code-related query (or type 'exit'/'quit' to end): ")
         if query.lower() in ['exit', 'quit']:
             print("Goodbye!")
             break
