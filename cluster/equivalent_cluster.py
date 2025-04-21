@@ -126,8 +126,8 @@ API Information:
 - API Signature: {api.signature}
 {'- Function Description: ' + api.description if api.description else ''}
 {'- Parameters: ' + api.parameters if api.parameters else ''}
-{'- Attributes' + api.attributes if api.attributes else ''}
-{'- Output' + api.output if api.output else ''}
+{'- Attributes:' + api.attributes if api.attributes else ''}
+{'- Output:' + api.output if api.output else ''}
 
 Task:
 Search for the APIs or API groups in the following deep learning libraries that is functionally equivalent or similar to {api.full_name}.
@@ -186,6 +186,12 @@ Target Libraries:
         return None
 
     def construct_twin_test_seed_messages(self, base_api, twin_api_group):  # twin_api_group = [API1, API2, ...]
+        # system prompt
+        system_prompt = f"""
+(1) Role Definition: You are an AI assistant specialized in deep learning framework APIs (e.g., PyTorch, JAX, MindSpore and Jittor). Your primary task is to help users find equivalent APIs (or API groups) across different deep learning libraries.
+(2) Output Format: Your response must be pure code, without any natural language statements.
+"""
+
         # twin_api_group 的详情
         if len(twin_api_group) == 1:
             twin_api = twin_api_group[0]
@@ -195,8 +201,8 @@ Target Libraries:
 - API Signature: {twin_api.signature}
 {'- Function Description: ' + twin_api.description if twin_api.description else ''}
 {'- Parameters: ' + twin_api.parameters if twin_api.parameters else ''}
-{'- Attributes' + twin_api.attributes if twin_api.attributes else ''}
-{'- Output' + twin_api.output if twin_api.output else ''}
+{'- Attributes:' + twin_api.attributes if twin_api.attributes else ''}
+{'- Output:' + twin_api.output if twin_api.output else ''}
 """
         else:
             api_group_info_prompt = ""
@@ -207,8 +213,8 @@ Member{count + 1} of API Group:
 - API Signature: {twin_api.signature}
 {'- Function Description: ' + twin_api.description if twin_api.description else ''}
 {'- Parameters: ' + twin_api.parameters if twin_api.parameters else ''}
-{'- Attributes' + twin_api.attributes if twin_api.attributes else ''}
-{'- Output' + twin_api.output if twin_api.output else ''}
+{'- Attributes:' + twin_api.attributes if twin_api.attributes else ''}
+{'- Output:' + twin_api.output if twin_api.output else ''}
 """
 
         # twin_api_group brief info
@@ -252,8 +258,7 @@ Below is a code snippet calling ({base_api.signature}). Please generate a code s
 """
 
         messages = [
-            {"role": "system",
-             "content": "You are an AI assistant specialized in deep learning framework APIs (e.g., PyTorch, JAX, MindSpore and Jittor)."},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ]
         return messages
@@ -280,38 +285,34 @@ Below is a code snippet calling ({base_api.signature}). Please generate a code s
 
     def construct_extract_base_test_seed_messages(self, base_api: API):
         system_prompt = f"""
-(1) Role Definition: You are an AI assistant specialized in deep learning framework APIs (e.g., PyTorch, JAX, MindSpore and Jittor). Your primary task is to help users find equivalent APIs (or API groups) across different deep learning libraries."
+(1) Role Definition: You are an AI assistant specialized in deep learning framework APIs (e.g., PyTorch, JAX, MindSpore and Jittor). Your primary task is to help users find equivalent APIs (or API groups) across different deep learning libraries.
 (2) Output Format: Your response must be pure code, without any natural language statements.
 """
         # Example 1
         context_query_prompt1 = f"""
 API Information:
-- API Name: jittor.nn.CrossEntropyLoss
-- Source Library: Jittor
-- Version: 1.3.9.10
-- API Signature: jittor.nn.CrossEntropyLoss(weight=None, ignore_index=None)
-- Function Description: This class is used to compute the cross-entropy loss between the output values and the target values. Cross-entropy loss is a commonly used loss function for classification tasks, especially when dealing with multi-class problems.
+- API Name: jax.numpy.arccos
+- Source Library: JAX
+- Version: 0.4.13
+- API Signature: jax.numpy.arccos(x,/)
+- Function Description: Compute element-wise inverse of trigonometric cosine of input.
+- Parameters: x(ArrayLike) – input array or scalar.
+- Attributes: Null
+- Output: Array
+- Examples:
+example: >>> x = jnp.array([-2, -1, -0.5, 0, 0.5, 1, 2])
+>>> with jnp.printoptions(precision=3, suppress=True):
+...   jnp.arccos(x)
+Array([  nan, 3.142, 2.094, 1.571, 1.047, 0.   ,   nan], dtype=float32)
 
 Task:
-
+Extract a usage example from the API's Examples that includes calling the jax.numpy.arccos and return the code. The code must declare a variable named "output" that stores either the return result of the API (if the API has a return value) or the input after being processed by the API's built-in operations (if the API has no return value).
 """
         context_answer_prompt1 = """
-
-"""
-        # Example 2
-        context_query_prompt2 = f"""
-API Information:
-- API Name: mindspore.ops.relu
-- Source Library: MindSpore
-- Version: 2.4.0
-- API Signature: mindspore.ops.relu(input)
-- Function Description: Computes the Rectified Linear Unit (ReLU) activation function on each element of the input tensor.
-
-Task:
-
-"""
-        context_answer_prompt2 = """
-
+import jax
+import jax.numpy as jnp
+x = jnp.array([-2, -1, -0.5, 0, 0.5, 1, 2])
+output = jnp.arccos(x)
 """
         # query
         query_prompt = f"""
@@ -321,8 +322,8 @@ API Information:
 - API Signature: {base_api.signature}
 {'- Function Description: ' + base_api.description if base_api.description else ''}
 {'- Parameters: ' + base_api.parameters if base_api.parameters else ''}
-{'- Attributes' + base_api.attributes if base_api.attributes else ''}
-{'- Output' + base_api.output if base_api.output else ''}
+{'- Attributes:' + base_api.attributes if base_api.attributes else ''}
+{'- Output:' + base_api.output if base_api.output else ''}
 - Examples: \n{base_api.example}
 
 Task:
@@ -330,10 +331,8 @@ Extract a usage example from the API's Examples that includes calling the {base_
 """
         messages = [
             {"role": "system", "content": system_prompt},
-            # {"role": "user", "content": context_query_prompt1},
-            # {"role": "assistant", "content": context_answer_prompt1},
-            # {"role": "user", "content": context_query_prompt2},
-            # {"role": "assistant", "content": context_answer_prompt2},
+            {"role": "user", "content": context_query_prompt1},
+            {"role": "assistant", "content": context_answer_prompt1},
             {"role": "user", "content": query_prompt},
         ]
         return messages

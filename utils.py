@@ -342,6 +342,24 @@ def retrieve_api_issues(full_api_name):
     finally:
         session.close()
 
+def get_api_info(full_api_name='torch.nn.functional.cross_entropy'):
+    # 从数据库中获取API信息
+    session = get_session()
+    api = session.query(API).filter_by(full_name=full_api_name).first()
+    if api:
+        print(f"id: {api.id}")
+        print(f"name: {api.name}")
+        print(f"lib: {api.lib}")
+        print(f"version: {api.version}")
+        print(f"module: {api.module}")
+        print(f"full_name: {api.full_name}")
+        print(f"signature: {api.signature}")
+        print(f"parameters: {api.parameters}")
+        print(f"attributes: {api.attributes}")
+        print(f"output: {api.output}")
+        print(f"description: {api.description}")
+        print(f"example: {api.example}")
+
 
 if __name__ == '__main__':
     # list = [
@@ -370,4 +388,5 @@ if __name__ == '__main__':
     # apis = session.query(API).filter_by(version="").all()
     # for api in apis:
     #    print(api.full_name)
-    retrieve_api_issues('torch.nn.functional.cross_entropy')
+    # retrieve_api_issues('torch.nn.functional.cross_entropy')
+    get_api_info("jittor.add")
