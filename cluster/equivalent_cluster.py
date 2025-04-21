@@ -137,17 +137,21 @@ Target Libraries:
 """
         messages = [
             {"role": "system", "content": system_prompt},
-            # {"role": "user", "content": context_query_prompt1},
-            # {"role": "assistant", "content": context_answer_prompt1},
-            # {"role": "user", "content": context_query_prompt2},
-            # {"role": "assistant", "content": context_answer_prompt2},
+            {"role": "user", "content": context_query_prompt1},
+            {"role": "assistant", "content": context_answer_prompt1},
+            {"role": "user", "content": context_query_prompt2},
+            {"role": "assistant", "content": context_answer_prompt2},
             {"role": "user", "content": query_prompt},
         ]
         return messages
 
     def query_llm4cluster(self, messages, max_try=5):  # 生成并检验JSON数据, 在检验完成或尝试次数达到上限后返回JSON数据或空值
+        print("query_llm4cluster()" + "*" * 80)
         attempt_num = 0
         while attempt_num < max_try:  # 设置最大尝试次数以避免无限循环
+            print("-" * 60)
+            print(f"query_llm4cluster() Info - messages:\n{messages}")
+            self.error_log = []  # 清空错误列表
             try:  # 假如返回的数据不符合JSON格式, 则重新调用OpenAI API, 直到返回的数据符合JSON格式为止
                 response = self.rag_client.chat.completions.create(
                     model="gpt-4o-mini",  # gpt-4o-mini  gpt-3.5-turbo
@@ -155,28 +159,30 @@ Target Libraries:
                     messages=messages,
                     temperature=0.4,
                 )
-                # print(response.choices[0].message['content'])
-                # response = response.choices[0].message.content
                 response = response.choices[0].message['content']
+                # 如果response的第一行以"```"开头, 则去掉第一行; 如果response的最后一行以"```"结尾, 则去掉最后一行
+                if response.split('\n', 1)[0].startswith("```"):
+                    response = response.split('\n', 1)[1]
+                if response.split('\n')[-1].endswith("```"):
+                    response = '\n'.join(response.split('\n')[:-1])
                 messages.append({"role": "assistant", "content": response})
-                print(f"Clustered API: {self.api.full_name}\nResponse:\n{response}")
+                print(f"query_llm4cluster() Info - Clustered API: {self.api.full_name}\nResponse:\n{response}")
                 # 在此处需要检查: 1.响应的数据是否遵循JSON格式; 2.返回的是API的完整函数名(完整函数名 = 模块名.API名)而非函数签名 3.所有的API函数名必须有效(不是虚构的, 也不是被弃用的)
                 if self.validate_apis(response):  # 经验证证明返回的数据是有效的
+                    print(f"query_llm4cluster() Success - Both json response and apis are valid!")
                     self.error_log = []  # 清空错误列表
                     return json.loads(response)
                 else:
+                    print(f"query_llm4cluster() Error - self.error_log: {self.error_log}")
                     attempt_num = attempt_num + 1
-                    messages.append({"role": "user",
-                                     "content": f"The JSON data you generated has the following errors: \n{self.error_log} \n Please try again."})
-                    print(
-                        f"Incorrect JSON format or invalid API.\n Error Details: \n {self.error_log} \nRetrying(Current attempt: {attempt_num})...")
-                    self.error_log = []  # 清空错误列表
+                    messages.append({"role": "user", "content": f"The JSON response you generated has the following errors: \n{self.error_log} \n Please try again."})
+                    print(f"query_llm4cluster() Error - Incorrect JSON format or invalid API. Error Details: {self.error_log} \nRetrying(Current attempt: {attempt_num})...")
             except Exception as e:
                 attempt_num = attempt_num + 1
                 self.session.rollback()  # 回滚在异常中的任何数据库更改
-                print(f"An unexpected error occurred: {e}")
+                print(f"query_llm4cluster() Error - An unexpected error occurred: {e}")
         self.error_log = []  # 清空错误列表
-        print("Max attempts reached. Unable to get valid JSON data.")
+        print("query_llm4cluster() Failed - Max attempts reached. Unable to get valid JSON data.")
         return None
 
     def construct_verify_messages(self, base_api, twin_api_group):  # twin_api_group = [API1, API2, ...]
@@ -303,7 +309,7 @@ Below is a code snippet calling ({base_api.signature}). Please generate a code s
             else:
                 return True
         except Exception as e:
-            self.error_log.append(str(e))
+            self.error_log.append(f"{full_api_name} is not a valid API. Error: {e}")
             return False
 
     def validate_apis(self, response):
@@ -314,13 +320,16 @@ Below is a code snippet calling ({base_api.signature}). Please generate a code s
         try:
             is_valid = True
             json_data = json.loads(response)
+            print(f"validate_apis() Info - json format is valid")
             for dl_lib, api_groups in json_data.items():  # 逐个访问Pytorch, JAX, MindSpore和Jittor下的API二维数组
                 for api_group in api_groups:  # 逐个访问Pytorch, Tensorflow和Jax下的各个API组合
                     for full_api_name in api_group:  # 逐个访问API组合下的各个API
-                        if not self.validate_api(full_api_name):
+                        if self.validate_api(full_api_name) is False:
+                            print(f"validate_apis() Error - {full_api_name} is not a callable API!")
+                            self.error_log.append(f"{full_api_name} is not a callable API.")
                             is_valid = False
             return is_valid
-        except JSONDecodeError:
+        except JSONDecodeError as e:
             self.error_log.append("The response data has an invalid JSON format.")
             return False
         except Exception as e:
@@ -414,6 +423,7 @@ Below is a code snippet calling ({base_api.signature}). Please generate a code s
         return value_equivalent_api_groups, state_equivalent_api_groups  # [[API], [API, API], ...]
 
     def verify_equivalence(self, json_data):  # 验证API组合的等价关系是否成立(值等价(1)/状态等价(2)/无等价关系(0))
+        print("verify_equivalence()" + "*" * 80)
         libs_apis_group_objects = {}  # {"Pytorch" : [(API1), (API2, API3)], "JAX" : [(API1),(API2, API3)], ...}
         for lib, dict_api_groups in json_data.items():
             apis_group_objects = self.identify_apis(api_groups=dict_api_groups, whether_supplement_api=False)
@@ -433,7 +443,9 @@ Below is a code snippet calling ({base_api.signature}). Please generate a code s
         single_api_groups = [api_group for api_group in api_groups if len(api_group) == 1]
         # 检查是否single_api_groups中的所有APIGroup的api.example都为空
         if all([api_group[0].example is None for api_group in single_api_groups]):
+            # 如果没有可用的测试输入作为Oracle, 则直接返回None
             # TODO 考虑根据self.api的文档为self.api生成一个example作为测试输入
+            print("verify_equivalence() Success - No test example available for equivalence verification.")
             self.api.is_clustered = True
             self.session.commit()
             return None, None
@@ -453,8 +465,7 @@ Below is a code snippet calling ({base_api.signature}). Please generate a code s
                         continue
                     messages = self.construct_verify_messages(base_api_group[0], twin_api_group)
                     test_case = self.query_llm4verify(messages)
-                    validate_test_case = validator.APITestSeedValidator(llm_client=self.llm_client,
-                                                                        raw_code=test_case).validate4code()
+                    validate_test_case = validator.APITestSeedValidator(llm_client=self.llm_client, raw_code=test_case).validate4code()
                     test_cases[twin_api_group] = validate_test_case
             except Exception as e:
                 print(f"An error occurred when verify equivalence: {e}")
@@ -564,7 +575,8 @@ Below is a code snippet calling ({base_api.signature}). Please generate a code s
 def run_randomly():  # 随机挑选未聚类的API进行聚类
     # 创建数据库连接
     session = get_session()
-    llm_client = get_llm_client('gpt4o-mini-with-rag')
+    llm_client = get_llm_client('gpt4o-mini')
+    rag_client = get_llm_client('gpt4o-mini-with-rag')
 
     # 对未聚类的PytorchAPI进行聚类
     uncluttered_torch_apis = session.query(API).filter_by(is_clustered=False).all()
@@ -572,7 +584,7 @@ def run_randomly():  # 随机挑选未聚类的API进行聚类
         print("----------------------------------------------------------------------------------")
         # 随机选择一个未聚类的API
         uncluttered_torch_api = random.choice(uncluttered_torch_apis)
-        cluster = EquivalentCluster(uncluttered_torch_api, session, llm_client)
+        cluster = EquivalentCluster(uncluttered_torch_api, session, rag_client, llm_client)
         cluster.cluster_api()
 
         uncluttered_torch_apis = session.query(API).filter_by(is_clustered=False).all()
@@ -590,7 +602,7 @@ def run_linearly():  # 线性地对未聚类的API进行聚类
     # 对未聚类的API进行聚类
     uncluttered_torch_apis = session.query(API).filter_by(is_clustered=False).all()
     for i, uncluttered_torch_api in enumerate(uncluttered_torch_apis):
-        print("----------------------------------------------------------------------------------")
+        print(f"EquivalentCluster({uncluttered_torch_api.full_name})" + "=" * 100)
         # 选择一个未聚类的TensorflowAPI
         cluster = EquivalentCluster(uncluttered_torch_api, session, rag_client, llm_client)
         cluster.cluster_api()
