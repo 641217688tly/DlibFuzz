@@ -1,5 +1,6 @@
 import os
 import subprocess
+import time
 from utils import *
 
 
@@ -85,7 +86,8 @@ class APITestSeedValidator:
 
     def static_analysis(self, raw_code):  # 静态分析Python代码, 如果发现错误, 则返回False和错误信息
         # 创建一个临时的Python文件:
-        file_path = f'../data/tmp/{self.seed.id}.py'
+        timestamp = int(time.time())
+        file_path = f'../data/tmp/{timestamp}.py'
         with open(file_path, 'w') as f:
             f.write(raw_code)
         # 使用静态分析工具对代码文件进行分析

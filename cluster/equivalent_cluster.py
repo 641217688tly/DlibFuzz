@@ -5,7 +5,7 @@ from json import JSONDecodeError
 from sqlalchemy import func
 from utils import *
 from fuzzer import validator
-
+from fuzzer.validator import APITestSeedValidator
 
 # ----------------------------------------------Cluster----------------------------------------------
 class EquivalentCluster:
@@ -146,7 +146,7 @@ Target Libraries:
         return messages
 
     def query_llm4cluster(self, messages, max_try=5):  # 生成并检验JSON数据, 在检验完成或尝试次数达到上限后返回JSON数据或空值
-        print("query_llm4cluster()" + "*" * 80)
+        print("*" * 80 + "query_llm4cluster()")
         attempt_num = 0
         while attempt_num < max_try:  # 设置最大尝试次数以避免无限循环
             print("-" * 60)
@@ -185,7 +185,7 @@ Target Libraries:
         print("query_llm4cluster() Failed - Max attempts reached. Unable to get valid JSON data.")
         return None
 
-    def construct_verify_messages(self, base_api, twin_api_group):  # twin_api_group = [API1, API2, ...]
+    def construct_twin_test_seed_messages(self, base_api, twin_api_group):  # twin_api_group = [API1, API2, ...]
         # twin_api_group 的详情
         if len(twin_api_group) == 1:
             twin_api = twin_api_group[0]
@@ -246,8 +246,8 @@ Information of the API {'group' if len(twin_api_group) > 1 else ''} to be called
 Background knowledge:
 {background_knowledge_prompt}
 
-Task requirements:
-Below is a code snippet calling ({base_api.signature}). Please generate a code snippet that replaces ({base_api.full_name}) with {api_group_brief_info}, ensuring that the input parameters remain unchanged. At the end of the code, print the return value of the ({base_api.full_name}) or the variable modified by the ({base_api.full_name}) in-place operations.
+Task:
+Below is a code snippet calling ({base_api.signature}). Please generate a code snippet that replaces ({base_api.full_name}) with {api_group_brief_info}, ensuring that the input parameters remain unchanged. Additionally, ensure that the code snippet you generate declares the same variables as the example code (for instance, if the example code declares an "output" variable to store the API's result, then your generated code should also declare an "output" variable to store the API's result).
 {base_api.example}
 """
 
@@ -258,18 +258,98 @@ Below is a code snippet calling ({base_api.signature}). Please generate a code s
         ]
         return messages
 
-    def query_llm4verify(self, messages, max_retry=5):
+    def query_llm4TwinTestSeed(self, messages, max_retry=5):
         attempt_num = 0
-        llm_client = get_llm_client('gpt4o-mini')
         while attempt_num < max_retry:  # 设置最大尝试次数以避免无限循环
             try:
-                response = llm_client.chat.completions.create(
+                response = self.llm_client.chat.completions.create(
                     model="gpt-4o-mini",  # gpt-4o-mini  gpt-3.5-turbo
                     messages=messages,
                     temperature=0.4,
                 )
-                response_data = response.choices[0].message.content
-                return response_data
+                raw_code = response.choices[0].message.content
+                code = APITestSeedValidator(llm_client=self.llm_client, raw_code=raw_code).validate4code()
+                return code
+            except Exception as e:
+                print(f"Failed to get response due to: \n{e} \nRetrying(Current attempt: {attempt_num + 1})...")
+                attempt_num += 1
+                self.session.rollback()  # 回滚在异常中的任何数据库更改
+        if attempt_num >= 5:  # 设置最大尝试次数以避免无限循环
+            print("Max attempts reached. Unable to get valid JSON data.")
+            return None
+
+    def construct_extract_base_test_seed_messages(self, base_api: API):
+        system_prompt = f"""
+(1) Role Definition: You are an AI assistant specialized in deep learning framework APIs (e.g., PyTorch, JAX, MindSpore and Jittor). Your primary task is to help users find equivalent APIs (or API groups) across different deep learning libraries."
+(2) Output Format: Your response must be pure code, without any natural language statements.
+"""
+        # Example 1
+        context_query_prompt1 = f"""
+API Information:
+- API Name: jittor.nn.CrossEntropyLoss
+- Source Library: Jittor
+- Version: 1.3.9.10
+- API Signature: jittor.nn.CrossEntropyLoss(weight=None, ignore_index=None)
+- Function Description: This class is used to compute the cross-entropy loss between the output values and the target values. Cross-entropy loss is a commonly used loss function for classification tasks, especially when dealing with multi-class problems.
+
+Task:
+
+"""
+        context_answer_prompt1 = """
+
+"""
+        # Example 2
+        context_query_prompt2 = f"""
+API Information:
+- API Name: mindspore.ops.relu
+- Source Library: MindSpore
+- Version: 2.4.0
+- API Signature: mindspore.ops.relu(input)
+- Function Description: Computes the Rectified Linear Unit (ReLU) activation function on each element of the input tensor.
+
+Task:
+
+"""
+        context_answer_prompt2 = """
+
+"""
+        # query
+        query_prompt = f"""
+API Information:
+- API Name: {base_api.full_name}
+- Source Library: {base_api.lib} (version{base_api.version})
+- API Signature: {base_api.signature}
+{'- Function Description: ' + base_api.description if base_api.description else ''}
+{'- Parameters: ' + base_api.parameters if base_api.parameters else ''}
+{'- Attributes' + base_api.attributes if base_api.attributes else ''}
+{'- Output' + base_api.output if base_api.output else ''}
+- Examples: \n{base_api.example}
+
+Task:
+Extract a usage example from the API's Examples that includes calling the {base_api.full_name} and return the code. The code must declare a variable named "output" that stores either the return result of the API (if the API has a return value) or the input after being processed by the API's built-in operations (if the API has no return value).
+"""
+        messages = [
+            {"role": "system", "content": system_prompt},
+            # {"role": "user", "content": context_query_prompt1},
+            # {"role": "assistant", "content": context_answer_prompt1},
+            # {"role": "user", "content": context_query_prompt2},
+            # {"role": "assistant", "content": context_answer_prompt2},
+            {"role": "user", "content": query_prompt},
+        ]
+        return messages
+
+    def query_llm4BaseTestSeed(self, messages, max_retry=5):
+        attempt_num = 0
+        while attempt_num < max_retry:  # 设置最大尝试次数以避免无限循环
+            try:
+                response = self.llm_client.chat.completions.create(
+                    model="gpt-4o-mini",  # gpt-4o-mini  gpt-3.5-turbo
+                    messages=messages,
+                    temperature=0.4,
+                )
+                raw_code = response.choices[0].message.content
+                code = APITestSeedValidator(llm_client=self.llm_client, raw_code=raw_code).validate4code()
+                return code
             except Exception as e:
                 print(f"Failed to get response due to: \n{e} \nRetrying(Current attempt: {attempt_num + 1})...")
                 attempt_num += 1
@@ -375,8 +455,7 @@ Below is a code snippet calling ({base_api.signature}). Please generate a code s
     def judge_equivalence(self, api_groups, execute_results, threshold=0.95):  # 根据测试用例的运行结果判断API组合的等价关系
         # Example: api_groups = [("jittor.nn.CrossEntropyLoss"), ("jax.nn.log_softmax", "jax.numpy.sum", "jax.numpy.mean"), ...]
         # Example: execute_results = {("jittor.nn.CrossEntropyLoss"):[result1, result2], ), ("jax.nn.log_softmax", "jax.numpy.sum", "jax.numpy.mean"):[result1, result2, ..], ...}
-        target_api_group = [api_group for api_group in api_groups if len(api_group) == 1 and api_group[0] == self.api][
-            0]
+        target_api_group = [api_group for api_group in api_groups if len(api_group) == 1 and api_group[0] == self.api][0]
         value_equivalent_api_groups = [list(target_api_group), ]
         state_equivalent_api_groups = [list(target_api_group), ]
         target_api_group_results = execute_results[target_api_group]
@@ -423,7 +502,7 @@ Below is a code snippet calling ({base_api.signature}). Please generate a code s
         return value_equivalent_api_groups, state_equivalent_api_groups  # [[API], [API, API], ...]
 
     def verify_equivalence(self, json_data):  # 验证API组合的等价关系是否成立(值等价(1)/状态等价(2)/无等价关系(0))
-        print("verify_equivalence()" + "*" * 80)
+        print("*" * 80 + "verify_equivalence()")
         libs_apis_group_objects = {}  # {"Pytorch" : [(API1), (API2, API3)], "JAX" : [(API1),(API2, API3)], ...}
         for lib, dict_api_groups in json_data.items():
             apis_group_objects = self.identify_apis(api_groups=dict_api_groups, whether_supplement_api=False)
@@ -435,6 +514,7 @@ Below is a code snippet calling ({base_api.signature}). Please generate a code s
         # 如果没有匹配到任何等价API, 在判定为该API无等价关系
         if len(api_groups) < 2:
             if len(api_groups[0]) == 1 and api_groups[0][0] == self.api:  # 没有匹配到等价API
+                print(f"verify_equivalence() Success - Did not find any equivalent API for {self.api.full_name}.")
                 self.api.is_clustered = True
                 self.session.commit()
                 return None, None
@@ -444,29 +524,40 @@ Below is a code snippet calling ({base_api.signature}). Please generate a code s
         # 检查是否single_api_groups中的所有APIGroup的api.example都为空
         if all([api_group[0].example is None for api_group in single_api_groups]):
             # 如果没有可用的测试输入作为Oracle, 则直接返回None
-            # TODO 考虑根据self.api的文档为self.api生成一个example作为测试输入
             print("verify_equivalence() Success - No test example available for equivalence verification.")
             self.api.is_clustered = True
             self.session.commit()
             return None, None
 
         execute_results = {api_group: [] for api_group in api_groups}
-        base_api_groups = [api_group for api_group in single_api_groups if
-                           api_group[0].example is not None and api_group[0].example != ""]
+        # 选择有文档usage example的API作为基准API
+        base_api_groups = [api_group for api_group in single_api_groups if api_group[0].example is not None and api_group[0].example != "" and len(api_group[0].example) > 5]
+
+        #TODO 为了节约成本, 仅从base_api_groups中随机选择一个API作为基准API
+        if len(base_api_groups) > 1:
+            base_api_groups = random.sample(base_api_groups, 1)
+
         while base_api_groups:
             base_api_group = base_api_groups[0]
+            base_api = base_api_group[0]
+            print("-" * 60 + "\n" + f"verify_equivalence() Info - base_api: {base_api.full_name}")
 
-            # 生成测试用例
-            test_cases = {api_group: (base_api_group[0].example if api_group == base_api_group else "") for api_group in
-                          api_groups}
+            # 使用LLM从base_api_group[0].example中生提取一个有效的测试用例
+            base_messages = self.construct_extract_base_test_seed_messages(base_api)
+            base_test_code = self.query_llm4BaseTestSeed(base_messages)
+            if base_test_code is None:
+                print(f"verify_equivalence() Error - No valid test cases can be obtained from the example of {base_api.full_name}.")
+                continue
+            print("@" * 40 + "\n" + f"verify_equivalence() Info - {base_api.full_name} Base Test Case:\n{base_test_code}")
+            test_cases = {api_group: (base_test_code if api_group == base_api_group else "") for api_group in api_groups}  # 初始化测试用例
             try:
                 for twin_api_group in api_groups:
                     if twin_api_group == base_api_group:
                         continue
-                    messages = self.construct_verify_messages(base_api_group[0], twin_api_group)
-                    test_case = self.query_llm4verify(messages)
-                    validate_test_case = validator.APITestSeedValidator(llm_client=self.llm_client, raw_code=test_case).validate4code()
-                    test_cases[twin_api_group] = validate_test_case
+                    twin_messages = self.construct_twin_test_seed_messages(base_api_group[0], twin_api_group)
+                    twin_test_code = self.query_llm4TwinTestSeed(twin_messages)
+                    test_cases[twin_api_group] = twin_test_code
+                    print("@" * 40 + "\n" + f"verify_equivalence() Info - {twin_api_group[0].full_name} Base Test Case:\n{twin_test_code}")
             except Exception as e:
                 print(f"An error occurred when verify equivalence: {e}")
                 continue
