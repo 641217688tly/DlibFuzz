@@ -7,10 +7,9 @@ from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain.schema import Document
 from langchain_core.prompts import ChatPromptTemplate
-from llm import OpenAILLM
 from embeddings import OllamaEmbeddings, OpenAIEmbeddings
 from langchain.chains import RetrievalQA
-from typing import List, Dict, Optional, Any, Union
+from typing import List, Dict, Union
 
 
 def load_files(directory: str, kind: str):
@@ -150,10 +149,11 @@ def initialize_rag_system(is_local: bool,
     
     # Initialize LLM
     if is_local:
-        print("Local LLM not implemented yet.")
+        from llm import OllamaLLM
+        llm = OllamaLLM(model_name='llama3.1')
     else:
+        from llm import OpenAILLM
         llm = OpenAILLM(model_name=openai_model, api_key=openai_api_key)
-    print('LLM initialized.')
     
     # Establish RAG pipeline
     if instructions_template is None:

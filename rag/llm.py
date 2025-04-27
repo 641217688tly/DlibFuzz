@@ -1,12 +1,10 @@
 import os
 import logging
-from typing import Any, ClassVar, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
-import httpx
-from pydantic import PrivateAttr
 from langchain.llms.base import LLM
 from openai import OpenAI
-from langchain.schema import BaseMessage, AIMessage, HumanMessage, SystemMessage, ChatMessage
+from langchain.schema import BaseMessage, AIMessage, HumanMessage, SystemMessage
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -41,6 +39,8 @@ class OpenAILLM(LLM):
         except Exception as e:
             logger.error(f"Failed to initialize OpenAILLM: {e}")
             raise
+
+        logger.info(f"LLM initialized as expected. Model: {self.model_name}")
 
     @property
     def _llm_type(self) -> str:
@@ -122,4 +122,61 @@ class OpenAILLM(LLM):
         """
         # Simple approximation: ~4 characters per token
         return len(text) // 4
+
+
+class OllamaLLM(LLM):
+    """
+    Custom LLM class to interact with Ollama server locally.
+    """
+    model_name: str = "llama3"
+    api_url: str = "http://localhost:11434"
+    temperature: float = 0.7
+    max_tokens: int = 1024
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.model_name = kwargs.get('model_name', self.model_name)
+        self.api_url = kwargs.get('api_url', self.api_url)
+        self.temperature = kwargs.get('temperature', self.temperature)
+        self.max_tokens = kwargs.get('max_tokens', self.max_tokens)
+
+        logger.info(f"LLM initialized as expected. Model: {self.model_name}")
+
+
+    @property
+    def _llm_type(self) -> str:
+        return "ollama"
+
+    def _call(self, prompt: Union[str, List[Dict[str, str]], List[BaseMessage]],
+              stop: Optional[List[str]] = None, **kwargs: Any) -> str:
+        """
+        Call the Ollama local server with the given prompt.
+        """
+        import requests
+
+        if isinstance(prompt, list):
+            if isinstance(prompt[0], BaseMessage):
+                prompt = "\n".join([msg.content for msg in prompt])
+            elif isinstance(prompt[0], dict) and "content" in prompt[0]:
+                prompt = "\n".join([msg["content"] for msg in prompt])
+            else:
+                prompt = str(prompt)
+
+        payload = {
+            "model": self.model_name,
+            "prompt": prompt,
+            "temperature": self.temperature,
+            "options": {
+                "num_predict": self.max_tokens
+            }
+        }
+
+        response = requests.post(f"{self.api_url}/v1/chat/completions", json=payload)
+        if response.status_code != 200:
+            raise ValueError(f"Error communicating with Ollama: {response.text}")
+        data = response.json()
+        return data["message"]["content"]
+
+    def get_num_tokens(self, text: str) -> int:
+        return len(text) // 4  # rough estimate
 
