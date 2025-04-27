@@ -17,37 +17,38 @@ def load_files(directory: str, kind: str):
     
     for root, _, files in os.walk(directory):
         for filename in files:
-            if filename.endswith(('.html', '.htm', '.md', '.txt')):
-                filepath = os.path.join(root, filename)
-                try:
-                    if filename.endswith(('.html', '.htm')):
-                        with open(filepath, 'r', encoding='utf-8') as file:
-                            soup = BeautifulSoup(file, 'html.parser')
-                            if kind == 'pytorch' or 'jax':
-                                sections = soup.find_all('div', class_='section')
-                                if sections:
-                                    text = "\n".join(section.get_text(separator='') for section in sections)
-                                else:
-                                    # If no sections found, get all text
-                                    text = soup.get_text(separator='\n')
-                            elif kind == 'mindspore' or kind == 'jittor':
-                                sections = soup.find_all('div', class_='section')
-                                if sections:
-                                    text = "\n".join(section.get_text(separator=' ') for section in sections)
-                                else:
-                                    # If no sections found, get all text
-                                    text = soup.get_text(separator='')
+            if not filename.endswith(('.html', '.htm', '.md', '.txt')):
+                continue
+            filepath = os.path.join(root, filename)
+            try:
+                if filename.endswith(('.html', '.htm')):
+                    with open(filepath, 'r', encoding='utf-8') as file:
+                        soup = BeautifulSoup(file, 'html.parser')
+                        if kind == 'pytorch' or 'jax':
+                            sections = soup.find_all('div', class_='section')
+                            if sections:
+                                text = "\n".join(section.get_text(separator='') for section in sections)
                             else:
+                                # If no sections found, get all text
                                 text = soup.get_text(separator='\n')
-                            documents.append(text)
-                    else:  # .md files
-                        with open(filepath, 'r', encoding='utf-8') as file:
-                            text = file.read()
-                            documents.append(text)
-                except Exception as e:
-                    print(f"Error processing file {filepath}: {str(e)}")
-                    continue
-        
+                        elif kind == 'mindspore' or kind == 'jittor':
+                            sections = soup.find_all('div', class_='section')
+                            if sections:
+                                text = "\n".join(section.get_text(separator=' ') for section in sections)
+                            else:
+                                # If no sections found, get all text
+                                text = soup.get_text(separator='')
+                        else:
+                            text = soup.get_text(separator='\n')
+                        documents.append(text)
+                elif filename.endswith(('.md', '.txt')):
+                    with open(filepath, 'r', encoding='utf-8') as file:
+                        text = file.read()
+                        documents.append(text)
+            except Exception as e:
+                print(f"Error processing file {filepath}: {str(e)}")
+                continue
+    
     return documents
 
 def create_vector_store_batched(documents, embeddings, batch_size=100):
