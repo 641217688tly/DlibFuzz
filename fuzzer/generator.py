@@ -33,11 +33,12 @@ class Fuzzer:  # 以Cluster为单位生成测试种子
             "ValueIndirectRelevant": [],
             "Irrelevant": []
         }
+        
         # 1.优先寻找与api直接相关的错误
         direct_relevant_errors = api.history_errors
         if direct_relevant_errors:
-            errors["DirectRelevant"] = random.sample(direct_relevant_errors,
-                                                     min(self.error_num_in_context, len(direct_relevant_errors)))
+            errors["DirectRelevant"] = random.sample(direct_relevant_errors, min(self.error_num_in_context, len(direct_relevant_errors)))
+
         # 2.如果当前错误数量不足n个, 则继续寻找与api间接相关的错误
         if sum(len(v) for v in errors.values()) < self.error_num_in_context and self.whether_sample_state_equivalent:
             single_api_groups = (self.session.query(APIGroup)
@@ -63,6 +64,7 @@ class Fuzzer:  # 以Cluster为单位生成测试种子
                                                             min(self.error_num_in_context - sum(
                                                                 len(v) for v in errors.values()),
                                                                 len(indirect_relevant_errors)))
+
         # 3.如果当前错误数量不足n个, 则从值等价簇内寻找由单个API组成的APIGroup的直接关联错误
         if sum(len(v) for v in errors.values()) < self.error_num_in_context and self.whether_sample_value_equivalent:
             single_api_groups = (self.session.query(APIGroup)
@@ -88,6 +90,7 @@ class Fuzzer:  # 以Cluster为单位生成测试种子
                                                             min(self.error_num_in_context - sum(
                                                                 len(v) for v in errors.values()),
                                                                 len(indirect_relevant_errors)))
+
         # 4.如果当前错误数量不足n个, 则继续寻找与api不相关的错误
         if sum(len(v) for v in errors.values()) < self.error_num_in_context:
             # 此处可以考虑通过比较embedding向量来找到在history_errors中与api相对相关的错误
@@ -104,15 +107,10 @@ class Fuzzer:  # 以Cluster为单位生成测试种子
         return errors
 
     def weighted_sample_base(self, candidates, energy):  # 加权抽取基底API
-        """
-           1. 根据 self.sample_errors(candidate.apis[0]) 得到每个候选项的"错误数"来提高它的抽中概率
-           2. 同时，如果候选项在本次抽取过程中被抽过多次，则其再次被抽的概率会递减
-           3. 最终抽取 energy 次，返回抽中的 candidate 列表
-        """
         if not candidates or energy <= 0:
             return []
 
-        # 用于记录候选项在本次抽取过程中的“已被抽取次数”
+        # 用于记录候选项在本次抽取过程中的"已被抽取次数"
         draw_count_map = defaultdict(int)
 
         # 预先计算所有候选项的 error_count
@@ -129,7 +127,7 @@ class Fuzzer:  # 以Cluster为单位生成测试种子
 
         # 抽取 energy 次
         chosen = []
-        for _ in range(energy):
+        for i in range(energy):
             # 计算此次抽取时各个候选基底的权重
             weights = []
             for candidate in candidates:
@@ -311,17 +309,16 @@ Please refer to the input values for API parameters and the API call combination
                     attempt_num = attempt_num + 1
                     messages.append({"role": "user", "content": f"The JSON response you generated has the following errors: \n{self.error_log} \n Please try again."})
             except Exception as e:
-                print(f"Failed to get response due to: \n{e} \nRetrying(Current attempt: {attempt_num + 1})...")
                 attempt_num += 1
                 self.session.rollback()  # 回滚在异常中的任何数据库更改
         self.error_log = []  # 清空错误列表
-        print("Max attempts reached. Unable to get valid JSON data.")
         return None, None
 
     def generate_seed4base(self, base_api_group: APIGroup, cluster_seed: ClusterTestSeed):
+        print("*" * 40 + "generate_seed4base()" + "*" * 40)
         messages = self.construct_messages4base(base_api_group)
         base_seed_code, api_name_list = self.query_llm4BaseSeed(messages)
-        if base_seed_code or api_name_list is None:
+        if base_seed_code is None or api_name_list is None:
             raise Exception("Failed to generate base seed for base API.")
         api_combination = self.identify_apis(api_name_list)
         base_seed = APITestSeed(
@@ -333,11 +330,12 @@ Please refer to the input values for API parameters and the API call combination
         self.session.flush()
 
         # 对基底API进行修复
-        valid_code = APITestSeedValidator(self.session, self.llm_client, base_seed).validate4seed()
+        valid_code = APITestSeedValidator(self.llm_client, self.session, base_seed).validate4seed()
         if valid_code is None:
             raise Exception("Failed to generate base seed for base API.")
         base_seed.valid_code = valid_code
         self.session.flush()
+        print(f"generate_seed4base() Success - Base seed generated and validated for {base_api_group.apis[0].full_name}:\n\n{base_seed.valid_code}")
         return base_seed, api_combination
 
     def construct_messages4twin(self, twin_api_group, base_api_seed, base_api_invoke_combination):
@@ -417,7 +415,7 @@ Below is a code snippet calling ({base_api.signature}). Please generate a code s
 """
 
         # 为每个api_combination中的API和其对应的equivalent_api生成文档提示词
-        if len(base_api_invoke_combination) == 1 and base_api_invoke_combination[0] == base_api: # 先检查api_combination内是否有且只有base_api这一个API, 如果是则跳过
+        if not (len(base_api_invoke_combination) == 1 and base_api_invoke_combination[0] == base_api): # 先检查api_combination内是否有且只有base_api这一个API, 如果不是则处理其他API
             api_mapper = {}
             for api in base_api_invoke_combination:
                 api_obj_groups = (self.session.query(APIGroup)
@@ -496,7 +494,6 @@ Corresponding equivalent API in target library: {equivalent_api.full_name}
             try:
                 response = self.llm_client.chat.completions.create(
                     model=model,  # gpt-4o-mini  gpt-3.5-turbo
-                    response_format={"type": "json_object"},
                     messages=messages,
                     temperature=0.4,
                 )
@@ -508,16 +505,15 @@ Corresponding equivalent API in target library: {equivalent_api.full_name}
                     response = '\n'.join(response.split('\n')[:-1])
                 return response
             except Exception as e:
-                print(f"Failed to get response due to: \n{e} \nRetrying(Current attempt: {attempt_num + 1})...")
                 attempt_num += 1
                 self.session.rollback()  # 回滚在异常中的任何数据库更改
-        print("Max attempts reached. Unable to get valid JSON data.")
         return None
 
     def generate_seed4twin(self, twin_api_group: APIGroup, base_api_seed: APITestSeed, base_api_combination, cluster_seed: ClusterTestSeed):
         messages = self.construct_messages4twin(twin_api_group, base_api_seed, base_api_combination)
         twin_seed_code = self.query_llm4TwinSeed(messages)
         if twin_seed_code is None:
+            print(f"generate_seed4twin() Error - Failed to generate seed for equivalent API")
             raise Exception("Failed to generate seed for equivalent API.")
         twin_seed = APITestSeed(
             cluster_seed_id=cluster_seed.id,
@@ -528,17 +524,22 @@ Corresponding equivalent API in target library: {equivalent_api.full_name}
         self.session.flush()
 
         # 对raw_code进行修复
-        valid_code = APITestSeedValidator(self.session, self.llm_client, twin_seed).validate4seed()
+        valid_code = APITestSeedValidator(self.llm_client, self.session, twin_seed).validate4seed()
         if valid_code is None:
+            print(f"generate_seed4twin() Error - Failed to validate twin seed")
             raise Exception("Failed to generate seed for equivalent API.")
         twin_seed.valid_code = valid_code
+        print(f"generate_seed4twin() Success - Twin seed generated and validated for {twin_api_group.apis[0].full_name}:\n\n{twin_seed.valid_code}")
         self.session.flush()
         return twin_seed
 
     def fuzz_equivalent_cluster(self, cluster: Cluster):
+        print(f"fuzz_equivalent_cluster() Info - Fuzzing cluster ID: {cluster.id}, Type: {cluster.type}")
         if cluster.is_tested:
+            print(f"fuzz_equivalent_cluster() Info - Cluster {cluster.id} already tested, skipping")
             return
         elif not cluster.api_groups:  # 如果该等价簇没有API组合, 则直接标记为已测试
+            print(f"fuzz_equivalent_cluster() Info - Cluster {cluster.id} has no API groups, marking as tested")
             cluster.is_tested = True
             self.session.commit()
             return
@@ -546,61 +547,77 @@ Corresponding equivalent API in target library: {equivalent_api.full_name}
         # 先查询该等价簇已经生成了几个种子
         seeds_num = self.session.query(ClusterTestSeed).filter(ClusterTestSeed.cluster_id == cluster.id).count()
         remaining_energy = cluster.energy - seeds_num
+        print(f"fuzz_equivalent_cluster() Info - Cluster {cluster.id} has {seeds_num} existing seeds, remaining energy: {remaining_energy}")
+        
         # 从cluster中筛选出仅由一个API组成的APIGroup作为候选基底
         candidate_base_api_groups = [api_group for api_group in cluster.api_groups if len(api_group.apis) == 1]
+        print(f"fuzz_equivalent_cluster() Info - Found {len(candidate_base_api_groups)} candidate base API groups")
+        
         base_api_groups = self.weighted_sample_base(candidate_base_api_groups, remaining_energy)
-
         while base_api_groups:  # 生成remaining_energy个ClusterTestSeed
-            try:  # 开始种子的生成
-                base_api_group = base_api_groups[0]
-                cluster_seed = ClusterTestSeed(
-                    cluster_id=cluster.id,
-                    start_test=datetime.utcnow()
-                )
-                self.session.add(cluster_seed)
-                self.session.flush()
+            print("=" * 50 + f"Generating Seed({cluster.energy - len(base_api_groups) + 1})" + "=" * 50)
+            # try:  # 开始种子的生成
+            base_api_group = base_api_groups[0]
+            cluster_seed = ClusterTestSeed(
+                cluster_id=cluster.id,
+                start_test=datetime.utcnow()
+            )
+            self.session.add(cluster_seed)
+            self.session.flush()
 
-                # 生成基底API的测试用例
-                base_api_seed, base_api_combination = self.generate_seed4base(base_api_group, cluster_seed)
+            # 生成基底API的测试用例
+            base_api_seed, base_api_combination = self.generate_seed4base(base_api_group, cluster_seed)
 
-                # 生成等价簇中其他API的测试用例
-                twin_apis_seeds = []
-                for twin_api_group in cluster.api_groups:
-                    if twin_api_group == base_api_group:
-                        continue
-                    twin_api_seed = self.generate_seed4twin(twin_api_group, base_api_seed, base_api_combination, cluster_seed)
-                    twin_apis_seeds.append(twin_api_seed)
-                cluster_seed.end_test = datetime.utcnow()
-                self.session.commit()
-                base_api_groups.pop(0)
-            except Exception as e:
-                print(f"Error in generating seed for Value Equivalent Cluster({cluster.id}): {e}")
-                self.session.rollback()
-                continue
+            # 生成等价簇中其他API的测试用例
+            twin_apis_seeds = []
+            for count, twin_api_group in enumerate(cluster.api_groups):
+                if twin_api_group == base_api_group:
+                    continue
+                print("*" * 30 + f"generate_seed4twin() - Twin API Group({count})" + "*" * 30)
+                twin_api_seed = self.generate_seed4twin(twin_api_group, base_api_seed, base_api_combination, cluster_seed)
+                twin_apis_seeds.append(twin_api_seed)
+            cluster_seed.end_test = datetime.utcnow()
+            self.session.commit()
+            print(f"fuzz_equivalent_cluster() Success - Completed seed generation for base API: {base_api_group.apis[0].full_name}")
+            base_api_groups.pop(0)
+            # except Exception as e:
+            #     print(f"fuzz_equivalent_cluster() Error - Error in generating seed for {cluster.type} Cluster({cluster.id}): {e}")
+            #     self.session.rollback()
+            #     base_api_groups.pop(0)
+            #     continue
 
         # 检查是否所有的种子都已经生成完毕
         seeds_num = self.session.query(ClusterTestSeed).filter_by(cluster_id=cluster.id).count()
         if seeds_num >= cluster.energy:
             cluster.is_tested = True
             self.session.commit()
+            print(f"fuzz_equivalent_cluster() Success - Cluster {cluster.id} completed with {seeds_num} seeds")
 
     def fuzz_value_equivalent_clusters(self):
+        print("=" * 75 +"fuzz_value_equivalent_clusters()" + "=" * 75)
         value_equivalent_clusters = self.session.query(Cluster).filter_by(type='ValueEquivalent').all()
         untested_clusters = self.session.query(Cluster).filter_by(is_tested=False, type='ValueEquivalent').all()
+        
         while untested_clusters:
-            print(f"Fuzzing Value Equivalent Clusters: {len(untested_clusters)}/ {len(value_equivalent_clusters)}")
+            print("-" * 70 + f"Fuzzing Value Equivalent Clusters: {len(untested_clusters)}/ {len(value_equivalent_clusters)}" + "-" * 70)
             untested_cluster = untested_clusters[0]
             self.fuzz_equivalent_cluster(untested_cluster)
             untested_clusters = self.session.query(Cluster).filter_by(is_tested=False, type='ValueEquivalent').all()
+            
+        print(f"fuzz_value_equivalent_clusters() Success - All value equivalent clusters fuzzing completed")
 
     def fuzz_state_equivalent_clusters(self):
+        print("=" * 75 + "fuzz_state_equivalent_clusters()" + "=" * 75)
         state_equivalent_clusters = self.session.query(Cluster).filter_by(type='StateEquivalent').all()
         untested_clusters = self.session.query(Cluster).filter_by(is_tested=False, type='StateEquivalent').all()
+        
         while untested_clusters:
-            print(f"Fuzzing State Equivalent Clusters: {len(untested_clusters)}/ {len(state_equivalent_clusters)}")
+            print("-" * 70 + f"Fuzzing State Equivalent Clusters: {len(untested_clusters)}/ {len(state_equivalent_clusters)}" + "-" * 70)
             untested_cluster = untested_clusters[0]
             self.fuzz_equivalent_cluster(untested_cluster)
             untested_clusters = self.session.query(Cluster).filter_by(is_tested=False, type='StateEquivalent').all()
+            
+        print(f"fuzz_state_equivalent_clusters() Success - All state equivalent clusters fuzzing completed")
 
 
 if __name__ == '__main__':
@@ -608,6 +625,7 @@ if __name__ == '__main__':
     llm_client = utils.get_llm_client(llm='gpt4o-mini')
     rag_client = utils.get_llm_client(llm='gpt4o-mini-with-rag')
     fuzzer = Fuzzer(session, llm_client, rag_client)
+    
     fuzzer.fuzz_value_equivalent_clusters()
     fuzzer.fuzz_state_equivalent_clusters()
     session.close()
