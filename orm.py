@@ -41,7 +41,6 @@ class API(Base):
     is_clustered = Column(Boolean, default=False)  # 该API是否已经被执行匹配
     history_errors = relationship('APIHistoryError', back_populates='api')  # 一个API可能有多个触发bug的代码片段
 
-
 class APIGroup(Base):
     __tablename__ = 'api_group'
     id = Column(Integer, primary_key=True)

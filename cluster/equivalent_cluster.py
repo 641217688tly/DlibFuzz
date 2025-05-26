@@ -4,7 +4,6 @@ import traceback
 from json import JSONDecodeError
 from sqlalchemy import func
 from utils import *
-from fuzzer import validator
 from fuzzer.validator import APITestSeedValidator
 
 # ----------------------------------------------Cluster----------------------------------------------
@@ -35,7 +34,7 @@ Definition of Equivalent API:
 Definition of Equivalent API Groups:
 - If the functionality of an API can be achieved by calling a group of APIs, then this group of APIs is defined as an "Equivalent API Group".
 (3) Output Format
-Provide the answer in JSON format:
+Your answer must be provided strictly in the following JSON format:
 - Key: The name of the deep learning library where the target API resides.
 - Value: A two-dimensional array, where each element is a one-dimensional array containing one or more fully qualified API names (i.e., module name + API name).
 Additionally, the JSON must include at least the target API for which equivalent APIs (or API groups) are being sought.
@@ -189,7 +188,7 @@ Target Libraries:
         # system prompt
         system_prompt = f"""
 (1) Role Definition: You are an AI assistant specialized in deep learning framework APIs (e.g., PyTorch, JAX, MindSpore and Jittor). Your primary task is to help users find equivalent APIs (or API groups) across different deep learning libraries.
-(2) Output Format: Your response must be pure code, without any natural language statements.
+(2) Output Format: Your response must be pure code. Do not include any explanations, comments, or extra content.
 """
 
         # twin_api_group 的详情
@@ -230,18 +229,24 @@ Member{count + 1} of API Group:
 The API ({twin_api.signature}) from library {twin_api.lib}(v{twin_api.version}) has the similar function as the API ({base_api.signature}) from library {base_api.lib}(v{base_api.version}).
 The detail of API ({base_api.signature}) is as follows:
 - API Name: {base_api.full_name}
-- Source Library: {base_api.lib} (version{base_api.version})
+- API Library: {base_api.lib} (version{base_api.version})
 - API Signature: {base_api.signature}
 {'- Function Description: ' + base_api.description if base_api.description else ''}
+{'- Parameters: ' + base_api.parameters if base_api.parameters else ''}
+{'- Attributes:' + base_api.attributes if base_api.attributes else ''}
+{'- Output:' + base_api.output if base_api.output else ''}
 """
         else:
             background_knowledge_prompt = f"""
 By combining the APIs in {api_group_brief_info}, it can achieve the similar functionality as the API {base_api.signature} from library {base_api.lib}(v{base_api.version}).
 The detail of API ({base_api.signature}) is as follows:
 - API Name: {base_api.full_name}
-- Source Library: {base_api.lib} (version{base_api.version})
+- API Library: {base_api.lib} (version{base_api.version})
 - API Signature: {base_api.signature}
 {'- Function Description: ' + base_api.description if base_api.description else ''}
+{'- Parameters: ' + base_api.parameters if base_api.parameters else ''}
+{'- Attributes:' + base_api.attributes if base_api.attributes else ''}
+{'- Output:' + base_api.output if base_api.output else ''}
 """
 
         # 构建最终提示词
@@ -273,7 +278,9 @@ Below is a code snippet calling ({base_api.signature}). Please generate a code s
                     temperature=0.4,
                 )
                 raw_code = response.choices[0].message.content
+                # print(f"\nquery_llm4TwinTestSeed() Info - raw_code:\n{raw_code}")
                 code = APITestSeedValidator(llm_client=self.llm_client, raw_code=raw_code).validate4code()
+                # print(f"\nquery_llm4TwinTestSeed() Info - code:\n{code}")
                 return code
             except Exception as e:
                 print(f"Failed to get response due to: \n{e} \nRetrying(Current attempt: {attempt_num + 1})...")
@@ -286,7 +293,7 @@ Below is a code snippet calling ({base_api.signature}). Please generate a code s
     def construct_extract_base_test_seed_messages(self, base_api: API):
         system_prompt = f"""
 (1) Role Definition: You are an AI assistant specialized in deep learning framework APIs (e.g., PyTorch, JAX, MindSpore and Jittor). Your primary task is to help users find equivalent APIs (or API groups) across different deep learning libraries.
-(2) Output Format: Your response must be pure code, without any natural language statements.
+(2) Output Format: Your response must be pure code. Do not include any explanations, comments, or extra content.
 """
         # Example 1
         context_query_prompt1 = f"""
@@ -347,7 +354,9 @@ Extract a usage example from the API's Examples that includes calling the {base_
                     temperature=0.4,
                 )
                 raw_code = response.choices[0].message.content
+                # print(f"\nquery_llm4BaseTestSeed() Info - raw_code:\n{raw_code}")
                 code = APITestSeedValidator(llm_client=self.llm_client, raw_code=raw_code).validate4code()
+                # print(f"\nquery_llm4BaseTestSeed() Info - code:\n{code}")
                 return code
             except Exception as e:
                 print(f"Failed to get response due to: \n{e} \nRetrying(Current attempt: {attempt_num + 1})...")
@@ -700,5 +709,5 @@ def run_linearly():  # 线性地对未聚类的API进行聚类
 
 
 if __name__ == '__main__':
-    # run_randomly()
-    run_linearly()
+    run_randomly()
+    # run_linearly()
