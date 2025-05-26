@@ -52,8 +52,8 @@ class Fuzzer:  # 以Cluster为单位生成测试种子
                 state_equivalent_cluster = single_api_group.cluster
                 state_equivalent_api_groups = state_equivalent_cluster.api_groups
                 filtered_api_list = [
-                    sublist[0] for sublist in state_equivalent_api_groups
-                    if len(sublist) == 1 and sublist[0] not in single_api_group
+                    api_group.apis[0] for api_group in state_equivalent_api_groups
+                    if len(api_group.apis) == 1 and api_group.apis[0] != api
                 ]
                 state_equivalent_apis.extend(filtered_api_list)
             indirect_relevant_errors = []
@@ -77,8 +77,8 @@ class Fuzzer:  # 以Cluster为单位生成测试种子
                 value_equivalent_cluster = single_api_group.cluster
                 value_equivalent_api_groups = value_equivalent_cluster.api_groups
                 filtered_api_list = [
-                    sublist[0] for sublist in value_equivalent_api_groups
-                    if len(sublist) == 1 and sublist[0] not in single_api_group
+                    api_group.apis[0] for api_group in value_equivalent_api_groups
+                    if len(api_group.apis) == 1 and api_group.apis[0] != api
                 ]
                 value_equivalent_apis.extend(filtered_api_list)
             indirect_relevant_errors = []
