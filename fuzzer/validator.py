@@ -206,10 +206,13 @@ class ClusterTestSeedValidator:
         if self.seed.is_validated:
             return True
         # 寻找当前ClusterSeed中待验证的APISeed
-        api_seeds_waiting_validate = self.seed.api_seeds.filter(APITestSeed.is_validated == False).all()
+        api_seeds_waiting_validate = self.session.query(APITestSeed).filter(
+            APITestSeed.cluster_seed_id == self.seed.id,
+            APITestSeed.is_validated == False
+        ).all()
         if_success = True
         for api_seed in api_seeds_waiting_validate:
-            api_seed_validator = APITestSeedValidator(session=self.session, llm_client=self.llm_client, seed=api_seed)
+            api_seed_validator = APITestSeedValidator(llm_client=self.llm_client, session=self.session, seed=api_seed)
             validated_code = api_seed_validator.validate4seed()
             if validated_code is None:
                 if_success = False

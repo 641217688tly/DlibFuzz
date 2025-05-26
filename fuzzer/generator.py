@@ -556,35 +556,35 @@ Corresponding equivalent API in target library: {equivalent_api.full_name}
         base_api_groups = self.weighted_sample_base(candidate_base_api_groups, remaining_energy)
         while base_api_groups:  # 生成remaining_energy个ClusterTestSeed
             print("=" * 50 + f"Generating Seed({cluster.energy - len(base_api_groups) + 1})" + "=" * 50)
-            # try:  # 开始种子的生成
-            base_api_group = base_api_groups[0]
-            cluster_seed = ClusterTestSeed(
-                cluster_id=cluster.id,
-                start_test=datetime.utcnow()
-            )
-            self.session.add(cluster_seed)
-            self.session.flush()
+            try:  # 开始种子的生成
+                base_api_group = base_api_groups[0]
+                cluster_seed = ClusterTestSeed(
+                    cluster_id=cluster.id,
+                    start_test=datetime.utcnow()
+                )
+                self.session.add(cluster_seed)
+                self.session.flush()
 
-            # 生成基底API的测试用例
-            base_api_seed, base_api_combination = self.generate_seed4base(base_api_group, cluster_seed)
+                # 生成基底API的测试用例
+                base_api_seed, base_api_combination = self.generate_seed4base(base_api_group, cluster_seed)
 
-            # 生成等价簇中其他API的测试用例
-            twin_apis_seeds = []
-            for count, twin_api_group in enumerate(cluster.api_groups):
-                if twin_api_group == base_api_group:
-                    continue
-                print("*" * 30 + f"generate_seed4twin() - Twin API Group({count})" + "*" * 30)
-                twin_api_seed = self.generate_seed4twin(twin_api_group, base_api_seed, base_api_combination, cluster_seed)
-                twin_apis_seeds.append(twin_api_seed)
-            cluster_seed.end_test = datetime.utcnow()
-            self.session.commit()
-            print(f"fuzz_equivalent_cluster() Success - Completed seed generation for base API: {base_api_group.apis[0].full_name}")
-            base_api_groups.pop(0)
-            # except Exception as e:
-            #     print(f"fuzz_equivalent_cluster() Error - Error in generating seed for {cluster.type} Cluster({cluster.id}): {e}")
-            #     self.session.rollback()
-            #     base_api_groups.pop(0)
-            #     continue
+                # 生成等价簇中其他API的测试用例
+                twin_apis_seeds = []
+                for count, twin_api_group in enumerate(cluster.api_groups):
+                    if twin_api_group == base_api_group:
+                        continue
+                    print("*" * 30 + f"generate_seed4twin() - Twin API Group({count})" + "*" * 30)
+                    twin_api_seed = self.generate_seed4twin(twin_api_group, base_api_seed, base_api_combination, cluster_seed)
+                    twin_apis_seeds.append(twin_api_seed)
+                cluster_seed.end_test = datetime.utcnow()
+                self.session.commit()
+                print(f"fuzz_equivalent_cluster() Success - Completed seed generation for base API: {base_api_group.apis[0].full_name}")
+                base_api_groups.pop(0)
+            except Exception as e:
+                print(f"fuzz_equivalent_cluster() Error - Error in generating seed for {cluster.type} Cluster({cluster.id}): {e}")
+                self.session.rollback()
+                base_api_groups.pop(0)
+                continue
 
         # 检查是否所有的种子都已经生成完毕
         seeds_num = self.session.query(ClusterTestSeed).filter_by(cluster_id=cluster.id).count()
