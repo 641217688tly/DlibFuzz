@@ -5,6 +5,7 @@ from json import JSONDecodeError
 from sqlalchemy import func
 from utils import *
 from fuzzer.validator import APITestSeedValidator
+import numpy as np
 
 # ----------------------------------------------Cluster----------------------------------------------
 class EquivalentCluster:
@@ -489,18 +490,30 @@ Extract a usage example from the API's Examples that includes calling the {base_
                         is_value_equivalent = False
                         break
                 else:
-                    # 判断向量的维度是否一致
-                    if len(target_output) != len(compare_output):
-                        is_value_equivalent = False
-                        break
-                    # 计算余弦相似度
+                    # 处理不同类型的输出比较
                     try:
-                        similarity = cosine_similarity(target_output, compare_output)
-                        if similarity < threshold:
+                        # 转换为numpy数组进行比较
+                        target_np = convert2numpy(target_output)
+                        compare_np = convert2numpy(compare_output)
+                        
+                        # 检查形状是否一致
+                        if target_np.shape != compare_np.shape:
                             is_value_equivalent = False
                             break
+                        
+                        # 如果是标量（0维数组），直接比较值
+                        if target_np.ndim == 0:
+                            # 对于标量，检查值是否相等（考虑浮点数精度）
+                            if not np.allclose(target_np, compare_np, rtol=1e-5, atol=1e-8):
+                                is_value_equivalent = False
+                                break
+                        else:
+                            # 对于向量/矩阵，计算余弦相似度
+                            similarity = cosine_similarity(target_output, compare_output)
+                            if similarity < threshold:
+                                is_value_equivalent = False
+                                break
                     except Exception as e:
-                        print(f"Error computing similarity between vectors: {e}")
                         is_value_equivalent = False
                         break
             if is_value_equivalent == True:
@@ -582,7 +595,7 @@ Extract a usage example from the API's Examples that includes calling the {base_
                     exec_namespace = {}  # 使用独立的命名空间来隔离执行环境
                     try:
                         exec(test_case, {}, exec_namespace)
-                        # 假设代码片段定义了一个变量 `result` 来表示执行结果
+                        # 假设代码片段定义了一个变量 `output` 来表示执行结果
                         output = exec_namespace.get('output', 'No result returned.')  # 此处默认变量名为"output"
                         execute_results[api_group].append({"status": "Success", "output": output})
                     except Exception as exec_e:
