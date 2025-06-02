@@ -538,7 +538,7 @@ class PytorchAPILoader:
             print(f"Error: {e}")
             self.session.rollback()
 
-def add_pytorch_apis_from_doc(folder_path):
+def add_pytorch_apis_from_doc(folder_path, lib_ver):
     # 先获取folder_path下的所有HTML文件
     html_files = [f for f in os.listdir(folder_path) if f.endswith('.html')]
     for file, i in zip(html_files, range(len(html_files))):
@@ -548,7 +548,7 @@ def add_pytorch_apis_from_doc(folder_path):
             module_name = '.'.join(full_api_name.split('.')[:-1])
             api_name = full_api_name.split('.')[-1]
             if validate_api_existence(module_name, api_name):  # 如果API能够被正确导入
-                loader = PytorchAPILoader(file_path, get_session())
+                loader = PytorchAPILoader(file_path, get_session(), lib_ver=lib_ver)
             print(f"add_pytorch_apis_from_doc(): {i + 1}/{len(html_files)}")
         except Exception as e:
             print(f"add_pytorch_apis_from_doc({file}) Error: {str(e)}")
@@ -559,15 +559,5 @@ if __name__ == "__main__":
     # process_unhandled_docs() # done
 
     # 向数据库中添加API信息
-    core_html_file_folder = './../data/docs/torch/2.3.0/handled/'
-    add_pytorch_apis_from_doc(core_html_file_folder)  # 共1889个Pytorch文档, 其中能够被正确导入的API有1059个
-
-    # # file_path = './../data/docs/torch/docs/2.3/raw/torch._assert.html'
-    # file_path = './../data/docs/torch/docs/2.3/raw/torch.nn.AvgPool1d.html'
-    # # file_path = './../data/docs/torch/docs/2.3/raw/torch.nn.functional.softmax.html'
-    # # file_path = './../data/docs/torch/docs/2.3/raw/torch.nn.modules.lazy.LazyModuleMixin.html'
-    # loader = PytorchAPILoader(file_path, get_session())
-    # api_info = loader.extract_api_info()
-    # for key, value in api_info.items():
-    #     print(f"{key}: \n{value}")
-    #     print("=" * 50)
+    torch_docs_folder_path = './../data/docs/torch/2.3.0/handled/'
+    add_pytorch_apis_from_doc(torch_docs_folder_path, "2.4.1")  # 共1889个Pytorch文档, 其中能够被正确导入的API有1059个

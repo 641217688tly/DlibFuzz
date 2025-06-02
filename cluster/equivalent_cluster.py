@@ -709,5 +709,5 @@ def run_linearly():  # 线性地对未聚类的API进行聚类
 
 
 if __name__ == '__main__':
-    run_randomly()
-    # run_linearly()
+    # run_randomly()
+    run_linearly()

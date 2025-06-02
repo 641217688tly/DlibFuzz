@@ -2,8 +2,6 @@ import os
 from bs4 import BeautifulSoup
 from orm import API
 from utils import get_session, inspect_api_info, validate_api_existence
-from bs4.element import NavigableString
-
 
 class MindsporeDocumentationHandler:
     def __init__(self, raw_file_path, core_html_file_path=None, plain_text_file_path="./../rag/docs/Mindspore/2.5.0/"):
@@ -781,8 +779,7 @@ class MindsporeAPILoader:
     def save2db(self, api_info):
         try:
             # 检查数据库中是否已存在该API
-            api_exists = self.session.query(API).filter_by(full_name=api_info['full_name'], lib='MindSpore',
-                                                           version=self.lib_ver).first()
+            api_exists = self.session.query(API).filter_by(full_name=api_info['full_name'], lib='MindSpore', version=self.lib_ver).first()
             if api_exists:
                 return
 
@@ -807,7 +804,7 @@ class MindsporeAPILoader:
             self.session.rollback()
 
 
-def add_mindspore_apis_from_doc(folder_path):
+def add_mindspore_apis_from_doc(folder_path, lib_ver):
     # 先获取folder_path下的所有HTML文件
     html_files = [f for f in os.listdir(folder_path) if f.endswith('.html')]
     for file, i in zip(html_files, range(len(html_files))):
@@ -817,7 +814,7 @@ def add_mindspore_apis_from_doc(folder_path):
             module_name = '.'.join(full_api_name.split('.')[:-1])
             api_name = full_api_name.split('.')[-1]
             if validate_api_existence(module_name, api_name):  # 如果API能够被正确导入
-                loader = MindsporeAPILoader(file_path, get_session())
+                loader = MindsporeAPILoader(file_path, get_session(), lib_ver=lib_ver)
             print(f"add_mindspore_apis_from_doc(): {i + 1}/{len(html_files)}")
         except Exception as e:
             print(f"add_mindspore_apis_from_doc({file}) Error: {str(e)}")
@@ -828,13 +825,5 @@ if __name__ == '__main__':
     # process_unhandled_docs() # done
 
     # 向数据库中添加API信息
-    core_html_file_folder = './../data/docs/ms/2.5.0/api mapping docs/2.5.0/handled/'
-    add_mindspore_apis_from_doc(core_html_file_folder)
-    #file_path = './../data/docs/ms/2.5.0/api mapping docs/2.5.0/handled/mindspore.dataset.vision.Normalize.html'
-    #file_path = './../data/docs/ms/2.5.0/api mapping docs/2.5.0/handled/mindspore.communication.comm_func.all_gather_into_tensor.html'
-    #file_path = './../data/docs/ms/2.5.0/api mapping docs/2.5.0/handled/mindspore.dataset.audio.SlidingWindowCmn.html'
-    #loader = MindsporeAPILoader(file_path, get_session())
-    #api_info = loader.extract_api_info()
-    #for key, value in api_info.items():
-    #    print(f"{key}: \n{value}")
-    #    print("=" * 50)
+    ms_docs_folder_path = './../data/docs/ms/2.5.0/api mapping docs/2.5.0/handled/'
+    add_mindspore_apis_from_doc(ms_docs_folder_path, "2.5.0")

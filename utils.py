@@ -52,7 +52,7 @@ def get_llm_client(llm='gpt4o-mini', proxy_url="http://127.0.0.1:7890"):
         return None
 
 
-def get_libs_info():  # 该函数将返回数据库中待测试的深度学习库的名称和版本, 比如[('Pytorch', '1.12'), ('JAX', '0.4.13'), ('MindSpore', '2.4.0')]
+def get_libs_info():  # 该函数将返回数据库中待测试的深度学习库的名称和版本, 比如[('Pytorch', '2.4.1'), ('JAX', '0.4.33'), ('MindSpore', '2.5.0'), ('Jittor', '1.3.9.14')]
     db_session = get_session()
     try:
         results = db_session.query(API.lib, API.version).distinct().all()
@@ -124,16 +124,31 @@ def map_module2lib(module_name):
         'mindspore': 'MindSpore',
         'Jittor': 'Jittor',
         'jittor': 'Jittor',
+        'jt': 'Jittor',
     }
     return lib_map.get(module_name, 'Unknown')
 
 
 def inspect_api_info(module_name, api_name):
+    module_alias_mapper = {
+        "tf": "tensorflow",
+        "ms": "mindspore",
+        "np": "numpy",
+        "pd": "pandas",
+        "jt": "jittor",
+
+        "jnp": "jax.numpy",
+        "pytorch": "torch",
+    }
+    # 将module_name中的lib别名转换为实际的库名
+    module_list = module_name.split('.')
+    module_list[0] = module_alias_mapper.get(module_list[0], module_list[0])
+    module_name = '.'.join(module_list)
+    module_list = module_name.split('.') # 防止"jax.numpy"这种情况
     if validate_api_existence(module_name, api_name) is False:  # 验证API是否存在
         print(f"inspect_api_info({module_name}, {api_name}) Error: API {api_name} does not exist.")
         return None
 
-    module_list = module_name.split('.')
     module = importlib.import_module(module_list[0])
     if len(module_list) > 1:
         for submodule_name in module_list[1:]:
@@ -156,7 +171,7 @@ def inspect_api_info(module_name, api_name):
 
     # 获取API的版本
     version = ""
-    lib_version_list = get_libs_info()  # [('Pytorch', '1.12'), ('JAX', '0.4.13'), ('MindSpore', '2.4.0')]
+    lib_version_list = get_libs_info()  # [('Pytorch', '2.4.1'), ('JAX', '0.4.33'), ('MindSpore', '2.5.0'), ('Jittor', '1.3.9.14')]
     for lib_name, lib_version in lib_version_list:
         if lib_name.lower() == lib.lower():
             version = lib_version
@@ -306,7 +321,7 @@ def cosine_similarity(x, y):
     return np.dot(x.flatten(), y.flatten()) / (np.linalg.norm(x.flatten()) * np.linalg.norm(y.flatten()))
 
 
-def count_api_nums_with_history_errors(lib):
+def count_api_nums_with_history_errors(lib): # 计算指定库中有多少API存在历史错误
     session = get_session()
     try:
         apis = session.query(API).filter_by(lib=lib).all()
@@ -362,31 +377,8 @@ def get_api_info(full_api_name='torch.nn.functional.cross_entropy'):
 
 
 if __name__ == '__main__':
-    # list = [
-    #    'torch.nn.functional.relu',
-    #    'torch.nn.ReLU',
-    #    'mindspore.ops.relu',
-    #    'mindspore.nn.ReLU',
-    #    'jax.nn.relu',
-    #    'jittor.init.calculate_gain',
-    # ]
-    # list = [
-    #     'torch.nn.functional.cross_entropy',
-    #     'torch.nn.CrossEntropyLoss',
-    #     'mindspore.nn.CrossEntropyLoss',
-    #     "mindspore.ops.cross_entropy",
-    # ]
-    # for api in list:
-    #     module_name, api_name = api.rsplit('.', 1)
-    #     print(validate_api_existence(module_name, api_name))
-
-    # count_api_nums_with_history_errors('Pytorch') # 85/890(旧); 461/1201(旧); 597/1335(新)
-    # count_api_nums_with_history_errors('JAX') # 269/961(旧); 306/974(旧); 463/1015(新)
-    # count_api_nums_with_history_errors('MindSpore') # 248/2378(新)
-    # session = get_session()
-    ## 从数据库中获取API中version为""的api
-    # apis = session.query(API).filter_by(version="").all()
-    # for api in apis:
-    #    print(api.full_name)
-    # retrieve_api_issues('torch.nn.functional.cross_entropy')
-    get_api_info("jittor.add")
+    print(get_libs_info())
+    count_api_nums_with_history_errors('Pytorch')
+    count_api_nums_with_history_errors('MindSpore')
+    count_api_nums_with_history_errors('JAX')
+    count_api_nums_with_history_errors('Jittor')
