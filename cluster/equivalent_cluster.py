@@ -259,7 +259,7 @@ Background knowledge:
 {background_knowledge_prompt}
 
 Task:
-Below is a code snippet calling ({base_api.signature}). Please generate a code snippet that replaces ({base_api.full_name}) with {api_group_brief_info}, ensuring that the input parameters remain unchanged. Additionally, ensure that the code snippet you generate declares the same variables as the example code (for instance, if the example code declares an "output" variable to store the API's result, then your generated code should also declare an "output" variable to store the API's result).
+Below is a code snippet calling ({base_api.signature}). Please generate a code snippet that replaces ({base_api.full_name}) with {api_group_brief_info}, ensuring that the input parameters remain unchanged. Additionally, ensure that the code snippet you generate declares the same output variables as the example code. If the example code uses variables like "output1", "output2", "output3", etc., to store multiple return values or affected variables, then your generated code should also declare the same numbered output variables (output1, output2, output3, etc.) to store the corresponding results.
 {base_api.example}
 """
 
@@ -314,13 +314,51 @@ example: >>> x = jnp.array([-2, -1, -0.5, 0, 0.5, 1, 2])
 Array([  nan, 3.142, 2.094, 1.571, 1.047, 0.   ,   nan], dtype=float32)
 
 Task:
-Extract a usage example from the API's Examples that includes calling the jax.numpy.arccos and return the code. The code must declare a variable named "output" that stores either the return result of the API (if the API has a return value) or the input after being processed by the API's built-in operations (if the API has no return value).
+Extract a usage example from the API's Examples that includes calling the jax.numpy.arccos and return the code. 
+When the API has only one return value, you must declare a variable named "output1" to store the result. When the API has multiple return values, you need to declare variables named "output1", "output2", "output3", etc., to store these return values respectively. If the API has no return value but performs a built-in operation on the input, you need to use "output1" to store the input after it has been processed by the API's built-in operation. If the API's built-in operation affects multiple inputs, you need to declare variables named "output1", "output2", "output3", etc., to store these affected inputs respectively.
 """
         context_answer_prompt1 = """
 import jax
 import jax.numpy as jnp
 x = jnp.array([-2, -1, -0.5, 0, 0.5, 1, 2])
-output = jnp.arccos(x)
+output1 = jnp.arccos(x)
+"""
+        # Example 2 - 多返回值示例
+        context_query_prompt2 = f"""
+API Information:
+- API Name: torch.nn.MultiheadAttention
+- Source Library: PyTorch
+- Version: 2.4.1
+- API Signature: torch.nn.MultiheadAttention(embed_dim,num_heads,dropout=0.0,bias=True,add_bias_kv=False,add_zero_attn=False,kdim=None,vdim=None,batch_first=False,device=None,dtype=None)
+- Function Description: Allows the model to jointly attend to information from different representation subspaces.
+- Parameters: 
+embed_dim – Total dimension of the model.
+num_heads – Number of parallel attention heads. Note thatembed_dimwill be split acrossnum_heads(i.e. each head will have dimensionembed_dim//num_heads).
+dropout – Dropout probability onattn_output_weights. Default:0.0(no dropout).
+bias – If specified, adds bias to input / output projection layers. Default:True.
+add_bias_kv – If specified, adds bias to the key and value sequences at dim=0. Default:False.
+add_zero_attn – If specified, adds a new batch of zeros to the key and value sequences at dim=1.
+kdim – Total number of features for keys. Default:None(useskdim=embed_dim).
+vdim – Total number of features for values. Default:None(usesvdim=embed_dim).
+batch_first – If True, then the input and output tensors are provided as (batch, seq, feature).
+- Examples:
+example: >>> multihead_attn = nn.MultiheadAttention(embed_dim, num_heads)
+>>> attn_output, attn_output_weights = multihead_attn(query, key, value)
+
+Task:
+Extract a usage example from the API's Examples that includes calling the torch.nn.MultiheadAttention and return the code. 
+When the API has only one return value, you must declare a variable named "output1" to store the result. When the API has multiple return values, you need to declare variables named "output1", "output2", "output3", etc., to store these return values respectively. If the API has no return value but performs a built-in operation on the input, you need to use "output1" to store the input after it has been processed by the API's built-in operation. If the API's built-in operation affects multiple inputs, you need to declare variables named "output1", "output2", "output3", etc., to store these affected inputs respectively.
+"""
+        context_answer_prompt2 = """
+import torch
+import numpy as np
+embed_dim, num_heads = 128, 8
+seq_length, batch_size = 10, 8
+query = torch.Tensor(np.random.randn(seq_length, batch_size, embed_dim))
+key = torch.Tensor(np.random.randn(seq_length, batch_size, embed_dim))
+value = torch.Tensor(np.random.randn(seq_length, batch_size, embed_dim))
+multihead_attn = torch.nn.MultiheadAttention(embed_dim, num_heads)
+output1, output2 = multihead_attn(query, key, value)
 """
         # query
         query_prompt = f"""
@@ -335,12 +373,15 @@ API Information:
 - Examples: \n{base_api.example}
 
 Task:
-Extract a usage example from the API's Examples that includes calling the {base_api.full_name} and return the code. The code must declare a variable named "output" that stores either the return result of the API (if the API has a return value) or the input after being processed by the API's built-in operations (if the API has no return value).
+Extract a usage example from the API's Examples that includes calling the {base_api.full_name} and return the code. 
+When the API has only one return value, you must declare a variable named "output1" to store the result. When the API has multiple return values, you need to declare variables named "output1", "output2", "output3", etc., to store these return values respectively. If the API has no return value but performs a built-in operation on the input, you need to use "output1" to store the input after it has been processed by the API's built-in operation. If the API's built-in operation affects multiple inputs, you need to declare variables named "output1", "output2", "output3", etc., to store these affected inputs respectively.
 """
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": context_query_prompt1},
             {"role": "assistant", "content": context_answer_prompt1},
+            {"role": "user", "content": context_query_prompt2},
+            {"role": "assistant", "content": context_answer_prompt2},
             {"role": "user", "content": query_prompt},
         ]
         return messages
@@ -463,11 +504,17 @@ Extract a usage example from the API's Examples that includes calling the {base_
 
     def judge_equivalence(self, api_groups, execute_results, threshold=0.95):  # 根据测试用例的运行结果判断API组合的等价关系
         # Example: api_groups = [("jittor.nn.CrossEntropyLoss"), ("jax.nn.log_softmax", "jax.numpy.sum", "jax.numpy.mean"), ...]
-        # Example: execute_results = {("jittor.nn.CrossEntropyLoss"):[result1, result2], ), ("jax.nn.log_softmax", "jax.numpy.sum", "jax.numpy.mean"):[result1, result2, ..], ...}
-        target_api_group = [api_group for api_group in api_groups if len(api_group) == 1 and api_group[0] == self.api][0]
+        # Example: execute_results = {("jittor.nn.CrossEntropyLoss"):[result1, result2], ("jax.nn.log_softmax", "jax.numpy.sum", "jax.numpy.mean"):[result1, result2], ...}
+        target_api_groups = [api_group for api_group in api_groups if len(api_group) == 1 and api_group[0] == self.api]
+        if not target_api_groups:
+            print(f"judge_equivalence() Error - Target API {self.api.full_name} not found in api_groups")
+            return [], []
+        target_api_group = target_api_groups[0]
+        
         value_equivalent_api_groups = [list(target_api_group), ]
         state_equivalent_api_groups = [list(target_api_group), ]
         target_api_group_results = execute_results[target_api_group]
+        
         for api_group, results in execute_results.items():
             if api_group == target_api_group:
                 continue
@@ -482,40 +529,58 @@ Extract a usage example from the API's Examples that includes calling the {base_
             # 再检查target_api_group_results和results中的每个result的值是否一致
             is_value_equivalent = True
             for i in range(len(target_api_group_results)):
-                target_output = target_api_group_results[i]['output']
-                compare_output = results[i]['output']
-                if isinstance(target_output, str) and isinstance(compare_output, str):  # 输出值为字符串
-                    # 字符串完全相同
-                    if target_output != compare_output:
+                target_outputs = target_api_group_results[i]['outputs']
+                compare_outputs = results[i]['outputs']
+                
+                # 比较输出变量的数量
+                if len(target_outputs) != len(compare_outputs):
+                    is_value_equivalent = False
+                    break
+                
+                # 逐个比较每个输出变量
+                for output_key in target_outputs.keys():
+                    if output_key not in compare_outputs:
                         is_value_equivalent = False
                         break
-                else:
-                    # 处理不同类型的输出比较
-                    try:
-                        # 转换为numpy数组进行比较
-                        target_np = convert2numpy(target_output)
-                        compare_np = convert2numpy(compare_output)
-                        
-                        # 检查形状是否一致
-                        if target_np.shape != compare_np.shape:
+                    
+                    target_output = target_outputs[output_key]
+                    compare_output = compare_outputs[output_key]
+                    
+                    if isinstance(target_output, str) and isinstance(compare_output, str):  # 输出值为字符串
+                        # 字符串完全相同
+                        if target_output != compare_output:
                             is_value_equivalent = False
                             break
-                        
-                        # 如果是标量（0维数组），直接比较值
-                        if target_np.ndim == 0:
-                            # 对于标量，检查值是否相等（考虑浮点数精度）
-                            if not np.allclose(target_np, compare_np, rtol=1e-5, atol=1e-8):
+                    else:
+                        # 处理不同类型的输出比较
+                        try:
+                            # 转换为numpy数组进行比较
+                            target_np = convert2numpy(target_output)
+                            compare_np = convert2numpy(compare_output)
+                            
+                            # 检查形状是否一致
+                            if target_np.shape != compare_np.shape:
                                 is_value_equivalent = False
                                 break
-                        else:
-                            # 对于向量/矩阵，计算余弦相似度
-                            similarity = cosine_similarity(target_output, compare_output)
-                            if similarity < threshold:
-                                is_value_equivalent = False
-                                break
-                    except Exception as e:
-                        is_value_equivalent = False
-                        break
+                            
+                            # 如果是标量（0维数组），直接比较值
+                            if target_np.ndim == 0:
+                                # 对于标量，检查值是否相等（考虑浮点数精度）
+                                if not np.allclose(target_np, compare_np, rtol=1e-5, atol=1e-8):
+                                    is_value_equivalent = False
+                                    break
+                            else:
+                                # 对于向量/矩阵，计算余弦相似度
+                                similarity = cosine_similarity(target_output, compare_output)
+                                if similarity < threshold:
+                                    is_value_equivalent = False
+                                    break
+                        except Exception as e:
+                            is_value_equivalent = False
+                            break
+                if not is_value_equivalent:
+                    break
+                    
             if is_value_equivalent == True:
                 value_equivalent_api_groups.append(list(api_group))
             else:  # 值不等价但状态等价
@@ -545,9 +610,9 @@ Extract a usage example from the API's Examples that includes calling the {base_
         # 检查是否single_api_groups中的所有APIGroup的api.example都为空
         if all([api_group[0].example is None for api_group in single_api_groups]):
             # 如果没有可用的测试输入作为Oracle, 则直接返回None
-            print("verify_equivalence() Success - No test example available for equivalence verification.")
-            self.api.is_clustered = True
-            self.session.commit()
+            print("verify_equivalence() Error - No test example available for equivalence verification.")
+            # self.api.is_clustered = True
+            # self.session.commit()
             return None, None
 
         execute_results = {api_group: [] for api_group in api_groups}
@@ -580,30 +645,57 @@ Extract a usage example from the API's Examples that includes calling the {base_
                     test_cases[twin_api_group] = twin_test_code
                     print("@" * 40 + "\n" + f"verify_equivalence() Info - {twin_api_group[0].full_name} Base Test Case:\n{twin_test_code}")
             except Exception as e:
-                print(f"An error occurred when verify equivalence: {e}")
+                print(f"verify_equivalence() Error - An error occurred when verify equivalence: {e}")
                 continue
 
             # 执行测试用例
             try:
                 for api_group, test_case in test_cases.items():
                     if not test_case:
-                        execute_results[api_group].append(
-                            {"status": "Skipped", "output": "Error: No test case provided."})
+                        execute_results[api_group].append({"status": "Skipped", "outputs": {"error": "Error: No test case provided."}})
                         continue
 
                     # 执行代码片段
                     exec_namespace = {}  # 使用独立的命名空间来隔离执行环境
                     try:
                         exec(test_case, {}, exec_namespace)
-                        # 假设代码片段定义了一个变量 `output` 来表示执行结果
-                        output = exec_namespace.get('output', 'No result returned.')  # 此处默认变量名为"output"
-                        execute_results[api_group].append({"status": "Success", "output": output})
+                        # 收集所有output变量（output1, output2, output3等）
+                        outputs = {}
+                        output_count = 0
+                        for i in range(1, 21):  # 最多支持20个输出变量
+                            output_var = f'output{i}'
+                            if output_var in exec_namespace:
+                                outputs[output_var] = exec_namespace[output_var]
+                                output_count += 1
+                            else:
+                                break  # 如果找不到连续的output变量，停止搜索
+                        
+                        if output_count == 0:
+                            # 如果没有找到任何output变量，尝试寻找其他可能的输出变量
+                            possible_outputs = []
+                            for var_name, var_value in exec_namespace.items():
+                                if (not var_name.startswith('_') and 
+                                    not callable(var_value) and 
+                                    var_name not in ['torch', 'jax', 'mindspore', 'jittor', 'numpy', 'np', 'tensorflow']):
+                                    if any(keyword in var_name.lower() for keyword in ['output', 'result', 'attn', 'prediction', 'pred']):
+                                        possible_outputs.insert(0, (var_name, var_value))
+                                    else:
+                                        possible_outputs.append((var_name, var_value))
+                            
+                            if possible_outputs:
+                                outputs['output1'] = possible_outputs[0][1]
+                                print(f"verify_equivalence() Info - Using variable '{possible_outputs[0][0]}' as output1 for {api_group}")
+                            else:
+                                outputs['output1'] = 'No result returned.'
+                                print(f"verify_equivalence() Warning - No suitable output variable found for {api_group}")
+                        
+                        execute_results[api_group].append({"status": "Success", "outputs": outputs})
                     except Exception as exec_e:
                         # 捕获执行中的异常
                         error_trace = traceback.format_exc()
-                        execute_results[api_group].append({"status": "Failed", "output": error_trace})
+                        execute_results[api_group].append({"status": "Failed", "outputs": {"error": error_trace}})
             except Exception as e:
-                print(f"An error occurred when execute test cases: {e}")
+                print(f"verify_equivalence() Error - An error occurred when execute test cases: {e}")
                 continue
             base_api_groups.pop(0)
         # 根据execute_results判断值等价/状态等价/无等价关系
@@ -617,7 +709,7 @@ Extract a usage example from the API's Examples that includes calling the {base_
         try:
             # 1. 判断是否有等价关系
             if api_groups is None:  # 如果没有匹配到等价API, 则直接返回
-                return None
+                return False
 
             # 2. apis_group_objects中目前至少有2个API Group, 查找已经存在的Cluster对象或创建Cluster对象:
             single_api_groups = [api_group for api_group in api_groups if len(api_group) == 1]
@@ -635,42 +727,43 @@ Extract a usage example from the API's Examples that includes calling the {base_
                     for api_obj_group in api_obj_groups:
                         cluster = api_obj_group.cluster
                         cluster_dict[cluster] = cluster_dict.get(cluster, 0) + 1
-                if cluster_dict:  # 选择已有的值等价簇加入
-                    # Case 2.1
-                    value_equivalent_cluster = max(cluster_dict, key=cluster_dict.get)
-                else:  # 创建一个新的值等价簇并加入
-                    # Case 2.2
-                    value_equivalent_cluster = Cluster(
+                if cluster_dict:  # 假如已经存在等价簇
+                    # Case 2.1 选择已有的等价簇加入
+                    equivalent_cluster = max(cluster_dict, key=cluster_dict.get)
+                else:  # 假如不存在等价簇
+                    # Case 2.2 创建一个新的等价簇并加入
+                    equivalent_cluster = Cluster(
                         type=equivalence_type,
                         energy=5,
                     )
-                    self.session.add(value_equivalent_cluster)
+                    self.session.add(equivalent_cluster)
                     self.session.flush()
-            else:  # 创建一个新的值等价簇并加入
-                # Case 2.2
-                value_equivalent_cluster = Cluster(
+            else:  # 假如不存在由单独的API组成的API组合
+                # Case 2.2 创建一个新的等价簇并加入
+                equivalent_cluster = Cluster(
                     type=equivalence_type,
                     energy=5,
                 )
-                self.session.add(value_equivalent_cluster)
+                self.session.add(equivalent_cluster)
                 self.session.flush()
 
             # 3. 为每个API组合创建对应的APIGroup对象, 之后将它们与新创建的Cluster对象关联
             for api_group in api_groups:  # 逐个访问每个API组合
                 group = APIGroup(
                     apis=list(api_group),
-                    cluster=value_equivalent_cluster
+                    cluster=equivalent_cluster
                 )
                 self.session.add(group)
                 self.session.flush()
 
-            # 4. 将single_api_groups中的API标记为已经被聚类
-            # for single_api_group in single_api_groups:
-            #     single_api_group[0].is_clustered = True
-            # self.session.commit()
+            # 4. 将single_api_groups中的API标记为已经被聚类, 这样能显著提高API匹配的效率
+            for single_api_group in single_api_groups:
+                single_api_group[0].is_clustered = True
+            self.session.flush()
+            return True
         except Exception as e:
             self.session.rollback()  # 回滚在异常中的任何数据库更改
-            print(f"An error occurred: {e}")
+            print(f"save_cluster() Error - An error occurred: {e}")
 
     # ----------------------------------------------run()----------------------------------------------
     def cluster_api(self):
@@ -678,10 +771,12 @@ Extract a usage example from the API's Examples that includes calling the {base_
         cluster_json_data = self.query_llm4cluster(cluster_query_messages)
         if cluster_json_data:
             value_equivalent_api_groups, state_equivalent_api_groups = self.verify_equivalence(cluster_json_data)
-            self.save_cluster('ValueEquivalent', value_equivalent_api_groups)
-            self.save_cluster('StateEquivalent', state_equivalent_api_groups)
-            self.api.is_clustered = True
-            self.session.commit()
+            # 如果value_equivalent_api_groups和state_equivalent_api_groups不同时为空, 则保存聚类结果
+            if value_equivalent_api_groups and state_equivalent_api_groups:
+                self.save_cluster('ValueEquivalent', value_equivalent_api_groups)
+                self.save_cluster('StateEquivalent', state_equivalent_api_groups)
+                self.api.is_clustered = True
+                self.session.commit()
 
 
 def run_randomly():  # 随机挑选未聚类的API进行聚类
@@ -691,18 +786,23 @@ def run_randomly():  # 随机挑选未聚类的API进行聚类
     rag_client = get_llm_client('gpt4o-mini-with-rag')
 
     # 对未聚类的PytorchAPI进行聚类
-    uncluttered_torch_apis = session.query(API).filter_by(is_clustered=False).all()
-    while uncluttered_torch_apis:
-        print("----------------------------------------------------------------------------------")
+    unclustered_apis = session.query(API).filter_by(is_clustered=False).all()
+    while unclustered_apis:
         # 随机选择一个未聚类的API
-        uncluttered_torch_api = random.choice(uncluttered_torch_apis)
-        cluster = EquivalentCluster(uncluttered_torch_api, session, rag_client, llm_client)
+        unclustered_api = random.choice(unclustered_apis)
+        
+        # 打印当前未聚类的API数量
+        apis_nums = session.query(API).count()
+        unclustered_apis_nums = session.query(API).filter_by(is_clustered=False).count()
+        print(f"EquivalentCluster({unclustered_api.full_name})" + "=" * 100 + f"\nUnclustered / Total: {unclustered_apis_nums} / {apis_nums}" + "\n")
+
+        # 对未聚类的API进行聚类
+        cluster = EquivalentCluster(unclustered_api, session, rag_client, llm_client)
         cluster.cluster_api()
 
-        uncluttered_torch_apis = session.query(API).filter_by(is_clustered=False).all()
-        total_apis_num = session.query(API).count()
-        unclustered_torch_apis_num = len(uncluttered_torch_apis)
-        print(f"Unclustered / Total: {unclustered_torch_apis_num} / {total_apis_num}")
+        # 更新未聚类的API列表
+        unclustered_apis = session.query(API).filter_by(is_clustered=False).all()
+
 
 
 def run_linearly():  # 线性地对未聚类的API进行聚类
@@ -712,13 +812,18 @@ def run_linearly():  # 线性地对未聚类的API进行聚类
     rag_client = get_llm_client('gpt4o-mini-with-rag')
 
     # 对未聚类的API进行聚类
-    uncluttered_torch_apis = session.query(API).filter_by(is_clustered=False).all()
-    for i, uncluttered_torch_api in enumerate(uncluttered_torch_apis):
-        print(f"EquivalentCluster({uncluttered_torch_api.full_name})" + "=" * 100)
-        # 选择一个未聚类的TensorflowAPI
-        cluster = EquivalentCluster(uncluttered_torch_api, session, rag_client, llm_client)
+    unclustered_apis = session.query(API).filter_by(is_clustered=False).all()
+    for unclustered_api in unclustered_apis:
+        if unclustered_api.is_clustered:
+            continue
+        apis_nums = session.query(API).count()
+        unclustered_apis_nums = session.query(API).filter_by(is_clustered=False).count()
+        print(f"EquivalentCluster({unclustered_api.full_name})" + "=" * 100 + f"\nUnclustered / Total: {unclustered_apis_nums} / {apis_nums}" + "\n")
+        
+        # 选择一个未聚类的API
+        cluster = EquivalentCluster(unclustered_api, session, rag_client, llm_client)
         cluster.cluster_api()
-        print(f"Unclustered / Total: {len(uncluttered_torch_apis) - i - 1} / {len(uncluttered_torch_apis)}" + "\n")
+        
 
 
 if __name__ == '__main__':

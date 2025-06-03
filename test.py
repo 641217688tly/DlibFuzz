@@ -53,5 +53,4 @@ import json
 # dict_var = json.loads(json_data)
 # print(dict_var)
 
-from mindspore import Tensor
-Tensor.log2
+print(False & False)
