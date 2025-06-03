@@ -375,12 +375,127 @@ def get_api_info(full_api_name='torch.nn.functional.cross_entropy'):
               f"description: {api.description}\n\n"
               f"example: {api.example}\n\n")
 
+def list_clusters(cluster_type='ValueEquivalent'):
+    """
+    列出指定类型的所有cluster及其包含的API
+    
+    Args:
+        cluster_type (str): 聚类类型，可以是 'ValueEquivalent' 或 'StateEquivalent'
+    """
+    if cluster_type not in ['ValueEquivalent', 'StateEquivalent']:
+        print(f"Error: Invalid cluster_type '{cluster_type}'. Must be 'ValueEquivalent' or 'StateEquivalent'.")
+        return
+    
+    session = get_session()
+    try:
+        # 查询指定类型的所有cluster
+        clusters = session.query(Cluster).filter_by(type=cluster_type).all()
+        
+        if not clusters:
+            print(f"No {cluster_type} clusters found.")
+            return
+        
+        print(f"=== {cluster_type} Clusters ===")
+        print(f"Total {cluster_type} clusters: {len(clusters)}")
+        print("=" * 80)
+        
+        for i, cluster in enumerate(clusters, 1):
+            print(f"\nCluster #{i} (ID: {cluster.id})")
+            print("-" * 40)
+            
+            # 获取该cluster下的所有API组
+            api_groups = cluster.api_groups
+            if not api_groups:
+                print("  No API groups found in this cluster.")
+                continue
+            
+            for j, api_group in enumerate(api_groups, 1):
+                if len(api_group.apis) == 1:
+                    print(f"  Group {j}: Single API")
+                else:
+                    print(f"  Group {j}: API Group ({len(api_group.apis)} APIs)")
+                
+                # 打印该组中的所有API
+                for api in api_group.apis:
+                    print(f"    - {api.full_name} (ID: {api.id}, Lib: {api.lib})")
+            
+            print(f"  Total API groups in this cluster: {len(api_groups)}")
+            total_apis = sum(len(group.apis) for group in api_groups)
+            print(f"  Total APIs in this cluster: {total_apis}")
+        
+        # 统计信息
+        total_api_groups = sum(len(cluster.api_groups) for cluster in clusters)
+        total_apis = sum(sum(len(group.apis) for group in cluster.api_groups) for cluster in clusters)
+        
+        print("=" * 80)
+        print(f"Summary for {cluster_type} clusters:")
+        print(f"  Total clusters: {len(clusters)}")
+        print(f"  Total API groups: {total_api_groups}")
+        print(f"  Total APIs: {total_apis}")
+        
+    except Exception as e:
+        print(f"An error occurred while listing clusters: {str(e)}")
+    finally:
+        session.close()
+
+
+def clean_invalid_clusters():
+    """
+    清理只包含一个API组的无效cluster
+    理论上每个cluster应该至少包含2个API组才有意义
+    """
+    session = get_session()
+    try:
+        # 查询所有cluster
+        clusters = session.query(Cluster).all()
+        invalid_clusters = []
+        
+        for cluster in clusters:
+            if len(cluster.api_groups) <= 1:
+                invalid_clusters.append(cluster)
+        
+        if not invalid_clusters:
+            print("No invalid clusters found.")
+            return
+        
+        print(f"Found {len(invalid_clusters)} invalid clusters (with <= 1 API groups):")
+        for cluster in invalid_clusters:
+            print(f"  Cluster ID: {cluster.id}, Type: {cluster.type}, API groups: {len(cluster.api_groups)}")
+            if cluster.api_groups:
+                for api_group in cluster.api_groups:
+                    for api in api_group.apis:
+                        print(f"    - {api.full_name}")
+        
+        # 询问是否删除
+        response = input(f"\nDo you want to delete these {len(invalid_clusters)} invalid clusters? (y/N): ")
+        if response.lower() in ['y', 'yes']:
+            for cluster in invalid_clusters:
+                # 重置相关API的is_clustered状态
+                for api_group in cluster.api_groups:
+                    for api in api_group.apis:
+                        api.is_clustered = False
+                
+                # 删除cluster（级联删除会自动删除相关的api_groups）
+                session.delete(cluster)
+            
+            session.commit()
+            print(f"Successfully deleted {len(invalid_clusters)} invalid clusters.")
+        else:
+            print("No clusters were deleted.")
+            
+    except Exception as e:
+        session.rollback()
+        print(f"An error occurred while cleaning invalid clusters: {str(e)}")
+    finally:
+        session.close()
+
 
 if __name__ == '__main__':
-    print(get_libs_info())
-    count_api_nums_with_history_errors('Pytorch')
-    count_api_nums_with_history_errors('MindSpore')
-    count_api_nums_with_history_errors('JAX')
-    count_api_nums_with_history_errors('Jittor')
-
-    get_api_info("torch.nn.MultiheadAttention")
+    # print(get_libs_info())
+    # count_api_nums_with_history_errors('Pytorch')
+    # count_api_nums_with_history_errors('MindSpore')
+    # count_api_nums_with_history_errors('JAX')
+    # count_api_nums_with_history_errors('Jittor')
+    list_clusters('ValueEquivalent')
+    print("\n")
+    list_clusters('StateEquivalent')

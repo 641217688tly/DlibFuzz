@@ -469,13 +469,17 @@ When the API has only one return value, you must declare a variable named "outpu
     def identify_apis(self, api_groups, whether_supplement_api=False):
         """
         以下列数据为例:
-        api_groups = "Tensorflow" : [
+        api_groups = [
             ["tensorflow.keras.losses.CategoricalCrossentropy"],
             ["tensorflow.constant", "tensorflow.nn.softmax_cross_entropy_with_logits"]
         ]
         """
         api_group_objects = []  # [[CategoricalCrossentropy], [constant, softmax_cross_entropy_with_logits]]
         for api_group in api_groups:  # 逐个访问每个API组合
+            # 跳过空的API组
+            if len(api_group) == 0:
+                continue
+                
             api_list = []
             if_api_group_complete = True
             for full_api_name in api_group:  # 获取某个API组合中的每个API
@@ -498,19 +502,15 @@ When the API has only one return value, you must declare a variable named "outpu
                     if_api_group_complete = False
                     break
                 api_list.append(api)  # [constant, softmax_cross_entropy_with_logits]
-            if if_api_group_complete:
+            if if_api_group_complete and len(api_list) > 0: 
                 api_group_objects.append(tuple(api_list))
         return api_group_objects  # [('CategoricalCrossentropy'), ('constant', 'softmax_cross_entropy_with_logits')]
 
     def judge_equivalence(self, api_groups, execute_results, threshold=0.95):  # 根据测试用例的运行结果判断API组合的等价关系
         # Example: api_groups = [("jittor.nn.CrossEntropyLoss"), ("jax.nn.log_softmax", "jax.numpy.sum", "jax.numpy.mean"), ...]
         # Example: execute_results = {("jittor.nn.CrossEntropyLoss"):[result1, result2], ("jax.nn.log_softmax", "jax.numpy.sum", "jax.numpy.mean"):[result1, result2], ...}
-        target_api_groups = [api_group for api_group in api_groups if len(api_group) == 1 and api_group[0] == self.api]
-        if not target_api_groups:
-            print(f"judge_equivalence() Error - Target API {self.api.full_name} not found in api_groups")
-            return [], []
-        target_api_group = target_api_groups[0]
-        
+        target_api_group = [api_group for api_group in api_groups if len(api_group) == 1 and api_group[0] == self.api][0]
+
         value_equivalent_api_groups = [list(target_api_group), ]
         state_equivalent_api_groups = [list(target_api_group), ]
         target_api_group_results = execute_results[target_api_group]
@@ -585,7 +585,7 @@ When the API has only one return value, you must declare a variable named "outpu
                 value_equivalent_api_groups.append(list(api_group))
             else:  # 值不等价但状态等价
                 state_equivalent_api_groups.append(list(api_group))
-        return value_equivalent_api_groups, state_equivalent_api_groups  # [[API], [API, API], ...]
+        return value_equivalent_api_groups, state_equivalent_api_groups  # [[Taraget_API], [API, API], ...] , [[Taraget_API], [API], [API, API], ...]
 
     def verify_equivalence(self, json_data):  # 验证API组合的等价关系是否成立(值等价(1)/状态等价(2)/无等价关系(0))
         print("*" * 80 + "verify_equivalence()")
@@ -593,7 +593,7 @@ When the API has only one return value, you must declare a variable named "outpu
         for lib, dict_api_groups in json_data.items():
             apis_group_objects = self.identify_apis(api_groups=dict_api_groups, whether_supplement_api=False)
             libs_apis_group_objects[lib] = apis_group_objects
-        api_groups = [api_group for api_groups in libs_apis_group_objects.values() for api_group in api_groups]
+        api_groups = [api_group for api_groups in libs_apis_group_objects.values() for api_group in api_groups] # 例: api_groups = [('CategoricalCrossentropy'), ('constant', 'softmax_cross_entropy_with_logits')]
         if tuple([self.api]) not in api_groups:  # 检查api_group_objects最终是否有包含(self.api,), 如果没有则手动添加
             api_groups.append(tuple([self.api]))
 
@@ -606,7 +606,7 @@ When the API has only one return value, you must declare a variable named "outpu
                 return None, None
 
         # 使用等价API的文档中API的调用样例作为测试输入
-        single_api_groups = [api_group for api_group in api_groups if len(api_group) == 1]
+        single_api_groups = [api_group for api_group in api_groups if len(api_group) == 1] # 例: single_api_groups = [('CategoricalCrossentropy'),]
         # 检查是否single_api_groups中的所有APIGroup的api.example都为空
         if all([api_group[0].example is None for api_group in single_api_groups]):
             # 如果没有可用的测试输入作为Oracle, 则直接返回None
@@ -621,7 +621,11 @@ When the API has only one return value, you must declare a variable named "outpu
 
         #TODO 为了节约成本, 仅从base_api_groups中随机选择一个API作为基准API
         if len(base_api_groups) > 1:
-            base_api_groups = random.sample(base_api_groups, 1)
+            # 检查(self.api)是否在base_api_groups中,如果在则优先选择(self.api)作为基准API
+            if tuple([self.api]) in base_api_groups:
+                base_api_groups = [tuple([self.api])]
+            else:
+                base_api_groups = random.sample(base_api_groups, 1)
 
         while base_api_groups:
             base_api_group = base_api_groups[0]
@@ -643,7 +647,7 @@ When the API has only one return value, you must declare a variable named "outpu
                     twin_messages = self.construct_twin_test_seed_messages(base_api_group[0], twin_api_group)
                     twin_test_code = self.query_llm4TwinTestSeed(twin_messages)
                     test_cases[twin_api_group] = twin_test_code
-                    print("@" * 40 + "\n" + f"verify_equivalence() Info - {twin_api_group[0].full_name} Base Test Case:\n{twin_test_code}")
+                    print("@" * 40 + "\n" + f"verify_equivalence() Info - {twin_api_group[0].full_name} Twin Test Case:\n{twin_test_code}")
             except Exception as e:
                 print(f"verify_equivalence() Error - An error occurred when verify equivalence: {e}")
                 continue
@@ -710,6 +714,8 @@ When the API has only one return value, you must declare a variable named "outpu
             # 1. 判断是否有等价关系
             if api_groups is None:  # 如果没有匹配到等价API, 则直接返回
                 return False
+            if len(api_groups) < 2:
+                return False
 
             # 2. apis_group_objects中目前至少有2个API Group, 查找已经存在的Cluster对象或创建Cluster对象:
             single_api_groups = [api_group for api_group in api_groups if len(api_group) == 1]
@@ -772,7 +778,7 @@ When the API has only one return value, you must declare a variable named "outpu
         if cluster_json_data:
             value_equivalent_api_groups, state_equivalent_api_groups = self.verify_equivalence(cluster_json_data)
             # 如果value_equivalent_api_groups和state_equivalent_api_groups不同时为空, 则保存聚类结果
-            if value_equivalent_api_groups and state_equivalent_api_groups:
+            if value_equivalent_api_groups or state_equivalent_api_groups:
                 self.save_cluster('ValueEquivalent', value_equivalent_api_groups)
                 self.save_cluster('StateEquivalent', state_equivalent_api_groups)
                 self.api.is_clustered = True
