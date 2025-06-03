@@ -10,10 +10,9 @@ from collections import defaultdict
 
 
 class Fuzzer:  # 以Cluster为单位生成测试种子
-    def __init__(self, session, llm_client, rag_client, error_num_in_context=6, whether_sample_state_equivalent=True, whether_sample_value_equivalent=True):
+    def __init__(self, session, llm_client, error_num_in_context=6, whether_sample_state_equivalent=True, whether_sample_value_equivalent=True):
         self.session = session
         self.llm_client = llm_client
-        self.rag_client = rag_client
         self.error_num_in_context = error_num_in_context
         self.whether_sample_state_equivalent = whether_sample_state_equivalent
         self.whether_sample_value_equivalent = whether_sample_value_equivalent
@@ -593,39 +592,40 @@ Corresponding equivalent API in target library: {equivalent_api.full_name}
             self.session.commit()
             print(f"fuzz_equivalent_cluster() Success - Cluster {cluster.id} completed with {seeds_num} seeds")
 
-    def fuzz_value_equivalent_clusters(self):
-        print("=" * 75 +"fuzz_value_equivalent_clusters()" + "=" * 75)
-        value_equivalent_clusters = self.session.query(Cluster).filter_by(type='ValueEquivalent').all()
-        untested_clusters = self.session.query(Cluster).filter_by(is_tested=False, type='ValueEquivalent').all()
-        
-        while untested_clusters:
-            print("-" * 70 + f"Fuzzing Value Equivalent Clusters: {len(untested_clusters)}/ {len(value_equivalent_clusters)}" + "-" * 70)
-            untested_cluster = untested_clusters[0]
-            self.fuzz_equivalent_cluster(untested_cluster)
-            untested_clusters = self.session.query(Cluster).filter_by(is_tested=False, type='ValueEquivalent').all()
-            
-        print(f"fuzz_value_equivalent_clusters() Success - All value equivalent clusters fuzzing completed")
 
-    def fuzz_state_equivalent_clusters(self):
-        print("=" * 75 + "fuzz_state_equivalent_clusters()" + "=" * 75)
-        state_equivalent_clusters = self.session.query(Cluster).filter_by(type='StateEquivalent').all()
-        untested_clusters = self.session.query(Cluster).filter_by(is_tested=False, type='StateEquivalent').all()
+def fuzz_value_equivalent_clusters(session, llm_client):
+    """对所有值等价簇进行模糊测试"""
+    print("=" * 75 +"fuzz_value_equivalent_clusters()" + "=" * 75)
+    value_equivalent_clusters = session.query(Cluster).filter_by(type='ValueEquivalent').all()
+    untested_clusters = session.query(Cluster).filter_by(is_tested=False, type='ValueEquivalent').all()
+    while untested_clusters:
+        print("-" * 70 + f"Fuzzing Value Equivalent Clusters: {len(untested_clusters)}/ {len(value_equivalent_clusters)}" + "-" * 70)
+        untested_cluster = untested_clusters[0]
+        fuzzer = Fuzzer(session, llm_client)
+        fuzzer.fuzz_equivalent_cluster(untested_cluster)
+        untested_clusters = session.query(Cluster).filter_by(is_tested=False, type='ValueEquivalent').all()
         
-        while untested_clusters:
-            print("-" * 70 + f"Fuzzing State Equivalent Clusters: {len(untested_clusters)}/ {len(state_equivalent_clusters)}" + "-" * 70)
-            untested_cluster = untested_clusters[0]
-            self.fuzz_equivalent_cluster(untested_cluster)
-            untested_clusters = self.session.query(Cluster).filter_by(is_tested=False, type='StateEquivalent').all()
-            
-        print(f"fuzz_state_equivalent_clusters() Success - All state equivalent clusters fuzzing completed")
+    print(f"fuzz_value_equivalent_clusters() Success - All value equivalent clusters fuzzing completed")
+
+
+def fuzz_state_equivalent_clusters(session, llm_client):
+    """对所有状态等价簇进行模糊测试"""
+    print("=" * 75 + "fuzz_state_equivalent_clusters()" + "=" * 75)
+    state_equivalent_clusters = session.query(Cluster).filter_by(type='StateEquivalent').all()
+    untested_clusters = session.query(Cluster).filter_by(is_tested=False, type='StateEquivalent').all()
+    while untested_clusters:
+        print("-" * 70 + f"Fuzzing State Equivalent Clusters: {len(untested_clusters)}/ {len(state_equivalent_clusters)}" + "-" * 70)
+        untested_cluster = untested_clusters[0]
+        fuzzer = Fuzzer(session, llm_client)
+        fuzzer.fuzz_equivalent_cluster(untested_cluster)
+        untested_clusters = session.query(Cluster).filter_by(is_tested=False, type='StateEquivalent').all()
+        
+    print(f"fuzz_state_equivalent_clusters() Success - All state equivalent clusters fuzzing completed")
 
 
 if __name__ == '__main__':
     session = utils.get_session()
-    llm_client = utils.get_llm_client(llm='gpt4o-mini')
-    rag_client = utils.get_llm_client(llm='gpt4o-mini-with-rag')
-    fuzzer = Fuzzer(session, llm_client, rag_client)
-    
-    fuzzer.fuzz_value_equivalent_clusters()
-    fuzzer.fuzz_state_equivalent_clusters()
+    llm_client = utils.get_llm_client(llm='gpt4o-mini') 
+    fuzz_value_equivalent_clusters(session, llm_client)
+    fuzz_state_equivalent_clusters(session, llm_client)
     session.close()
