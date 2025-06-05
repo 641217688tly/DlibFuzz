@@ -173,4 +173,12 @@ config.yml
 *.yml
 fuzzer/config.yml
 
+# FAISS
+*.faiss/
 
+results_*/
+
+unverified_seeds/
+verified_seeds/
+rag/docs
+rag/models
