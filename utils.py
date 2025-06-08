@@ -548,16 +548,16 @@ if __name__ == '__main__':
     # count_api_nums_with_history_errors('JAX')
     # count_api_nums_with_history_errors('Jittor')
 
-    # list_clusters('ValueEquivalent')
-    # print("\n")
-    # list_clusters('StateEquivalent')
+    list_clusters('ValueEquivalent')
+    print("\n")
+    list_clusters('StateEquivalent')
 
-    # clean_invalid_clusters()
+    clean_invalid_clusters()
 
-    full_api_name = "jax.jit"
-    retrieve_api_issues(full_api_name)
-    print("="*60)
-    get_api_info(full_api_name)
+    # full_api_name = "jax.jit"
+    # retrieve_api_issues(full_api_name)
+    # print("="*60)
+    # get_api_info(full_api_name)
 
     # session = get_session()
     # # 检查哪个API的history_errors最多

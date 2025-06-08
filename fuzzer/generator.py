@@ -16,7 +16,7 @@ import time
 
 
 class Fuzzer:  # 以Cluster为单位生成测试种子
-    def __init__(self, cluster, session, llm_client, error_num_in_context=6, whether_sample_state_equivalent=True, whether_sample_value_equivalent=True):
+    def __init__(self, cluster: Cluster, session, llm_client, error_num_in_context=6, whether_sample_state_equivalent=True, whether_sample_value_equivalent=True):
         self.cluster = cluster
         self.session = session
         self.llm_client = llm_client
@@ -749,7 +749,6 @@ def process_clusters_batch(cluster_ids: List[int], thread_id: int, llm_client, p
     """处理一批cluster的工作函数，在单独的线程中运行"""
     # 为每个线程创建独立的数据库会话
     thread_session = utils.get_session()
-    fuzzer = Fuzzer(thread_session, llm_client)
     
     print(f"线程 {thread_id} 开始处理 {len(cluster_ids)} 个 Clusters")
     
@@ -760,7 +759,9 @@ def process_clusters_batch(cluster_ids: List[int], thread_id: int, llm_client, p
                 cluster = thread_session.query(Cluster).filter_by(id=cluster_id).first()
                 if cluster and not cluster.is_tested:
                     print(f"线程 {thread_id} 正在处理 Cluster {cluster_id} ({i+1}/{len(cluster_ids)})")
-                    fuzzer.fuzz_equivalent_cluster(cluster)
+                    # 为每个cluster创建独立的Fuzzer实例
+                    fuzzer = Fuzzer(cluster, thread_session, llm_client)
+                    fuzzer.fuzz_equivalent_cluster()
                     
                     # 更新全局进度
                     if progress_lock and progress_counter is not None and total_clusters:
@@ -925,8 +926,8 @@ def fuzz_value_equivalent_clusters_single_thread(session, llm_client):
     while untested_clusters:
         print("-" * 70 + f"Fuzzing Value Equivalent Clusters: {len(untested_clusters)}/ {len(value_equivalent_clusters)}" + "-" * 70)
         untested_cluster = untested_clusters[0]
-        fuzzer = Fuzzer(session, llm_client)
-        fuzzer.fuzz_equivalent_cluster(untested_cluster)
+        fuzzer = Fuzzer(untested_cluster, session, llm_client)
+        fuzzer.fuzz_equivalent_cluster()
         untested_clusters = session.query(Cluster).filter_by(is_tested=False, type='ValueEquivalent').all()
         
     print(f"fuzz_value_equivalent_clusters() Success - All value equivalent clusters fuzzing completed")
@@ -941,8 +942,8 @@ def fuzz_state_equivalent_clusters_single_thread(session, llm_client):
     while untested_clusters:
         print("-" * 70 + f"Fuzzing State Equivalent Clusters: {len(untested_clusters)}/ {len(state_equivalent_clusters)}" + "-" * 70)
         untested_cluster = untested_clusters[0]
-        fuzzer = Fuzzer(session, llm_client)
-        fuzzer.fuzz_equivalent_cluster(untested_cluster)
+        fuzzer = Fuzzer(untested_cluster, session, llm_client)
+        fuzzer.fuzz_equivalent_cluster()
         untested_clusters = session.query(Cluster).filter_by(is_tested=False, type='StateEquivalent').all()
         
     print(f"fuzz_state_equivalent_clusters() Success - All state equivalent clusters fuzzing completed")
