@@ -47,7 +47,7 @@ class APIGroup(Base):
     apis = relationship('API', secondary=api_group_association)
     cluster_id = Column(Integer, ForeignKey('cluster.id'), nullable=True)
     cluster = relationship('Cluster', back_populates='api_groups')
-    api_seeds = relationship('APITestSeed', back_populates='api_group')
+    api_seeds = relationship('APITestSeed', back_populates='api_group', cascade="all, delete-orphan")
 
 
 class APIHistoryError(Base):
@@ -67,9 +67,9 @@ class Cluster(Base):
     type = Column(Enum('ValueEquivalent', 'StateEquivalent', name='cluster_type_enum'), nullable=False)
     description = Column(Text, nullable=True)
     energy = Column(Integer, default=5)
-    api_groups = relationship('APIGroup', back_populates='cluster')  # [APIA], [APIB, APIC], [APID], [APIJ]
+    api_groups = relationship('APIGroup', back_populates='cluster', cascade="all, delete-orphan")  # [APIA], [APIB, APIC], [APID], [APIJ]
     is_tested = Column(Boolean, default=False)  # 该API是否已经生成过了种子
-    cluster_seeds = relationship('ClusterTestSeed', back_populates='cluster')
+    cluster_seeds = relationship('ClusterTestSeed', back_populates='cluster', cascade="all, delete-orphan")
 
 
 class ClusterTestSeed(Base):

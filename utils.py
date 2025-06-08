@@ -441,51 +441,103 @@ def list_clusters(cluster_type='ValueEquivalent'):
 
 def clean_invalid_clusters():
     """
-    清理只包含一个API组的无效cluster
-    理论上每个cluster应该至少包含2个API组才有意义
+    清理无效的cluster
+    无效cluster包括：
+    1. 只包含一个API组的cluster
+    2. 包含重复APIGroup的cluster（APIGroup下的API集合完全相同）
     """
     session = get_session()
     try:
+        invalid_clusters = []
         # 查询所有cluster
         clusters = session.query(Cluster).all()
-        invalid_clusters = []
-        
         for cluster in clusters:
+            is_invalid = False
+            invalid_reason = ""
+            
+            # 检查条件1：只有一个或没有API组
             if len(cluster.api_groups) <= 1:
-                invalid_clusters.append(cluster)
+                is_invalid = True
+                invalid_reason = f"Only {len(cluster.api_groups)} API group(s)"
+            
+            # 检查条件2：存在重复的APIGroup（API集合相同）
+            elif len(cluster.api_groups) > 1:
+                api_group_signatures = []
+                for api_group in cluster.api_groups:
+                    # 为每个APIGroup创建签名：按API的full_name排序后组成的元组
+                    api_names = sorted([api.full_name for api in api_group.apis])
+                    signature = tuple(api_names)
+                    api_group_signatures.append(signature)
+                
+                # 检查是否所有APIGroup都是重复的（即只有一种唯一的API集合）
+                unique_signatures = set(api_group_signatures)
+                if len(unique_signatures) == 1:
+                    is_invalid = True
+                    invalid_reason = f"All API groups are identical (API set: {list(unique_signatures)[0]})"
+            
+            if is_invalid:
+                invalid_clusters.append((cluster, invalid_reason))
         
         if not invalid_clusters:
             print("No invalid clusters found.")
             return
         
-        print(f"Found {len(invalid_clusters)} invalid clusters (with <= 1 API groups):")
-        for cluster in invalid_clusters:
-            print(f"  Cluster ID: {cluster.id}, Type: {cluster.type}, API groups: {len(cluster.api_groups)}")
+        print(f"Found {len(invalid_clusters)} invalid clusters:")
+        for cluster, reason in invalid_clusters:
+            print(f"  Cluster ID: {cluster.id}, Type: {cluster.type}, Reason: {reason}")
+            print(f"    API groups: {len(cluster.api_groups)}")
             if cluster.api_groups:
-                for api_group in cluster.api_groups:
-                    for api in api_group.apis:
-                        print(f"    - {api.full_name}")
+                for i, api_group in enumerate(cluster.api_groups, 1):
+                    api_names = [api.full_name for api in api_group.apis]
+                    print(f"      Group {i}: {api_names}")
         
         # 询问是否删除
         response = input(f"\nDo you want to delete these {len(invalid_clusters)} invalid clusters? (y/N): ")
         if response.lower() in ['y', 'yes']:
-            for cluster in invalid_clusters:
-                # 重置相关API的is_clustered状态
+            for cluster, reason in invalid_clusters:
+                print(f"Deleting cluster {cluster.id} (Reason: {reason})...")
+                
+                # 1. 重置相关API的is_clustered状态
                 for api_group in cluster.api_groups:
                     for api in api_group.apis:
                         api.is_clustered = False
+                        print(f"  Reset API {api.full_name} is_clustered to False")
                 
-                # 删除cluster（级联删除会自动删除相关的api_groups）
+                # 2. 显式删除相关的APITestSeed
+                for api_group in cluster.api_groups:
+                    api_seeds = api_group.api_seeds
+                    for api_seed in api_seeds:
+                        print(f"  Deleting APITestSeed {api_seed.id}")
+                        session.delete(api_seed)
+                
+                # 3. 显式删除相关的ClusterTestSeed
+                cluster_seeds = cluster.cluster_seeds
+                for cluster_seed in cluster_seeds:
+                    print(f"  Deleting ClusterTestSeed {cluster_seed.id}")
+                    # 先删除cluster_seed下的所有api_seeds
+                    for api_seed in cluster_seed.api_seeds:
+                        print(f"    Deleting APITestSeed {api_seed.id} from ClusterTestSeed")
+                        session.delete(api_seed)
+                    session.delete(cluster_seed)
+                
+                # 4. 显式删除相关的APIGroup
+                api_groups = list(cluster.api_groups)  # 创建副本避免迭代时修改
+                for api_group in api_groups:
+                    print(f"  Deleting APIGroup {api_group.id}")
+                    session.delete(api_group)
+                
+                # 5. 最后删除cluster
+                print(f"  Deleting Cluster {cluster.id}")
                 session.delete(cluster)
             
             session.commit()
-            print(f"Successfully deleted {len(invalid_clusters)} invalid clusters.")
+            print(f"Successfully deleted {len(invalid_clusters)} invalid clusters with cascade deletion.\n\n")
         else:
-            print("No clusters were deleted.")
+            print("No clusters were deleted.\n\n")
             
     except Exception as e:
         session.rollback()
-        print(f"An error occurred while cleaning invalid clusters: {str(e)}")
+        print(f"An error occurred while cleaning invalid clusters: {str(e)}\n\n")
     finally:
         session.close()
 
@@ -496,6 +548,7 @@ if __name__ == '__main__':
     # count_api_nums_with_history_errors('MindSpore')
     # count_api_nums_with_history_errors('JAX')
     # count_api_nums_with_history_errors('Jittor')
+
     list_clusters('ValueEquivalent')
     print("\n")
     list_clusters('StateEquivalent')
