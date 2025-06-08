@@ -7,10 +7,17 @@ from fuzzer.validator import APITestSeedValidator
 from orm import *
 import random
 from collections import defaultdict
+import threading
+import concurrent.futures
+import os
+from typing import List
+import argparse
+import time
 
 
 class Fuzzer:  # 以Cluster为单位生成测试种子
-    def __init__(self, session, llm_client, error_num_in_context=6, whether_sample_state_equivalent=True, whether_sample_value_equivalent=True):
+    def __init__(self, cluster, session, llm_client, error_num_in_context=6, whether_sample_state_equivalent=True, whether_sample_value_equivalent=True):
+        self.cluster = cluster
         self.session = session
         self.llm_client = llm_client
         self.error_num_in_context = error_num_in_context
@@ -220,25 +227,143 @@ class Fuzzer:  # 以Cluster为单位生成测试种子
 
         system_prompt = """
 (1) Role Definition
-You are an AI assistant specialized in deep learning framework APIs (e.g., PyTorch, JAX, MindSpore and Jittor). Your primary task is to help users find equivalent APIs (or API groups) across different deep learning libraries.
+You are an AI assistant specialized in deep learning framework APIs (e.g., PyTorch, JAX, MindSpore and Jittor).
 
 (2) Output Format
 Your answer must be provided strictly in the following JSON format:
 - Code: A string containing the complete, runnable code snippet. The code should call the specified base_api and implement it according to the user's provided parameters and call combinations.
 - APIs: A list containing the full names (including module paths) of all APIs in the code snippet that come from the same deep learning library as the base_api. Each API should be listed only once, in any order.
-Example:
-{
-"Code": "import torch; import torch.nn.functional as F; logits = torch.randn(4, 5, requires_grad=True); target = torch.tensor([1, 4, 3, 0]); loss = F.cross_entropy(input=logits, target=target, weight=torch.tensor([1.0, 2.0, 0.5, 0.8, 1.2]), ignore_index=-1, reduction='mean', label_smoothing=0.1); loss.backward(); print(loss.item())",
-"APIs": ["torch.nn.functional.F.cross_entropy", "torch.randn", "torch.tensor"],
-}
 """
 
         # Example
         context_query_prompt1 = f"""
-        
+Code snippets that trigger the issue:
+History Issue Example1:
+- Issue Title: jax.jit crashes only as a class method (calling jax.scipy.linalg.lu_solve)
+- Issue Description: The issue occurs in a Linux environment using Python 3.10.12 and JAX version 0.4.13 with a NVIDIA A100 GPU. The user attempts to solve a large set of LU systems using the `solve_jit` method defined as a class method with a static argument. When calling `solver.solve_jit(rhs)`, the operation results in a crash (kernel dies or segmentation fault), while the non-jit method `solver.solve(rhs)` works correctly.
+- Issue Trigger API: jax.jit
+- Issue Code: 
+class Solver:
+  def __init__(self, lu):
+    self.lu = lu
+  def solve(self, rhs_0):
+    return jax.vmap(jax.scipy.linalg.lu_solve)(self.lu, rhs_0)
+
+  @partial(jax.jit, static_argnums=(0,))
+  def solve_jit(self, rhs_0):
+    return jax.vmap(jax.scipy.linalg.lu_solve)(self.lu, rhs_0)
+
+lu = jax.vmap(jax.scipy.linalg.lu_factor)(lhs)
+
+solver = Solver(lu)
+sol = solver.solve(rhs)
+sol = solver.solve_jit(rhs)   
+
+History Issue Example2:
+- Issue Title: ArgInfo.donated reports donated status for wrong argument
+- Issue Description: The issue occurred in an environment using TPU. The user defined a function and applied jax.jit with donate_argnums set to 1. After compiling and inspecting the function's argument information, it incorrectly reported that only one of the input arguments was donated. When the function was called, it resulted in a RuntimeError indicating that an array had been deleted, despite the expectation that the other argument was not donated.
+- Issue Trigger API: jax.jit
+- Issue Code: 
+def fn(x, y):
+  return x, y
+
+fn = jax.jit(fn, donate_argnums=1)
+
+x = {{'A': 1.0, 'B': 2.0}}
+y = 3.0
+x = jax.tree_map(lambda x: jax.device_put(x, jax.local_devices()[0]), x)
+y = jax.tree_map(lambda x: jax.device_put(x, jax.local_devices()[0]), y)
+
+fn = fn.lower(x, y)
+fn = fn.compile()
+print(fn.args_info) # claims only x['B'] is donated
+
+fn(x, y)
+
+print(x) # x wasn't donated at all
+print(y) # y was donated (as expected) -> RuntimeError: Array has been deleted.
+
+History Issue Example3:
+- Issue Title: JIT donate_argnums slows down execution
+- Issue Description: The user is working on a reinforcement learning project on Ubuntu 20.04 with a GPU. They are trying to optimize a replay buffer inside a jitted function using jax.lax.fori_loop. After implementing donate_argnums in their jitted function, they noticed that the training process is significantly slower than expected, despite the assumption that it would improve performance.
+- Issue Trigger API: jax.jit
+- Issue Code: 
+def loop_fn(_, carry):
+    loop_state, replay_state = carry
+    ...
+     # Some modifications to the loop_state and replay_state
+    return new_loop_state, new_replay_state
+
+loop_fn = jit(loop_fn)
+for i in range(...): 
+    loop_state, replay_state = jax.lax.fori_loop(0, FLAGS.log_frequency, loop_fn, (loop_state, replay_state))
+
+def fori_loop_fn(loop_state, replay_state):
+    return jax.lax.fori_loop(0, FLAGS.log_frequency, loop_fn, (loop_state, replay_state))
+
+fori_loop_fn = jit(fori_loop_fn, donate_argnums=(1,))
+for i in range(...):
+    loop_state, replay_state = fori_loop_fn(loop_state, replay_state)
+
+History Issue Example4:
+- Issue Title: Jax' transfer guard and XLA-CPU
+- Issue Description: The issue occurs in an environment using JAX with a TPU accelerator. The user attempts to transfer numpy arrays to the XLA-CPU device using JAX's transfer guard, expecting it to trigger for host-to-device transfers. However, the transfer guard does not trigger for numpy to XLA-CPU transfers, while it also fails to trigger for XLA-CPU to numpy transfers. This inconsistency in behavior is the main concern.
+- Issue Trigger API: jax.jit
+- Issue Code: 
+jax.jit(jax.random.PRNGKey, backend='cpu')(np.array(0))
+np.array(jax.device_put(0, device=jax.devices('cpu')[0]))
+
+History Issue Example5:
+- Issue Title: Complex max/min fail on shared gpu device arrays
+- Issue Description: The issue occurred in an environment using jax-0.4.13 and jaxlib-0.4.13+cuda12.cudnn89 on NVIDIA A100 GPUs. The user attempted to compute the maximum of a complex array distributed across multiple GPUs using jax.jit and jax.device_put. This operation resulted in an internal error related to the handling of complex arrays, leading to a failure in the computation.
+- Issue Trigger API: jax.jit
+- Issue Code: 
+import jax
+import jax.numpy as jnp
+
+x = jnp.ones(128, dtype=jnp.complex64)
+sharding = jax.sharding.PositionalSharding(jax.devices())
+x = jax.device_put(x, sharding)
+jax.debug.visualize_array_sharding(x)
+jax.jit(jnp.max)(x)
+#jax.jit(jnp.min)(x)
+
+History Issue Example6:
+- Issue Title: Crash in Metal plugin if bfloat16 constant is present
+- Issue Description: The issue occurred on an Apple M1 Pro with 32.00 GB of system memory and a max cache size of 10.67 GB. The user attempted to execute a JAX function that included a bfloat16 constant. As a result of this operation, an assertion failure occurred in the Metal plugin, indicating that the buffer was not large enough, leading to an abort trap.
+- Issue Trigger API: jax.jit
+- Issue Code: 
+jax.jit(lambda: jnp.exp(jnp.bfloat16(7)))()
+
+Information about the API to be called:
+- API Name: jax.jit
+- Source Library: JAX (version 0.4.33)
+- API Signature: jax.jit(fun,in_shardings=UnspecifiedValue,out_shardings=UnspecifiedValue,static_argnums=None,static_argnames=None,donate_argnums=None,donate_argnames=None,keep_unused=False,device=None,backend=None,inline=False,abstracted_axes=None,compiler_options=None)
+- Function Description: Sets up fun for just-in-time compilation with XLA
+- Output: pjit.JitWrapped
+
+Task Requirements:
+1. Your task is to generate a code snippet that is likely to reveal potential bugs in jax.jit, by mining and learning from the input parameters and API call combinations shown in the above issue examples.
+2. Output variable naming rules:
+   - If jax.jit returns a single value, you must assign the result to a variable named "output1".
+   - If jax.jit returns multiple values, you must assign them to variables named "output1", "output2", "output3", etc., in order.
+   - If jax.jit does not return a value but performs in-place operations on the input(s), you must assign the processed input to a variable named "output1".
+   - If jax.jit performs in-place operations on multiple inputs, you must assign each processed input to variables named "output1", "output2", "output3", etc., in order.
+3. The code should be complete and executable. You are only allowed to use APIs from the JAX (version 0.4.33) library and common utility libraries such as numpy, random, math, and built-in Python functions. Do not use APIs from any other deep learning frameworks or third-party libraries.
 """
         context_answer_prompt1 = f"""
-        
+{{
+  "Code": "import jax; import jax.numpy as jnp; from jax import random; import numpy as np; def complex_max_fn(x): return jnp.max(x), jnp.min(x); x = jnp.ones(128, dtype=jnp.complex64); sharding = jax.sharding.PositionalSharding(jax.devices()); x = jax.device_put(x, sharding); output1, output2 = jax.jit(complex_max_fn)(x); print(output1, output2); x_bfloat = jnp.bfloat16(7); output3 = jax.jit(lambda: jnp.exp(x_bfloat))(); print(output3)",
+  "APIs": [
+    "jax.jit",
+    "jax.numpy.jnp.max",
+    "jax.numpy.jnp.min",
+    "jax.device_put",
+    "jax.sharding.PositionalSharding",
+    "jax.numpy.jnp.bfloat16",
+    "jax.numpy.jnp.exp"
+  ]
+}}
 """
 
         # 基底API的详情
@@ -259,26 +384,32 @@ Example:
 History Issue Example{count + 1}:
 - Issue Title: {issue_example.title}
 - Issue Description: {issue_example.description}
-- Issue Trigger API: {issue_example.api.signature}
+- Issue Trigger API: {issue_example.api.full_name}
 - Issue Code: 
 {issue_example.code}         
 """
         # 构建最终查询提示词
         query_prompt = f"""
-Example code snippets that trigger the issue:
+Code snippets that trigger the issue:
 {issue_examples_prompt}
 
 Information about the API to be called:
 {base_api_info_prompt}
 
 Task Requirements:
-Please refer to the input values for API parameters and the API call combinations in the examples above, and generate a code snippet that calls {base_api.full_name}.
+1. Your task is to generate a code snippet that is likely to reveal potential bugs in {base_api.full_name}, by mining and learning from the input parameters and API call combinations shown in the above issue examples.
+2. Output variable naming rules:
+   - If {base_api.full_name} returns a single value, you must assign the result to a variable named "output1".
+   - If {base_api.full_name} returns multiple values, you must assign them to variables named "output1", "output2", "output3", etc., in order.
+   - If {base_api.full_name} does not return a value but performs in-place operations on the input(s), you must assign the processed input to a variable named "output1".
+   - If {base_api.full_name} performs in-place operations on multiple inputs, you must assign each processed input to variables named "output1", "output2", "output3", etc., in order.
+3. The code should be complete and executable. You are only allowed to use APIs from the {base_api.lib} (version {base_api.version}) library and common utility libraries such as numpy, random, math, and built-in Python functions. Do not use APIs from any other deep learning frameworks or third-party libraries.
 """
 
         messages = [
             {"role": "system", "content": system_prompt},
-            # {"role": "user", "content": context_query_prompt1},
-            # {"role": "assistant", "content": context_answer_prompt1},
+            {"role": "user", "content": context_query_prompt1},
+            {"role": "assistant", "content": context_answer_prompt1},
             {"role": "user", "content": query_prompt},
         ]
         return messages
@@ -338,11 +469,18 @@ Please refer to the input values for API parameters and the API call combination
         return base_seed, api_combination
 
     def construct_messages4twin(self, twin_api_group, base_api_seed, base_api_invoke_combination):
+        # System提示词
         system_prompt = """
 (1) Role Definition: You are an AI assistant specialized in deep learning framework APIs (e.g., PyTorch, JAX, MindSpore and Jittor).
 (2) Output Format: Your response must be pure code. Do not include any explanations, comments, or extra content.  
 """
-        # API Group的详情
+        # twin_api_group brief info
+        if len(twin_api_group.apis) == 1:
+            api_group_brief_info = f"{twin_api_group.apis[0].full_name}"
+        else:
+            api_group_brief_info = f"[{', '.join([api.full_name for api in twin_api_group.apis])}]"
+
+        # Twin API Group的详情
         if len(twin_api_group.apis) == 1:
             twin_api = twin_api_group.apis[0]
             api_group_info_prompt = f"""
@@ -358,7 +496,7 @@ Please refer to the input values for API parameters and the API call combination
             api_group_info_prompt = ""
             for count, twin_api in enumerate(twin_api_group.apis):
                 api_group_info_prompt = api_group_info_prompt + f"""
-Member{count + 1} of API Group:
+Member{count + 1} of API Group {api_group_brief_info}:
 - API Name: {twin_api.full_name}
 - API Library: {twin_api.lib} (version{twin_api.version})
 - API Signature: {twin_api.signature}
@@ -367,120 +505,134 @@ Member{count + 1} of API Group:
 {'- Attributes:' + twin_api.attributes if twin_api.attributes else ''}
 {'- Output:' + twin_api.output if twin_api.output else ''}
 """
-        # twin_api_group brief info
-        if len(twin_api_group.apis) == 1:
-            api_group_brief_info = f"{twin_api_group.apis[0].signature}"
-        else:
-            api_group_brief_info = f"[{', '.join([api.signature for api in twin_api_group.apis])}]"
 
         # 背景知识
         base_api = base_api_seed.api_group.apis[0]
-        if len(twin_api_group.apis) == 1:
-            twin_api = twin_api_group.apis[0]
-            background_knowledge_prompt = f"""
-The API ({twin_api.signature}) from library {twin_api.lib}(v{twin_api.version}) has the similar function as the API ({base_api.signature}) from library {base_api.lib}(v{base_api.version}).
-The detail of API ({base_api.signature}) is as follows:
-- API Name: {base_api.full_name}
-- API Library: {base_api.lib} (version{base_api.version})
-- API Signature: {base_api.signature}
-{'- Function Description: ' + base_api.description if base_api.description else ''}
-{'- Parameters: ' + base_api.parameters if base_api.parameters else ''}
-{'- Attributes:' + base_api.attributes if base_api.attributes else ''}
-{'- Output:' + base_api.output if base_api.output else ''}
-"""
-        else:
-            background_knowledge_prompt = f"""
-By combining the APIs in {api_group_brief_info}, it can achieve the similar functionality as the API {base_api.signature} from library {base_api.lib}(v{base_api.version}).
-The detail of API ({base_api.signature}) is as follows:
-- API Name: {base_api.full_name}
-- API Library: {base_api.lib} (version{base_api.version})
-- API Signature: {base_api.signature}
-{'- Function Description: ' + base_api.description if base_api.description else ''}
-{'- Parameters: ' + base_api.parameters if base_api.parameters else ''}
-{'- Attributes:' + base_api.attributes if base_api.attributes else ''}
-{'- Output:' + base_api.output if base_api.output else ''}
-"""
-        # 构建最终提示词
-        query_prompt = f"""
-Information of the API {'group' if len(twin_api_group.apis) > 1 else ''} to be called:
-{api_group_info_prompt}        
-
-Background Knowledge:
-{background_knowledge_prompt}
-
-Task Requirements:
-Below is a code snippet calling ({base_api.signature}). Please generate a code snippet that replaces ({base_api.full_name}) with {api_group_brief_info}, ensuring that the input parameters remain unchanged. Additionally, ensure that the code snippet you generate declares the same variables as the example code (for instance, if the example code declares an "output" variable to store the API's result, then your generated code should also declare an "output" variable to store the API's result).
-{base_api_seed.valid_code}
-"""
-
-        # 为每个api_combination中的API和其对应的equivalent_api生成文档提示词
-        if not (len(base_api_invoke_combination) == 1 and base_api_invoke_combination[0] == base_api): # 先检查api_combination内是否有且只有base_api这一个API, 如果不是则处理其他API
-            api_mapper = {}
-            for api in base_api_invoke_combination:
-                api_obj_groups = (self.session.query(APIGroup)
-                                  .join(APIGroup.apis)
-                                  .group_by(APIGroup.id)
-                                  .having(func.count(API.id) == 1,  # 确保当前Group内只包含一个API
-                                          func.min(API.id) == api.id)  # 确保当前Group内包含的API是api
-                                  .all())
-                if api_obj_groups is None:
-                    api_mapper[api] = None
-                    continue
-
-                equivalent_apis = {
-                    "ValueEquivalent": [],
-                    "StateEquivalent": []
-                }
-                for api_obj_group in api_obj_groups:
-                    if api_obj_group.cluster.type == 'ValueEquivalent':
-                        # 在'ValueEquivalent'的Cluster内寻找twin_api所在库的所有等价API
-                        value_equivalent_cluster = api_obj_group.cluster
-                        value_equivalent_api_groups = value_equivalent_cluster.api_groups
-                        for value_equivalent_api_group in value_equivalent_api_groups:
-                            if len(value_equivalent_api_group.apis) == 1 and value_equivalent_api_group.apis[0].lib == twin_api_group.apis[0].lib:
-                                equivalent_apis["ValueEquivalent"].append(value_equivalent_api_group.apis[0])
-                    else:
-                        # 在'StateEquivalent'的Cluster内寻找twin_api所在库的所有等价API
-                        state_equivalent_cluster = api_obj_group.cluster
-                        state_equivalent_api_groups = state_equivalent_cluster.api_groups
-                        for state_equivalent_api_group in state_equivalent_api_groups:
-                            if len(state_equivalent_api_group.apis) == 1 and state_equivalent_api_group.apis[0].lib == twin_api_group.apis[0].lib:
-                                equivalent_apis["StateEquivalent"].append(state_equivalent_api_group.apis[0])
-                if len(equivalent_apis["ValueEquivalent"]) > 0:
-                    api_mapper[api] = equivalent_apis["ValueEquivalent"][0]
-                elif len(equivalent_apis["StateEquivalent"]) > 0:
-                    api_mapper[api] = equivalent_apis["StateEquivalent"][0]
-                else:
-                    api_mapper[api] = None
-
-            api_invoke_combination_brief_info = f"[{', '.join([api.signature for api in base_api_invoke_combination])}]" # base_api_combination brief info
-
-            invoked_apis_prompt = f"""
-Additional Background Knowledge:
-The above code snippet invoking the following API combination from {base_api.lib} (version {base_api.version}):
-{api_invoke_combination_brief_info}
+        api_invoke_combination_brief_info = f"[{', '.join([api.full_name for api in base_api_invoke_combination])}]"  # base_api_combination brief info
+        background_knowledge_prompt = f"""
+The above code snippet invoking the following API combination from {base_api.lib} (version {base_api.version}): {api_invoke_combination_brief_info}
 Below are the detailed information about these APIs and their equivalent APIs in {twin_api_group.apis[0].lib} library (if any):
 """
-            for api, equivalent_api in api_mapper.items():
-                invoked_apis_prompt += f"""
-Source API: {api.full_name}
+        if len(twin_api_group.apis) == 1:
+            twin_api = twin_api_group.apis[0]
+            background_knowledge_prompt = background_knowledge_prompt + f"""
+The detail of API ({base_api.full_name}) is as follows:
+- API Name: {base_api.full_name}
+- API Library: {base_api.lib} (version{base_api.version})
+- API Signature: {base_api.signature}
+{'- Function Description: ' + base_api.description if base_api.description else ''}
+{'- Parameters: ' + base_api.parameters if base_api.parameters else ''}
+{'- Attributes:' + base_api.attributes if base_api.attributes else ''}
+{'- Output:' + base_api.output if base_api.output else ''}
+
+The API ({twin_api.full_name}) from library {twin_api.lib}(v{twin_api.version}) has the similar function as the API ({base_api.full_name}) from library {base_api.lib}(v{base_api.version}).
+The detail of API ({api_group_brief_info}) is as follows:
+{api_group_info_prompt}
+"""
+        else:
+            background_knowledge_prompt = background_knowledge_prompt + f"""
+The detail of API ({base_api.full_name}) is as follows:
+- API Name: {base_api.full_name}
+- API Library: {base_api.lib} (version{base_api.version})
+- API Signature: {base_api.signature}
+{'- Function Description: ' + base_api.description if base_api.description else ''}
+{'- Parameters: ' + base_api.parameters if base_api.parameters else ''}
+{'- Attributes:' + base_api.attributes if base_api.attributes else ''}
+{'- Output:' + base_api.output if base_api.output else ''}
+
+By combining the APIs in {api_group_brief_info}, it can achieve the similar functionality as the API {base_api.full_name} from library {base_api.lib}(v{base_api.version}).
+The detail of API ({api_group_brief_info}) is as follows:
+{api_group_info_prompt}
+"""
+
+            # 为每个api_combination中的API和其对应的equivalent_api生成文档提示词
+            base_api_invoke_combination = [api for api in base_api_invoke_combination if api != base_api]  # 从base_api_invoke_combination中删除base_api
+            if (len(base_api_invoke_combination) > 0):  # 先检查api_combination内是否有且只有base_api这一个API, 如果不是则处理其他API
+                # 寻找base_api_invoke_combination中每个API在等价簇中的等价API
+                api_mapper = {}
+                for api in base_api_invoke_combination:
+                    api_obj_groups = (self.session.query(APIGroup)
+                                      .join(APIGroup.apis)
+                                      .group_by(APIGroup.id)
+                                      .having(func.count(API.id) == 1,  # 确保当前Group内只包含一个API
+                                              func.min(API.id) == api.id)  # 确保当前Group内包含的API是api
+                                      .all())
+                    if api_obj_groups is None:
+                        api_mapper[api] = None
+                        continue
+
+                    equivalent_apis = {
+                        "ValueEquivalent": [],
+                        "StateEquivalent": []
+                    }
+                    for api_obj_group in api_obj_groups:
+                        if api_obj_group.cluster.type == 'ValueEquivalent':
+                            # 在'ValueEquivalent'的Cluster内寻找twin_api所在库的所有等价API
+                            value_equivalent_cluster = api_obj_group.cluster
+                            value_equivalent_api_groups = value_equivalent_cluster.api_groups
+                            for value_equivalent_api_group in value_equivalent_api_groups:
+                                if len(value_equivalent_api_group.apis) == 1 and value_equivalent_api_group.apis[0].lib == twin_api_group.apis[0].lib:
+                                    equivalent_apis["ValueEquivalent"].append(value_equivalent_api_group.apis[0])
+                        else:
+                            # 在'StateEquivalent'的Cluster内寻找twin_api所在库的所有等价API
+                            state_equivalent_cluster = api_obj_group.cluster
+                            state_equivalent_api_groups = state_equivalent_cluster.api_groups
+                            for state_equivalent_api_group in state_equivalent_api_groups:
+                                if len(state_equivalent_api_group.apis) == 1 and state_equivalent_api_group.apis[0].lib == twin_api_group.apis[0].lib:
+                                    equivalent_apis["StateEquivalent"].append(state_equivalent_api_group.apis[0])
+                    if len(equivalent_apis["ValueEquivalent"]) > 0:
+                        api_mapper[api] = equivalent_apis["ValueEquivalent"][0]
+                    elif len(equivalent_apis["StateEquivalent"]) > 0 and self.cluster.type == 'StateEquivalent':
+                        api_mapper[api] = equivalent_apis["StateEquivalent"][0]
+                    else:
+                        api_mapper[api] = None
+
+                # 为每个API和其对应的equivalent_api生成文档提示词
+                for api, equivalent_api in api_mapper.items():
+                    background_knowledge_prompt += f"""
+The detail of API ({api.full_name}) is as follows:
 - Library: {api.lib} (version {api.version})
 - Signature: {api.signature}
 {'- Description: ' + api.description if api.description else ''}
 {'- Parameters: ' + api.parameters if api.parameters else ''}
 {'- Output: ' + api.output if api.output else ''}
 """
-                if equivalent_api:
-                    invoked_apis_prompt += f"""
-Corresponding equivalent API in target library: {equivalent_api.full_name}
+                    if equivalent_api:
+                        background_knowledge_prompt += f"""
+The API ({equivalent_api.full_name}) from library {equivalent_api.lib}(v{equivalent_api.version}) has the similar function as the API ({api.full_name}) from library {api.lib}(v{api.version}).
+The detail of API ({equivalent_api.signature}) is as follows:
 - Library: {equivalent_api.lib} (version {equivalent_api.version})
 - Signature: {equivalent_api.signature}
 {'- Description: ' + equivalent_api.description if equivalent_api.description else ''}
 {'- Parameters: ' + equivalent_api.parameters if equivalent_api.parameters else ''}
 {'- Output: ' + equivalent_api.output if equivalent_api.output else ''}
 """
-            query_prompt = query_prompt + invoked_apis_prompt
 
+        # 构建最终提示词
+        query_prompt = f"""
+Code Snippet: 
+Below is a code snippet that calls the API combination {api_invoke_combination_brief_info} from {base_api.lib} (version {base_api.version}).
+{base_api_seed.valid_code}
+        
+Background Knowledge:
+{background_knowledge_prompt}
+
+Task Requirements:
+1. Translation Task: Your task is to translate the above code snippet, which calls the API combination {api_invoke_combination_brief_info} from {base_api.lib} (version {base_api.version}), into an equivalent code snippet using the equivalent APIs from {twin_api_group.apis[0].lib} (version {twin_api_group.apis[0].version}).
+2. Consistency Requirements: The translated code snippet must maintain consistency with the original code in the following aspects:
+   - API call order must remain the same
+   - API parameters must remain unchanged
+   - API return values handling must be consistent
+   - Variable names must be preserved
+   - Input parameters must remain unchanged
+3. Output Variable Naming Rules: 
+   In the original code, the output variable naming follows these rules:
+   - If {base_api.full_name} returns a single value, the result is assigned to a variable named "output1"
+   - If {base_api.full_name} returns multiple values, they are assigned to variables named "output1", "output2", "output3", etc., in order
+   - If {base_api.full_name} does not return a value but performs in-place operations on the input(s), the processed input is assigned to a variable named "output1"
+   - If {base_api.full_name} performs in-place operations on multiple inputs, each processed input is assigned to variables named "output1", "output2", "output3", etc., in order
+   In the translated code, the equivalent API {'Group' if len(twin_api_group.apis) > 1 else ''} {api_group_brief_info} must follow the same variable naming rules as {base_api.full_name}.
+"""
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": query_prompt},
@@ -532,33 +684,33 @@ Corresponding equivalent API in target library: {equivalent_api.full_name}
         self.session.flush()
         return twin_seed
 
-    def fuzz_equivalent_cluster(self, cluster: Cluster):
-        print(f"fuzz_equivalent_cluster() Info - Fuzzing cluster ID: {cluster.id}, Type: {cluster.type}")
-        if cluster.is_tested:
-            print(f"fuzz_equivalent_cluster() Info - Cluster {cluster.id} already tested, skipping")
+    def fuzz_equivalent_cluster(self):
+        print(f"fuzz_equivalent_cluster() Info - Fuzzing cluster ID: {self.cluster.id}, Type: {self.cluster.type}")
+        if self.cluster.is_tested:
+            print(f"fuzz_equivalent_cluster() Info - Cluster {self.cluster.id} already tested, skipping")
             return
-        elif not cluster.api_groups:  # 如果该等价簇没有API组合, 则直接标记为已测试
-            print(f"fuzz_equivalent_cluster() Info - Cluster {cluster.id} has no API groups, marking as tested")
-            cluster.is_tested = True
+        elif not self.cluster.api_groups:  # 如果该等价簇没有API组合, 则直接标记为已测试
+            print(f"fuzz_equivalent_cluster() Info - Cluster {self.cluster.id} has no API groups, marking as tested")
+            self.cluster.is_tested = True
             self.session.commit()
             return
 
         # 先查询该等价簇已经生成了几个种子
-        seeds_num = self.session.query(ClusterTestSeed).filter(ClusterTestSeed.cluster_id == cluster.id).count()
-        remaining_energy = cluster.energy - seeds_num
-        print(f"fuzz_equivalent_cluster() Info - Cluster {cluster.id} has {seeds_num} existing seeds, remaining energy: {remaining_energy}")
+        seeds_num = self.session.query(ClusterTestSeed).filter(ClusterTestSeed.cluster_id == self.cluster.id).count()
+        remaining_energy = self.cluster.energy - seeds_num
+        print(f"fuzz_equivalent_cluster() Info - Cluster {self.cluster.id} has {seeds_num} existing seeds, remaining energy: {remaining_energy}")
         
         # 从cluster中筛选出仅由一个API组成的APIGroup作为候选基底
-        candidate_base_api_groups = [api_group for api_group in cluster.api_groups if len(api_group.apis) == 1]
+        candidate_base_api_groups = [api_group for api_group in self.cluster.api_groups if len(api_group.apis) == 1]
         print(f"fuzz_equivalent_cluster() Info - Found {len(candidate_base_api_groups)} candidate base API groups")
         
         base_api_groups = self.weighted_sample_base(candidate_base_api_groups, remaining_energy)
         while base_api_groups:  # 生成remaining_energy个ClusterTestSeed
-            print("=" * 50 + f"Generating Seed({cluster.energy - len(base_api_groups) + 1})" + "=" * 50)
+            print("=" * 50 + f"Generating Seed({self.cluster.energy - len(base_api_groups) + 1})" + "=" * 50)
             try:  # 开始种子的生成
                 base_api_group = base_api_groups[0]
                 cluster_seed = ClusterTestSeed(
-                    cluster_id=cluster.id,
+                    cluster_id=self.cluster.id,
                     start_test=datetime.utcnow()
                 )
                 self.session.add(cluster_seed)
@@ -569,7 +721,7 @@ Corresponding equivalent API in target library: {equivalent_api.full_name}
 
                 # 生成等价簇中其他API的测试用例
                 twin_apis_seeds = []
-                for count, twin_api_group in enumerate(cluster.api_groups):
+                for count, twin_api_group in enumerate(self.cluster.api_groups):
                     if twin_api_group == base_api_group:
                         continue
                     print("*" * 30 + f"generate_seed4twin() - Twin API Group({count})" + "*" * 30)
@@ -580,24 +732,196 @@ Corresponding equivalent API in target library: {equivalent_api.full_name}
                 print(f"fuzz_equivalent_cluster() Success - Completed seed generation for base API: {base_api_group.apis[0].full_name}")
                 base_api_groups.pop(0)
             except Exception as e:
-                print(f"fuzz_equivalent_cluster() Error - Error in generating seed for {cluster.type} Cluster({cluster.id}): {e}")
+                print(f"fuzz_equivalent_cluster() Error - Error in generating seed for {self.cluster.type} Cluster({self.cluster.id}): {e}")
                 self.session.rollback()
                 base_api_groups.pop(0)
                 continue
 
         # 检查是否所有的种子都已经生成完毕
-        seeds_num = self.session.query(ClusterTestSeed).filter_by(cluster_id=cluster.id).count()
-        if seeds_num >= cluster.energy:
-            cluster.is_tested = True
+        seeds_num = self.session.query(ClusterTestSeed).filter_by(cluster_id=self.cluster.id).count()
+        if seeds_num >= self.cluster.energy:
+            self.cluster.is_tested = True
             self.session.commit()
-            print(f"fuzz_equivalent_cluster() Success - Cluster {cluster.id} completed with {seeds_num} seeds")
+            print(f"fuzz_equivalent_cluster() Success - Cluster {self.cluster.id} completed with {seeds_num} seeds")
 
 
-def fuzz_value_equivalent_clusters(session, llm_client):
-    """对所有值等价簇进行模糊测试"""
-    print("=" * 75 +"fuzz_value_equivalent_clusters()" + "=" * 75)
+def process_clusters_batch(cluster_ids: List[int], thread_id: int, llm_client, progress_lock=None, progress_counter=None, total_clusters=None):
+    """处理一批cluster的工作函数，在单独的线程中运行"""
+    # 为每个线程创建独立的数据库会话
+    thread_session = utils.get_session()
+    fuzzer = Fuzzer(thread_session, llm_client)
+    
+    print(f"线程 {thread_id} 开始处理 {len(cluster_ids)} 个 Clusters")
+    
+    try:
+        for i, cluster_id in enumerate(cluster_ids):
+            try:
+                # 重新查询cluster以确保数据是最新的
+                cluster = thread_session.query(Cluster).filter_by(id=cluster_id).first()
+                if cluster and not cluster.is_tested:
+                    print(f"线程 {thread_id} 正在处理 Cluster {cluster_id} ({i+1}/{len(cluster_ids)})")
+                    fuzzer.fuzz_equivalent_cluster(cluster)
+                    
+                    # 更新全局进度
+                    if progress_lock and progress_counter is not None and total_clusters:
+                        with progress_lock:
+                            progress_counter[0] += 1
+                            completed = progress_counter[0]
+                            print(f"总体进度: {completed}/{total_clusters} ({completed/total_clusters*100:.1f}%)")
+                else:
+                    print(f"线程 {thread_id} 跳过 Cluster {cluster_id} (已测试或不存在)")
+            except Exception as e:
+                print(f"线程 {thread_id} 处理 Cluster {cluster_id} 时出错: {e}")
+                thread_session.rollback()
+                continue
+                
+    finally:
+        thread_session.close()
+        print(f"线程 {thread_id} 完成处理")
+
+
+def split_clusters_for_threads(clusters: List, max_workers: int) -> List[List[int]]:
+    """将clusters分配给不同的线程"""
+    cluster_ids = [cluster.id for cluster in clusters if not cluster.is_tested]
+    
+    if not cluster_ids:
+        return []
+    
+    # 计算每个线程应该处理的cluster数量
+    clusters_per_thread = len(cluster_ids) // max_workers
+    remainder = len(cluster_ids) % max_workers
+    
+    batches = []
+    start_idx = 0
+    
+    for i in range(max_workers):
+        # 为前remainder个线程分配额外的一个cluster
+        batch_size = clusters_per_thread + (1 if i < remainder else 0)
+        if batch_size > 0:
+            end_idx = start_idx + batch_size
+            batches.append(cluster_ids[start_idx:end_idx])
+            start_idx = end_idx
+    
+    return batches
+
+
+def fuzz_value_equivalent_clusters(session, llm_client, max_workers=None):
+    """对所有值等价簇进行模糊测试 - 支持多线程"""
+    print("=" * 75 +"fuzz_value_equivalent_clusters() - 多线程版本" + "=" * 75)
+    
+    # 获取系统最大线程数
+    if max_workers is None:
+        max_workers = min(32, (os.cpu_count() or 1) + 4)  # 限制最大线程数
+    
+    # 获取所有未测试的值等价簇
+    untested_clusters = session.query(Cluster).filter_by(is_tested=False, type='ValueEquivalent').all()
+    total_clusters = session.query(Cluster).filter_by(type='ValueEquivalent').count()
+    
+    print(f"发现 {len(untested_clusters)}/{total_clusters} 个未测试的值等价簇")
+    print(f"使用 {max_workers} 个线程进行并行处理")
+    
+    if not untested_clusters:
+        print("所有值等价簇已完成测试")
+        return
+    
+    # 将clusters分配给不同线程
+    cluster_batches = split_clusters_for_threads(untested_clusters, max_workers)
+    
+    if not cluster_batches:
+        print("没有需要处理的clusters")
+        return
+    
+    print(f"将 {len(untested_clusters)} 个clusters分配给 {len(cluster_batches)} 个线程")
+    for i, batch in enumerate(cluster_batches):
+        print(f"线程 {i} 将处理 {len(batch)} 个clusters")
+    
+    # 创建进度跟踪
+    progress_lock = threading.Lock()
+    progress_counter = [0]  # 使用列表来创建可变对象
+    
+    # 使用线程池执行
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(cluster_batches)) as executor:
+        futures = []
+        for i, batch in enumerate(cluster_batches):
+            future = executor.submit(process_clusters_batch, batch, i, llm_client, 
+                                   progress_lock, progress_counter, len(untested_clusters))
+            futures.append(future)
+        
+        # 等待所有线程完成
+        concurrent.futures.wait(futures)
+        
+        # 检查是否有异常
+        for i, future in enumerate(futures):
+            try:
+                future.result()
+            except Exception as e:
+                print(f"线程 {i} 执行过程中出现异常: {e}")
+    
+    print("fuzz_value_equivalent_clusters() Success - 所有值等价簇模糊测试完成")
+
+
+def fuzz_state_equivalent_clusters(session, llm_client, max_workers=None):
+    """对所有状态等价簇进行模糊测试 - 支持多线程"""
+    print("=" * 75 + "fuzz_state_equivalent_clusters() - 多线程版本" + "=" * 75)
+    
+    # 获取系统最大线程数
+    if max_workers is None:
+        max_workers = min(32, (os.cpu_count() or 1) + 4)  # 限制最大线程数
+    
+    # 获取所有未测试的状态等价簇
+    untested_clusters = session.query(Cluster).filter_by(is_tested=False, type='StateEquivalent').all()
+    total_clusters = session.query(Cluster).filter_by(type='StateEquivalent').count()
+    
+    print(f"发现 {len(untested_clusters)}/{total_clusters} 个未测试的状态等价簇")
+    print(f"使用 {max_workers} 个线程进行并行处理")
+    
+    if not untested_clusters:
+        print("所有状态等价簇已完成测试")
+        return
+    
+    # 将clusters分配给不同线程
+    cluster_batches = split_clusters_for_threads(untested_clusters, max_workers)
+    
+    if not cluster_batches:
+        print("没有需要处理的clusters")
+        return
+    
+    print(f"将 {len(untested_clusters)} 个clusters分配给 {len(cluster_batches)} 个线程")
+    for i, batch in enumerate(cluster_batches):
+        print(f"线程 {i} 将处理 {len(batch)} 个clusters")
+    
+    # 创建进度跟踪
+    progress_lock = threading.Lock()
+    progress_counter = [0]  # 使用列表来创建可变对象
+    
+    # 使用线程池执行
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(cluster_batches)) as executor:
+        futures = []
+        for i, batch in enumerate(cluster_batches):
+            future = executor.submit(process_clusters_batch, batch, i, llm_client,
+                                   progress_lock, progress_counter, len(untested_clusters))
+            futures.append(future)
+        
+        # 等待所有线程完成
+        concurrent.futures.wait(futures)
+        
+        # 检查是否有异常
+        for i, future in enumerate(futures):
+            try:
+                future.result()
+            except Exception as e:
+                print(f"线程 {i} 执行过程中出现异常: {e}")
+    
+    print("fuzz_state_equivalent_clusters() Success - 所有状态等价簇模糊测试完成")
+
+
+# 保留原有的单线程版本作为备用
+def fuzz_value_equivalent_clusters_single_thread(session, llm_client):
+    """对所有值等价簇进行模糊测试 - 单线程版本"""
+    print("=" * 75 +"fuzz_value_equivalent_clusters() - 单线程版本" + "=" * 75)
     value_equivalent_clusters = session.query(Cluster).filter_by(type='ValueEquivalent').all()
     untested_clusters = session.query(Cluster).filter_by(is_tested=False, type='ValueEquivalent').all()
+    
     while untested_clusters:
         print("-" * 70 + f"Fuzzing Value Equivalent Clusters: {len(untested_clusters)}/ {len(value_equivalent_clusters)}" + "-" * 70)
         untested_cluster = untested_clusters[0]
@@ -608,11 +932,12 @@ def fuzz_value_equivalent_clusters(session, llm_client):
     print(f"fuzz_value_equivalent_clusters() Success - All value equivalent clusters fuzzing completed")
 
 
-def fuzz_state_equivalent_clusters(session, llm_client):
-    """对所有状态等价簇进行模糊测试"""
-    print("=" * 75 + "fuzz_state_equivalent_clusters()" + "=" * 75)
+def fuzz_state_equivalent_clusters_single_thread(session, llm_client):
+    """对所有状态等价簇进行模糊测试 - 单线程版本"""
+    print("=" * 75 + "fuzz_state_equivalent_clusters() - 单线程版本" + "=" * 75)
     state_equivalent_clusters = session.query(Cluster).filter_by(type='StateEquivalent').all()
     untested_clusters = session.query(Cluster).filter_by(is_tested=False, type='StateEquivalent').all()
+    
     while untested_clusters:
         print("-" * 70 + f"Fuzzing State Equivalent Clusters: {len(untested_clusters)}/ {len(state_equivalent_clusters)}" + "-" * 70)
         untested_cluster = untested_clusters[0]
@@ -624,8 +949,56 @@ def fuzz_state_equivalent_clusters(session, llm_client):
 
 
 if __name__ == '__main__':
+    # 添加命令行参数解析
+    parser = argparse.ArgumentParser(description='DlibFuzz 测试用例生成器')
+    parser.add_argument('--single-thread', action='store_true', help='使用单线程模式 (默认使用多线程)')
+    parser.add_argument('--max-workers', type=int, default=None, help='最大线程数 (默认自动检测)')
+    parser.add_argument('--value-only', action='store_true', help='只处理值等价簇')
+    parser.add_argument('--state-only', action='store_true', help='只处理状态等价簇')
+    args = parser.parse_args()
+    
+    # 验证参数
+    if args.value_only and args.state_only:
+        print("错误: --value-only 和 --state-only 不能同时使用")
+        exit(1)
+    
     session = utils.get_session()
-    llm_client = utils.get_llm_client(llm='gpt4o-mini') 
-    fuzz_value_equivalent_clusters(session, llm_client)
-    fuzz_state_equivalent_clusters(session, llm_client)
-    session.close()
+    llm_client = utils.get_llm_client(llm='gpt4o-mini')
+    
+    print("=" * 80)
+    print("DlibFuzz 测试用例生成器启动")
+    print(f"模式: {'单线程' if args.single_thread else '多线程'}")
+    if not args.single_thread and args.max_workers:
+        print(f"最大线程数: {args.max_workers}")
+    print("=" * 80)
+    
+    start_time = time.time()
+    
+    try:
+        if not args.state_only:
+            print("\n开始处理值等价簇...")
+            if args.single_thread:
+                fuzz_value_equivalent_clusters_single_thread(session, llm_client)
+            else:
+                fuzz_value_equivalent_clusters(session, llm_client, max_workers=args.max_workers)
+        
+        if not args.value_only:
+            print("\n开始处理状态等价簇...")
+            if args.single_thread:
+                fuzz_state_equivalent_clusters_single_thread(session, llm_client)
+            else:
+                fuzz_state_equivalent_clusters(session, llm_client, max_workers=args.max_workers)
+                
+    except KeyboardInterrupt:
+        print("\n收到中断信号，正在停止...")
+    except Exception as e:
+        print(f"\n程序执行过程中出现错误: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        session.close()
+        
+    end_time = time.time()
+    execution_time = end_time - start_time
+    print(f"\n总执行时间: {execution_time:.2f} 秒")
+    print("程序执行完成")

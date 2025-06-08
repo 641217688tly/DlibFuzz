@@ -136,7 +136,6 @@ def inspect_api_info(module_name, api_name):
         "np": "numpy",
         "pd": "pandas",
         "jt": "jittor",
-
         "jnp": "jax.numpy",
         "pytorch": "torch",
     }
@@ -549,6 +548,25 @@ if __name__ == '__main__':
     # count_api_nums_with_history_errors('JAX')
     # count_api_nums_with_history_errors('Jittor')
 
-    list_clusters('ValueEquivalent')
-    print("\n")
-    list_clusters('StateEquivalent')
+    # list_clusters('ValueEquivalent')
+    # print("\n")
+    # list_clusters('StateEquivalent')
+
+    # clean_invalid_clusters()
+
+    full_api_name = "jax.jit"
+    retrieve_api_issues(full_api_name)
+    print("="*60)
+    get_api_info(full_api_name)
+
+    # session = get_session()
+    # # 检查哪个API的history_errors最多
+    # apis = session.query(API).all()
+    # max_history_errors = 0
+    # max_history_errors_api = None
+    # for api in apis:
+    #     if len(api.history_errors) > max_history_errors:
+    #         max_history_errors = len(api.history_errors)
+    #         max_history_errors_api = api
+    # print(f"API with the most history errors: {max_history_errors_api.full_name} ({max_history_errors})")
+    # session.close()

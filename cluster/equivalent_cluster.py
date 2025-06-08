@@ -791,7 +791,7 @@ def run_randomly():  # 随机挑选未聚类的API进行聚类
     llm_client = get_llm_client('gpt4o-mini')
     rag_client = get_llm_client('gpt4o-mini-with-rag')
 
-    # 对未聚类的PytorchAPI进行聚类
+    # 对未聚类的API进行聚类
     unclustered_apis = session.query(API).filter_by(is_clustered=False).all()
     while unclustered_apis:
         # 随机选择一个未聚类的API
@@ -809,7 +809,52 @@ def run_randomly():  # 随机挑选未聚类的API进行聚类
         # 更新未聚类的API列表
         unclustered_apis = session.query(API).filter_by(is_clustered=False).all()
 
+def run_randomly_with_weight():  # 根据API的权重随机挑选未聚类的API进行聚类
+    # 创建数据库连接
+    session = get_session()
+    llm_client = get_llm_client('gpt4o-mini')
+    rag_client = get_llm_client('gpt4o-mini-with-rag')
 
+    # 对未聚类的API进行聚类
+    unclustered_apis = session.query(API).filter_by(is_clustered=False).all()
+    if not unclustered_apis:
+        print("No unclustered APIs found.")
+        return
+
+    # 初始化API被抽中次数统计
+    api_draw_count = {api.id: 0 for api in unclustered_apis}
+
+    while unclustered_apis:
+        # 计算每个API的权重（被抽中次数越多，权重越低，最小为0.01防止为0）
+        weights = []
+        for api in unclustered_apis:
+            count = api_draw_count.get(api.id, 0)
+            weight = 1.0 / (count + 1)
+            weights.append(weight)
+        total_weight = sum(weights)
+        if total_weight == 0:
+            weights = [1.0 for _ in unclustered_apis]
+            total_weight = sum(weights)
+        normalized_weights = [w / total_weight for w in weights]
+        # 按权重随机选择一个API
+        chosen_api = random.choices(unclustered_apis, weights=normalized_weights, k=1)[0]
+        api_draw_count[chosen_api.id] += 1
+
+        # 打印当前未聚类的API数量和被抽中次数
+        apis_nums = session.query(API).count()
+        unclustered_apis_nums = session.query(API).filter_by(is_clustered=False).count()
+        print(f"EquivalentCluster({chosen_api.full_name})" + "=" * 100 + f"\nUnclustered / Total: {unclustered_apis_nums} / {apis_nums}; Draw count: {api_draw_count[chosen_api.id]}\n")
+
+        if chosen_api.is_clustered:
+            continue
+
+        # 对未聚类的API进行聚类
+        cluster = EquivalentCluster(chosen_api, session, rag_client, llm_client)
+        cluster.cluster_api()
+
+        # 更新未聚类的API列表
+        unclustered_apis = session.query(API).filter_by(is_clustered=False).all()
+        api_draw_count = {api.id: api_draw_count.get(api.id, 0) for api in unclustered_apis} # 移除已聚类的API的抽中次数统计
 
 def run_linearly():  # 线性地对未聚类的API进行聚类
     # 创建数据库连接
@@ -819,13 +864,34 @@ def run_linearly():  # 线性地对未聚类的API进行聚类
 
     # 对未聚类的API进行聚类
     unclustered_apis = session.query(API).filter_by(is_clustered=False).all()
-    for unclustered_api in unclustered_apis:
+    for i, unclustered_api in enumerate(unclustered_apis):
         if unclustered_api.is_clustered:
             continue
         apis_nums = session.query(API).count()
         unclustered_apis_nums = session.query(API).filter_by(is_clustered=False).count()
-        print(f"EquivalentCluster({unclustered_api.full_name})" + "=" * 100 + f"\nUnclustered / Total: {unclustered_apis_nums} / {apis_nums}" + "\n")
-        
+        print(f"EquivalentCluster({unclustered_api.full_name})" + "=" * 100 + f"\nUnclustered / Total: {unclustered_apis_nums} / {apis_nums}; " + f"Count / Total: {i} / {unclustered_apis_nums}" "\n")
+
+        # 选择一个未聚类的API
+        cluster = EquivalentCluster(unclustered_api, session, rag_client, llm_client)
+        cluster.cluster_api()
+
+
+def run_linearly_reversed():  # 线性地对未聚类的API进行聚类
+    # 创建数据库连接
+    session = get_session()
+    llm_client = get_llm_client('gpt4o-mini')
+    rag_client = get_llm_client('gpt4o-mini-with-rag')
+
+    # 对未聚类的API进行聚类
+    unclustered_apis = session.query(API).filter_by(is_clustered=False).all()
+    unclustered_apis.reverse()  # 反转未聚类的API列表, 从最后一个开始聚类
+    for i, unclustered_api in enumerate(unclustered_apis):
+        if unclustered_api.is_clustered:
+            continue
+        apis_nums = session.query(API).count()
+        unclustered_apis_nums = session.query(API).filter_by(is_clustered=False).count()
+        print(f"EquivalentCluster({unclustered_api.full_name})" + "=" * 100 + f"\nUnclustered / Total: {unclustered_apis_nums} / {apis_nums}; " + f"Count / Total: {i} / {unclustered_apis_nums}" "\n")
+
         # 选择一个未聚类的API
         cluster = EquivalentCluster(unclustered_api, session, rag_client, llm_client)
         cluster.cluster_api()
@@ -834,4 +900,6 @@ def run_linearly():  # 线性地对未聚类的API进行聚类
 
 if __name__ == '__main__':
     # run_randomly()
-    run_linearly()
+    # run_linearly()
+    # run_linearly_reversed()
+    run_randomly_with_weight()
