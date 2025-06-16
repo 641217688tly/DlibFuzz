@@ -539,6 +539,51 @@ def clean_invalid_clusters():
         print(f"An error occurred while cleaning invalid clusters: {str(e)}\n\n")
     finally:
         session.close()
+        
+def count_api_without_cluster():
+    """
+    统计已完成聚类但没有匹配到任何等价API的API数量
+    即统计 is_clustered=True 但不属于任何APIGroup的API
+    """
+    session = get_session()
+    try:
+        # 查询所有已聚类的API
+        clustered_apis = session.query(API).filter(API.is_clustered == True).all()
+        
+        # 查询所有在APIGroup中的API ID
+        apis_in_groups = session.query(api_group_association.c.api_id).all()
+        apis_in_groups_ids = {api_id[0] for api_id in apis_in_groups}
+        
+        # 统计已聚类但不在任何APIGroup中的API
+        apis_without_cluster = []
+        for api in clustered_apis:
+            if api.id not in apis_in_groups_ids:
+                apis_without_cluster.append(api)
+        
+        # 按库分类统计
+        lib_counts = {}
+        for api in apis_without_cluster:
+            lib_counts[api.lib] = lib_counts.get(api.lib, 0) + 1
+        
+        print(f"已完成聚类但没有匹配到任何等价API的API统计:")
+        print("-" * 60)
+        total_count = len(apis_without_cluster)
+        for lib, count in lib_counts.items():
+            print(f"{lib}: {count} APIs")
+        print("-" * 60)
+        print(f"总计: {total_count} APIs")
+        
+        print("\n详细列表:")
+        for api in apis_without_cluster:
+            print(f"  {api.full_name} (ID: {api.id}, Lib: {api.lib})")
+        
+        return total_count
+        
+    except Exception as e:
+        print(f"统计无聚类API时发生错误: {str(e)}")
+        return 0
+    finally:
+        session.close()
 
 
 if __name__ == '__main__':
@@ -548,11 +593,14 @@ if __name__ == '__main__':
     # count_api_nums_with_history_errors('JAX')
     # count_api_nums_with_history_errors('Jittor')
 
-    list_clusters('ValueEquivalent')
-    print("\n")
-    list_clusters('StateEquivalent')
+    # list_clusters('ValueEquivalent')
+    # print("\n")
+    # list_clusters('StateEquivalent')
+    # print("\n")
 
-    clean_invalid_clusters()
+    count_api_without_cluster()
+
+    # clean_invalid_clusters()
 
     # full_api_name = "jax.jit"
     # retrieve_api_issues(full_api_name)

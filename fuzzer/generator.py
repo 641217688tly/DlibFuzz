@@ -12,7 +12,7 @@ import concurrent.futures
 import os
 from typing import List
 import argparse
-import time
+from datetime import datetime
 
 
 class Fuzzer:  # 以Cluster为单位生成测试种子
@@ -707,6 +707,7 @@ Task Requirements:
         base_api_groups = self.weighted_sample_base(candidate_base_api_groups, remaining_energy)
         while base_api_groups:  # 生成remaining_energy个ClusterTestSeed
             print("=" * 50 + f"Generating Seed({self.cluster.energy - len(base_api_groups) + 1})" + "=" * 50)
+            cluster_seed = None
             try:  # 开始种子的生成
                 base_api_group = base_api_groups[0]
                 cluster_seed = ClusterTestSeed(
@@ -715,6 +716,8 @@ Task Requirements:
                 )
                 self.session.add(cluster_seed)
                 self.session.flush()
+                # 立即提交cluster_seed以确保其在数据库中存在
+                self.session.commit()
 
                 # 生成基底API的测试用例
                 base_api_seed, base_api_combination = self.generate_seed4base(base_api_group, cluster_seed)
@@ -733,7 +736,19 @@ Task Requirements:
                 base_api_groups.pop(0)
             except Exception as e:
                 print(f"fuzz_equivalent_cluster() Error - Error in generating seed for {self.cluster.type} Cluster({self.cluster.id}): {e}")
-                self.session.rollback()
+                try:
+                    self.session.rollback()
+                    # 如果cluster_seed已经创建但发生错误，删除已创建的cluster_seed
+                    if cluster_seed and cluster_seed.id:
+                        self.session.query(ClusterTestSeed).filter_by(id=cluster_seed.id).delete()
+                        self.session.commit()
+                except Exception as rollback_error:
+                    print(f"fuzz_equivalent_cluster() Error - Error during rollback: {rollback_error}")
+                    # 重新创建session以确保数据库连接正常
+                    self.session.close()
+                    self.session = utils.get_session()
+                    # 重新查询cluster对象
+                    self.cluster = self.session.query(Cluster).filter_by(id=self.cluster.id).first()
                 base_api_groups.pop(0)
                 continue
 
@@ -950,56 +965,7 @@ def fuzz_state_equivalent_clusters_single_thread(session, llm_client):
 
 
 if __name__ == '__main__':
-    # 添加命令行参数解析
-    parser = argparse.ArgumentParser(description='DlibFuzz 测试用例生成器')
-    parser.add_argument('--single-thread', action='store_true', help='使用单线程模式 (默认使用多线程)')
-    parser.add_argument('--max-workers', type=int, default=None, help='最大线程数 (默认自动检测)')
-    parser.add_argument('--value-only', action='store_true', help='只处理值等价簇')
-    parser.add_argument('--state-only', action='store_true', help='只处理状态等价簇')
-    args = parser.parse_args()
-    
-    # 验证参数
-    if args.value_only and args.state_only:
-        print("错误: --value-only 和 --state-only 不能同时使用")
-        exit(1)
-    
     session = utils.get_session()
     llm_client = utils.get_llm_client(llm='gpt4o-mini')
-    
-    print("=" * 80)
-    print("DlibFuzz 测试用例生成器启动")
-    print(f"模式: {'单线程' if args.single_thread else '多线程'}")
-    if not args.single_thread and args.max_workers:
-        print(f"最大线程数: {args.max_workers}")
-    print("=" * 80)
-    
-    start_time = time.time()
-    
-    try:
-        if not args.state_only:
-            print("\n开始处理值等价簇...")
-            if args.single_thread:
-                fuzz_value_equivalent_clusters_single_thread(session, llm_client)
-            else:
-                fuzz_value_equivalent_clusters(session, llm_client, max_workers=args.max_workers)
-        
-        if not args.value_only:
-            print("\n开始处理状态等价簇...")
-            if args.single_thread:
-                fuzz_state_equivalent_clusters_single_thread(session, llm_client)
-            else:
-                fuzz_state_equivalent_clusters(session, llm_client, max_workers=args.max_workers)
-                
-    except KeyboardInterrupt:
-        print("\n收到中断信号，正在停止...")
-    except Exception as e:
-        print(f"\n程序执行过程中出现错误: {e}")
-        import traceback
-        traceback.print_exc()
-    finally:
-        session.close()
-        
-    end_time = time.time()
-    execution_time = end_time - start_time
-    print(f"\n总执行时间: {execution_time:.2f} 秒")
-    print("程序执行完成")
+    #fuzz_value_equivalent_clusters_single_thread(session, llm_client)
+    fuzz_state_equivalent_clusters_single_thread(session, llm_client)
