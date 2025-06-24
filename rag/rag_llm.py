@@ -133,11 +133,14 @@ def build_embeddings(documents_dir: list,
 def initialize_rag_system(is_local: bool,
                           openai_model: str = 'gpt-4o-mini', 
                           openai_api_key: str = '',
+                          ollama_model: str = 'qwen3:14b',
+                          ollama_api_url: str = 'http://localhost:11434',
+                          ollama_embedding_model: str = 'nomic-embed-text',
                           instructions_template: str = None
                           ):
     
     # Initialize embeddings
-    embeddings = OllamaEmbeddings(model='nomic-embed-text')
+    embeddings = OllamaEmbeddings(model=ollama_embedding_model)
     print('Embeddings initialized.')
 
     if os.path.exists('vector_store.faiss'):
@@ -151,10 +154,12 @@ def initialize_rag_system(is_local: bool,
     # Initialize LLM
     if is_local:
         from llm import OllamaLLM
-        llm = OllamaLLM(model_name='llama3.1')
+        llm = OllamaLLM(model_name=ollama_model, api_url=ollama_api_url)
+        print(f"Local LLM initialized with model: {ollama_model}")
     else:
         from llm import OpenAILLM
         llm = OpenAILLM(model_name=openai_model, api_key=openai_api_key)
+        print(f"OpenAI LLM initialized with model: {openai_model}")
     
     # Establish RAG pipeline
     if instructions_template is None:
@@ -314,7 +319,8 @@ if __name__ == "__main__":
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
     print(f'The API Key is {OPENAI_API_KEY}')
     build_embeddings(documents_dir=directories, use_third_party_hosted=False, openai_api_key=OPENAI_API_KEY)
-    qa_chain, vector_store = initialize_rag_system(openai_api_key=OPENAI_API_KEY, is_local=False)
+    # qa_chain, vector_store = initialize_rag_system(openai_api_key=OPENAI_API_KEY, is_local=False)
+    qa_chain, vector_store = initialize_rag_system(is_local=True, ollama_model='qwen3:14b')
 
     while True:
         query = input("Enter your code-related query (or type 'exit'/'quit' to end): ")
