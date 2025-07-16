@@ -1,11 +1,13 @@
 import json
 import random
 import traceback
+import time
 from json import JSONDecodeError
 from sqlalchemy import func
 from utils import *
 from fuzzer.validator import APITestSeedValidator
 import numpy as np
+import re
 
 # ----------------------------------------------Cluster----------------------------------------------
 class EquivalentCluster:
@@ -178,9 +180,24 @@ Target Libraries:
                     messages.append({"role": "user", "content": f"The JSON response you generated has the following errors: \n{self.error_log} \n Please try again."})
                     print(f"query_llm4cluster() Error - Incorrect JSON format or invalid API. Error Details: {self.error_log} \nRetrying(Current attempt: {attempt_num})...")
             except Exception as e:
-                attempt_num = attempt_num + 1
-                self.session.rollback()  # 回滚在异常中的任何数据库更改
-                print(f"query_llm4cluster() Error - An unexpected error occurred: {e}")
+                error_str = str(e)
+                # 检查是否是速率限制错误
+                if "rate_limit_exceeded" in error_str or "Rate limit reached" in error_str:
+                    # 从错误信息中提取等待时间
+                    wait_time_match = re.search(r'Please try again in (\d+\.?\d*)s', error_str)
+                    if wait_time_match:
+                        wait_time = float(wait_time_match.group(1)) + 1  # 额外增加1秒缓冲
+                    else:
+                        wait_time = 10  # 默认等待10秒
+                    
+                    print(f"query_llm4cluster() Warning - Rate limit exceeded. Waiting {wait_time} seconds before retry...")
+                    time.sleep(wait_time)
+                    # 不增加attempt_num，允许在速率限制后继续重试
+                    continue
+                else:
+                    attempt_num = attempt_num + 1
+                    self.session.rollback()  # 回滚在异常中的任何数据库更改
+                    print(f"query_llm4cluster() Error - An unexpected error occurred: {e}")
         self.error_log = []  # 清空错误列表
         print("query_llm4cluster() Failed - Max attempts reached. Unable to get valid JSON data.")
         return None
@@ -284,9 +301,25 @@ Below is a code snippet calling ({base_api.signature}). Please generate a code s
                 # print(f"\nquery_llm4TwinTestSeed() Info - code:\n{code}")
                 return code
             except Exception as e:
-                print(f"Failed to get response due to: \n{e} \nRetrying(Current attempt: {attempt_num + 1})...")
-                attempt_num += 1
-                self.session.rollback()  # 回滚在异常中的任何数据库更改
+                error_str = str(e)
+                # 检查是否是速率限制错误
+                if "rate_limit_exceeded" in error_str or "Rate limit reached" in error_str:
+                    # 从错误信息中提取等待时间
+                    import re
+                    wait_time_match = re.search(r'Please try again in (\d+\.?\d*)s', error_str)
+                    if wait_time_match:
+                        wait_time = float(wait_time_match.group(1)) + 1  # 额外增加1秒缓冲
+                    else:
+                        wait_time = 10  # 默认等待10秒
+                    
+                    print(f"query_llm4TwinTestSeed() Warning - Rate limit exceeded. Waiting {wait_time} seconds before retry...")
+                    time.sleep(wait_time)
+                    # 不增加attempt_num，允许在速率限制后继续重试
+                    continue
+                else:
+                    print(f"query_llm4TwinTestSeed() Error - Failed to get response due to: \n{e} \nRetrying(Current attempt: {attempt_num + 1})...")
+                    attempt_num += 1
+                    self.session.rollback()  # 回滚在异常中的任何数据库更改
         if attempt_num >= 5:  # 设置最大尝试次数以避免无限循环
             print("Max attempts reached. Unable to get valid JSON data.")
             return None
@@ -401,9 +434,25 @@ When the API has only one return value, you must declare a variable named "outpu
                 # print(f"\nquery_llm4BaseTestSeed() Info - code:\n{code}")
                 return code
             except Exception as e:
-                print(f"Failed to get response due to: \n{e} \nRetrying(Current attempt: {attempt_num + 1})...")
-                attempt_num += 1
-                self.session.rollback()  # 回滚在异常中的任何数据库更改
+                error_str = str(e)
+                # 检查是否是速率限制错误
+                if "rate_limit_exceeded" in error_str or "Rate limit reached" in error_str:
+                    # 从错误信息中提取等待时间
+                    import re
+                    wait_time_match = re.search(r'Please try again in (\d+\.?\d*)s', error_str)
+                    if wait_time_match:
+                        wait_time = float(wait_time_match.group(1)) + 1  # 额外增加1秒缓冲
+                    else:
+                        wait_time = 10  # 默认等待10秒
+                    
+                    print(f"query_llm4BaseTestSeed() Warning - Rate limit exceeded. Waiting {wait_time} seconds before retry...")
+                    time.sleep(wait_time)
+                    # 不增加attempt_num，允许在速率限制后继续重试
+                    continue
+                else:
+                    print(f"query_llm4BaseTestSeed() Error - Failed to get response due to: \n{e} \nRetrying(Current attempt: {attempt_num + 1})...")
+                    attempt_num += 1
+                    self.session.rollback()  # 回滚在异常中的任何数据库更改
         if attempt_num >= 5:  # 设置最大尝试次数以避免无限循环
             print("Max attempts reached. Unable to get valid JSON data.")
             return None

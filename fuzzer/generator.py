@@ -440,6 +440,7 @@ Task Requirements:
                     messages.append({"role": "user", "content": f"The JSON response you generated has the following errors: \n{self.error_log} \n Please try again."})
             except Exception as e:
                 attempt_num += 1
+                print(f"query_llm4BaseSeed() Error - Attempt {attempt_num} failed with error: {e}")
                 self.session.rollback()  # 回滚在异常中的任何数据库更改
         self.error_log = []  # 清空错误列表
         return None, None
@@ -953,7 +954,7 @@ def fuzz_state_equivalent_clusters_single_thread(session, llm_client):
     print("=" * 75 + "fuzz_state_equivalent_clusters() - 单线程版本" + "=" * 75)
     state_equivalent_clusters = session.query(Cluster).filter_by(type='StateEquivalent').all()
     untested_clusters = session.query(Cluster).filter_by(is_tested=False, type='StateEquivalent').all()
-    
+
     while untested_clusters:
         print("-" * 70 + f"Fuzzing State Equivalent Clusters: {len(untested_clusters)}/ {len(state_equivalent_clusters)}" + "-" * 70)
         untested_cluster = untested_clusters[0]
@@ -968,4 +969,6 @@ if __name__ == '__main__':
     session = utils.get_session()
     llm_client = utils.get_llm_client(llm='gpt4o-mini')
     #fuzz_value_equivalent_clusters_single_thread(session, llm_client)
-    fuzz_state_equivalent_clusters_single_thread(session, llm_client)
+    #fuzz_state_equivalent_clusters_single_thread(session, llm_client)
+    fuzz_value_equivalent_clusters(session, llm_client, max_workers=8)
+    #fuzz_state_equivalent_clusters(session, llm_client, max_workers=16)

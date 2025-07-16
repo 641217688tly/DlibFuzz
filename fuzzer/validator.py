@@ -1,6 +1,7 @@
 import os
 import subprocess
 import time
+import threading
 from utils import *
 
 
@@ -87,7 +88,8 @@ class APITestSeedValidator:
     def static_analysis(self, raw_code):  # 静态分析Python代码, 如果发现错误, 则返回False和错误信息
         # 创建一个临时的Python文件:
         timestamp = int(time.time())
-        file_path = f'../data/tmp/{timestamp}.py'
+        thread_id = threading.get_ident()
+        file_path = f'../data/tmp/{timestamp}_{thread_id}.py'
         with open(file_path, 'w') as f:
             f.write(raw_code)
         # 使用静态分析工具对代码文件进行分析
@@ -280,6 +282,95 @@ def validate_and_export_all_seeds():
         total_seeds_num = session.query(ClusterTestSeed).count()
         print(f"Unvalidated / Total: {len(unvalidated_cluster_seeds)} / {total_seeds_num}")
 
+def detect_invalid_cluster_seeds(seed_file_path, full_api_name_list):
+    """
+    检测seed_file_path文件中是否全部调用了full_api_name_list中的API, 如果是, 则返回True, 否则返回False
+    """
+    try:
+        with open(seed_file_path, 'r') as f:
+            code = f.read()
+    except Exception as e:
+        print(f"Error reading file {seed_file_path}: {e}")
+        return None
+    
+    # 如果code为空, 则返回False
+    if code == "": 
+        return False
+    
+    # 遍历full_api_name_list, 如果api_name在code中存在, 则返回False
+    for full_api_name in full_api_name_list:
+        # 取full_api_name的最后一个"."后的字符串作为api_name
+        api_name = full_api_name.split('.')[-1]
+        # 如果api_name在code中不存在, 则返回False
+        if api_name not in code:
+            return False
+    return True
+
+def label_invalid_cluster_seeds(clusters_folder_path):
+    """
+    遍历cluster_folder_path下的Cluster文件夹，检测并标记无效的种子文件
+    
+    Args:
+        clusters_folder_path: cluster文件夹的路径
+    """
+    if not os.path.exists(clusters_folder_path):
+        print(f"错误: 路径 {clusters_folder_path} 不存在")
+        return
+    
+    # 获取所有不以valid开头的cluster文件夹
+    cluster_folders = [f for f in os.listdir(clusters_folder_path) if os.path.isdir(os.path.join(clusters_folder_path, f)) and f.startswith('Cluster_')]
+    
+    for cluster_folder in cluster_folders:            
+        cluster_path = os.path.join(clusters_folder_path, cluster_folder)
+        print(f"处理cluster: {cluster_folder}")
+        
+        # 获取该cluster下的所有seed文件夹
+        seed_folders = [f for f in os.listdir(cluster_path) if os.path.isdir(os.path.join(cluster_path, f))]
+        
+        all_files_processed = True
+        for seed_folder in seed_folders:
+            seed_path = os.path.join(cluster_path, seed_folder)
+            print(f"  处理seed: {seed_folder}")
+            
+            # 获取该seed文件夹下的所有.py文件
+            py_files = [f for f in os.listdir(seed_path) if f.endswith('.py') and not f.startswith('invalid.')]
+            for py_file in py_files:
+                py_file_path = os.path.join(seed_path, py_file)
+                
+                # 从文件名中提取API名称列表, 文件名格式为"api1.py"或者是用"+"连接的多个API"api1+api2+api3.py"
+                file_name_without_ext = py_file.replace('.py', '')
+                if '+' in file_name_without_ext: # 如果文件名包含"+"，说明是多个API
+                    full_api_names = file_name_without_ext.split('+')
+                else:
+                    full_api_names = [file_name_without_ext]
+                is_valid = detect_invalid_cluster_seeds(py_file_path, full_api_names) # 使用detect_invalid_cluster_seeds检测文件
+                if is_valid is False:  # 检测返回False，说明文件无效
+                    # 重命名文件，在文件名前添加"invalid."
+                    invalid_file_name = f"invalid.{py_file}"
+                    invalid_file_path = os.path.join(seed_path, invalid_file_name)
+                    try:
+                        os.rename(py_file_path, invalid_file_path)
+                        print(f"    标记无效文件: {py_file} -> {invalid_file_name}")
+                    except OSError as e:
+                        print(f"    重命名文件失败 {py_file}: {e}")
+                        all_files_processed = False
+                elif is_valid is None:  # 检测过程中出现错误
+                    print(f"    检测文件时出错: {py_file}")
+                    all_files_processed = False
+        # 如果该cluster下的所有文件都已经检测完成，则给cluster文件夹添加"valid"前缀
+        if all_files_processed:
+            valid_cluster_name = f"valid_{cluster_folder}"
+            valid_cluster_path = os.path.join(clusters_folder_path, valid_cluster_name)
+            try:
+                os.rename(cluster_path, valid_cluster_path)
+                print(f"标记cluster为已处理: {cluster_folder} -> {valid_cluster_name}")
+            except OSError as e:
+                print(f"重命名cluster文件夹失败 {cluster_folder}: {e}")
+        else:
+            print(f"cluster {cluster_folder} 在处理期间发生错误")
 
 if __name__ == '__main__':
-    validate_and_export_all_seeds()
+    # validate_and_export_all_seeds()
+    #label_invalid_cluster_seeds('seeds/validated_seeds/ValueEquivalent')
+    label_invalid_cluster_seeds('seeds/validated_seeds/StateEquivalent')
+

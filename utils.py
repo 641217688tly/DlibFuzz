@@ -6,6 +6,7 @@ import jax
 import mindspore
 import jittor
 import numpy as np
+import os
 import torch
 from openai import OpenAI
 from sqlalchemy.orm import sessionmaker
@@ -542,13 +543,17 @@ def clean_invalid_clusters():
         
 def count_api_without_cluster():
     """
-    统计已完成聚类但没有匹配到任何等价API的API数量
-    即统计 is_clustered=True 但不属于任何APIGroup的API
+    统计API的聚类状态:
+    1. 已完成聚类但没有匹配到任何等价API的API数量 (is_clustered=True 但不属于任何APIGroup)
+    2. 未完成聚类的API数量 (is_clustered=False)
     """
     session = get_session()
     try:
         # 查询所有已聚类的API
         clustered_apis = session.query(API).filter(API.is_clustered == True).all()
+        
+        # 查询所有未聚类的API
+        unclustered_apis = session.query(API).filter(API.is_clustered == False).all()
         
         # 查询所有在APIGroup中的API ID
         apis_in_groups = session.query(api_group_association.c.api_id).all()
@@ -560,30 +565,196 @@ def count_api_without_cluster():
             if api.id not in apis_in_groups_ids:
                 apis_without_cluster.append(api)
         
-        # 按库分类统计
-        lib_counts = {}
+        # 按库分类统计已聚类但没有匹配的API
+        lib_counts_without_cluster = {}
         for api in apis_without_cluster:
-            lib_counts[api.lib] = lib_counts.get(api.lib, 0) + 1
+            lib_counts_without_cluster[api.lib] = lib_counts_without_cluster.get(api.lib, 0) + 1
         
+        # 按库分类统计未聚类的API
+        lib_counts_unclustered = {}
+        for api in unclustered_apis:
+            lib_counts_unclustered[api.lib] = lib_counts_unclustered.get(api.lib, 0) + 1
+        
+        # 打印已聚类但没有匹配的API统计
         print(f"已完成聚类但没有匹配到任何等价API的API统计:")
         print("-" * 60)
-        total_count = len(apis_without_cluster)
-        for lib, count in lib_counts.items():
+        total_without_cluster = len(apis_without_cluster)
+        for lib, count in lib_counts_without_cluster.items():
             print(f"{lib}: {count} APIs")
         print("-" * 60)
-        print(f"总计: {total_count} APIs")
+        print(f"总计: {total_without_cluster} APIs")
         
-        print("\n详细列表:")
+        # 打印未聚类的API统计
+        print(f"\n未完成聚类的API统计:")
+        print("-" * 60)
+        total_unclustered = len(unclustered_apis)
+        for lib, count in lib_counts_unclustered.items():
+            print(f"{lib}: {count} APIs")
+        print("-" * 60)
+        print(f"总计: {total_unclustered} APIs")
+        
+        # 打印总体统计
+        print(f"\n总体统计:")
+        print("-" * 60)
+        print(f"已完成聚类但没有匹配的API: {total_without_cluster}")
+        print(f"未完成聚类的API: {total_unclustered}")
+        print(f"需要处理的API总数: {total_without_cluster + total_unclustered}")
+        
+        print("\n已聚类但没有匹配的API详细列表:")
         for api in apis_without_cluster:
             print(f"  {api.full_name} (ID: {api.id}, Lib: {api.lib})")
         
-        return total_count
+        print("\n未聚类的API详细列表:")
+        for api in unclustered_apis:
+            print(f"  {api.full_name} (ID: {api.id}, Lib: {api.lib})")
+        
+        return {
+            'without_cluster': total_without_cluster,
+            'unclustered': total_unclustered,
+            'total_need_processing': total_without_cluster + total_unclustered
+        }
         
     except Exception as e:
-        print(f"统计无聚类API时发生错误: {str(e)}")
-        return 0
+        print(f"统计API聚类状态时发生错误: {str(e)}")
+        return {
+            'without_cluster': 0,
+            'unclustered': 0,
+            'total_need_processing': 0
+        }
     finally:
         session.close()
+
+
+def count_cluster_test_status(cluster_type='ValueEquivalent'):
+    """
+    统计指定类型的Cluster的测试完成情况
+    
+    Args:
+        cluster_type (str): 聚类类型，可以是 'ValueEquivalent' 或 'StateEquivalent'
+    """
+    if cluster_type not in ['ValueEquivalent', 'StateEquivalent']:
+        print(f"错误: 无效的cluster_type '{cluster_type}'. 必须是 'ValueEquivalent' 或 'StateEquivalent'.")
+        return None
+    
+    session = get_session()
+    try:
+        # 查询指定类型的所有cluster
+        clusters = session.query(Cluster).filter_by(type=cluster_type).all()
+        
+        if not clusters:
+            print(f"未找到 {cluster_type} 类型的cluster.")
+            return {'tested': 0, 'untested': 0, 'total': 0}
+        
+        # 统计已测试和未测试的cluster数量
+        tested_clusters = []
+        untested_clusters = []
+        
+        for cluster in clusters:
+            if cluster.is_tested:
+                tested_clusters.append(cluster)
+            else:
+                untested_clusters.append(cluster)
+        
+        tested_count = len(tested_clusters)
+        untested_count = len(untested_clusters)
+        total_count = len(clusters)
+        
+        print(f"=== {cluster_type} Cluster 测试状态统计 ===")
+        print(f"已完成测试的cluster数量: {tested_count}")
+        print(f"未完成测试的cluster数量: {untested_count}")
+        print(f"总cluster数量: {total_count}")
+        
+        if total_count > 0:
+            completion_rate = (tested_count / total_count) * 100
+            print(f"测试完成率: {completion_rate:.2f}%")
+        return {
+            'tested': tested_count,
+            'untested': untested_count,
+            'total': total_count,
+            'completion_rate': (tested_count / total_count) * 100 if total_count > 0 else 0
+        }
+    except Exception as e:
+        print(f"统计cluster测试状态时发生错误: {str(e)}")
+        return None
+    finally:
+        session.close()
+
+def count_invalid_cluster_seeds(clusters_folder_path):
+    """
+    统计指定路径下无效的cluster种子数量
+    
+    Args:
+        clusters_folder_path: cluster文件夹的路径
+        
+    Returns:
+        dict: 包含统计信息的字典
+    """
+    if not os.path.exists(clusters_folder_path):
+        print(f"错误: 路径 {clusters_folder_path} 不存在")
+        return {'invalid_files_count': 0, 'clusters_with_invalid_files': 0}
+    
+    invalid_files_num = 0  # 统计所有无效py文件总数
+    total_files_num = 0  # 统计所有py文件总数
+    clusters_with_invalid_files_num = 0  # 统计包含无效文件的cluster数量
+    
+    # 获取所有cluster文件夹（包括带valid前缀的）
+    all_folders = [f for f in os.listdir(clusters_folder_path) if os.path.isdir(os.path.join(clusters_folder_path, f))]
+    
+    # 筛选出cluster文件夹（Cluster_开头或valid_Cluster_开头）
+    cluster_folders = []
+    for folder in all_folders:
+        if folder.startswith('Cluster_') or folder.startswith('valid_Cluster_'):
+            cluster_folders.append(folder)
+    
+    print(f"在{clusters_folder_path}路径下找到 {len(cluster_folders)} 个cluster文件夹")
+    print("-" * 60)
+    
+    for cluster_folder in cluster_folders:
+        cluster_path = os.path.join(clusters_folder_path, cluster_folder)
+        cluster_invalid_count = 0  # 当前cluster中的无效文件数量
+        
+        # 获取该cluster下的所有子文件夹（seed文件夹）
+        try:
+            sub_folders = [f for f in os.listdir(cluster_path) if os.path.isdir(os.path.join(cluster_path, f))]
+        except Exception as e:
+            print(f"访问 {cluster_path} 时出错: {e}")
+            continue
+        
+        for sub_folder in sub_folders:
+            sub_folder_path = os.path.join(cluster_path, sub_folder)
+            
+            # 获取该子文件夹下的所有文件
+            try:
+                files = [f for f in os.listdir(sub_folder_path) if os.path.isfile(os.path.join(sub_folder_path, f))]
+            except Exception as e:
+                print(f"访问 {sub_folder_path} 时出错: {e}")
+                continue
+            
+            # 统计py文件
+            for file in files:
+                if file.endswith('.py'):
+                    total_files_num += 1  # 统计所有py文件
+                    if file.startswith('invalid.'):
+                        cluster_invalid_count += 1
+                        invalid_files_num += 1
+                        print(f"  找到无效文件: {cluster_folder}/{sub_folder}/{file}")
+        
+        # 如果当前cluster有无效文件，则增加cluster计数
+        if cluster_invalid_count > 0:
+            clusters_with_invalid_files_num += 1
+            print(f"{cluster_folder}文件夹下有 {cluster_invalid_count} 个无效文件")
+        else:
+            print(f"{cluster_folder}文件夹下没有无效文件")
+    
+    print("-" * 60)
+    print(f"统计结果:")
+    print(f"  无效py文件总数: {invalid_files_num} / {total_files_num}")
+    print(f"  包含无效文件的cluster数量: {clusters_with_invalid_files_num} / {len(cluster_folders)}")
+    
+    return {
+        'invalid_files_count': invalid_files_num,
+        'clusters_with_invalid_files': clusters_with_invalid_files_num,
+    }
 
 
 if __name__ == '__main__':
@@ -598,8 +769,15 @@ if __name__ == '__main__':
     # list_clusters('StateEquivalent')
     # print("\n")
 
-    count_api_without_cluster()
+    # 统计cluster测试状态
+    # count_cluster_test_status('ValueEquivalent')
+    # print("\n")
+    # count_cluster_test_status('StateEquivalent')
+    # print("\n")
 
+    # count_api_without_cluster()
+    #count_invalid_cluster_seeds('fuzzer/seeds/validated_seeds/ValueEquivalent') # 无效py文件总数: 858 / 16423; 包含无效文件的cluster数量: 297 / 1006
+    count_invalid_cluster_seeds('fuzzer/seeds/validated_seeds/StateEquivalent')
     # clean_invalid_clusters()
 
     # full_api_name = "jax.jit"
@@ -618,3 +796,5 @@ if __name__ == '__main__':
     #         max_history_errors_api = api
     # print(f"API with the most history errors: {max_history_errors_api.full_name} ({max_history_errors})")
     # session.close()
+
+    # retrieve_api_issues('jax.jit')
