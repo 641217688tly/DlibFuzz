@@ -17,8 +17,11 @@ Objective:
 Please fix the error in the code snippet based on the error details.
 
 Requirements:
-1.Only output the corrected code snippet.
-2.Do not include any explanations, comments, or additional text.
+1. Only output the corrected code snippet.
+2. Do not include any explanations, comments, or additional text.
+3. Preserve the original indentation, spacing, and formatting as much as possible.
+4. Keep all tabs, spaces, and line breaks intact unless they are part of the error.
+5. Do not reformat the code style unless it's necessary to fix the error.
     """
     return prompt
 
@@ -76,7 +79,7 @@ class APITestSeedValidator:
 
     def flake8_static_analysis(self, file_path):  # 使用静态分析工具flake8分析Python代码, 如果发现错误, 则返回False和错误信息
         result = subprocess.run(
-            ['flake8', file_path, '--select=F'],  # TODO flake8中的F和E都包含了一些代码风格建议,这些建议理论上应该被忽略,但需要在配置文件中进一步设置
+            ['flake8', file_path, '--extend-ignore=F401', '--select=F,E'],  # TODO flake8中的F和E都包含了一些代码风格建议,这些建议理论上应该被忽略,但需要在配置文件中进一步设置
             capture_output=True, text=True
         )
         error_details = result.stdout

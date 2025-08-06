@@ -12,7 +12,8 @@ from openai import OpenAI
 from sqlalchemy.orm import sessionmaker
 from orm import *
 from rag.rag_client import RagClient
-
+import ast
+import re
 
 def get_session():
     with open('config.yml', 'r', encoding='utf-8') as file:  # 读取config.yml文件
@@ -42,13 +43,23 @@ def get_llm_client(llm='gpt4o-mini', proxy_url="http://127.0.0.1:7890"):
             config = yaml.safe_load(file)
             openai_client = OpenAI(api_key=config['openai']['api_key'], http_client=proxy)
             return openai_client
-    elif llm == 'QianWen':
-        return None
     elif llm == 'gpt4o-mini-with-rag':
         with open('config.yml', 'r', encoding='utf-8') as file:
             config = yaml.safe_load(file)
             rag_client = RagClient(base_url="http://localhost:8000", api_key=config['openai']['api_key'])
             return rag_client
+    elif llm == 'gpt4o-mini-bianxie':
+        with open('config.yml', 'r', encoding='utf-8') as file:  # 读取config.yml文件
+            config = yaml.safe_load(file)
+            openai_client = OpenAI(api_key=config['openai']['bianxie_api_key'], http_client=proxy, base_url="https://api.bianxie.ai/v1")
+            return openai_client
+    elif llm == 'gpt4.1-mini-bianxie':
+        with open('config.yml', 'r', encoding='utf-8') as file:  # 读取config.yml文件
+            config = yaml.safe_load(file)
+            openai_client = OpenAI(api_key=config['openai']['bianxie_api_key'], http_client=proxy, base_url="https://api.bianxie.ai/v1")
+            return openai_client
+    elif llm == 'QianWen':
+        return None
     else:
         return None
 
@@ -756,6 +767,224 @@ def count_invalid_cluster_seeds(clusters_folder_path):
         'clusters_with_invalid_files': clusters_with_invalid_files_num,
     }
 
+def count_syntax_error_cluster_seeds():
+    """
+    统计fuzzer/seeds/validated_seeds/下的py文件中存在语法问题的文件数量
+    
+    检查的语法问题包括：
+    1. 使用分号(;)连接代码行而不是换行符
+    2. 缺少适当的换行符和缩进
+    3. 一行代码过长（超过合理长度）
+    
+    Returns:
+        dict: 包含统计信息的字典
+    """
+
+    def check_python_file_syntax(file_path):
+        """
+        检查单个Python文件是否存在语法问题
+
+        Args:
+            file_path: Python文件路径
+
+        Returns:
+            tuple: (是否存在语法问题, 问题列表)
+        """
+        issues = []
+
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # 检查1: 是否使用分号连接代码而不是换行符
+            if ';' in content:
+                # 排除字符串中的分号和注释中的分号
+                lines = content.split('\n')
+                for i, line in enumerate(lines, 1):
+                    stripped_line = line.strip()
+                    if not stripped_line or stripped_line.startswith('#'):
+                        continue
+
+                    # 简单检查：如果一行中有多个分号且不在字符串中
+                    semicolon_count = line.count(';')
+                    if semicolon_count > 0:
+                        # 检查是否在字符串中
+                        in_string = False
+                        quote_char = None
+                        actual_semicolons = 0
+
+                        for j, char in enumerate(line):
+                            if char in ['"', "'"] and (j == 0 or line[j - 1] != '\\'):
+                                if not in_string:
+                                    in_string = True
+                                    quote_char = char
+                                elif char == quote_char:
+                                    in_string = False
+                                    quote_char = None
+                            elif char == ';' and not in_string:
+                                actual_semicolons += 1
+
+                        if actual_semicolons > 0:
+                            issues.append(f"第{i}行使用分号连接代码: {actual_semicolons}个分号")
+
+            # 检查2: 检查是否存在过长的单行代码（可能是缺少换行符的标志）
+            lines = content.split('\n')
+            for i, line in enumerate(lines, 1):
+                if len(line.strip()) > 200:  # 超过200字符认为过长
+                    issues.append(f"第{i}行代码过长({len(line)}字符)，可能缺少换行符")
+
+            # 检查3: 尝试用AST解析，检查语法是否正确
+            try:
+                ast.parse(content)
+            except SyntaxError as e:
+                issues.append(f"Python语法错误: {e.msg} (行 {e.lineno})")
+
+            # 检查4: 检查缩进问题 - 寻找明显的缩进错误模式
+            # 例如类或函数定义后没有正确缩进
+            for i, line in enumerate(lines, 1):
+                stripped = line.strip()
+                if stripped.endswith(':') and (
+                        'def ' in stripped or 'class ' in stripped or 'if ' in stripped or 'for ' in stripped or 'while ' in stripped):
+                    # 检查下一行是否正确缩进
+                    if i < len(lines):
+                        next_line = lines[i]
+                        if next_line.strip() and not next_line.startswith('    ') and not next_line.startswith('\t'):
+                            # 但是要排除空行和注释行
+                            if not next_line.strip().startswith('#'):
+                                issues.append(f"第{i + 1}行可能缺少正确的缩进")
+
+            return len(issues) > 0, issues
+
+        except Exception as e:
+            return True, [f"读取文件时出错: {e}"]
+    
+    # 定义要检查的路径
+    paths_to_check = [
+        'fuzzer/seeds/validated_seeds/StateEquivalent',
+        'fuzzer/seeds/validated_seeds/ValueEquivalent'
+    ]
+    
+    total_files = 0
+    syntax_error_files = 0
+    detailed_results = []
+    
+    print("=== 检查 Python 文件语法问题 ===")
+    print("-" * 80)
+    
+    for base_path in paths_to_check:
+        if not os.path.exists(base_path):
+            print(f"路径不存在: {base_path}")
+            continue
+            
+        print(f"\n检查路径: {base_path}")
+        print("-" * 60)
+        
+        path_total_files = 0
+        path_syntax_error_files = 0
+        
+        # 遍历所有cluster文件夹
+        cluster_folders = [f for f in os.listdir(base_path) 
+                          if os.path.isdir(os.path.join(base_path, f)) and 
+                          (f.startswith('Cluster_') or f.startswith('valid_Cluster_'))]
+        
+        for cluster_folder in cluster_folders:
+            cluster_path = os.path.join(base_path, cluster_folder)
+            cluster_error_files = 0
+            
+            try:
+                # 遍历cluster下的所有子文件夹
+                sub_folders = [f for f in os.listdir(cluster_path) 
+                              if os.path.isdir(os.path.join(cluster_path, f))]
+                
+                for sub_folder in sub_folders:
+                    sub_folder_path = os.path.join(cluster_path, sub_folder)
+                    
+                    try:
+                        # 检查所有Python文件
+                        files = [f for f in os.listdir(sub_folder_path) 
+                                if f.endswith('.py') and os.path.isfile(os.path.join(sub_folder_path, f))]
+                        
+                        for file in files:
+                            file_path = os.path.join(sub_folder_path, file)
+                            total_files += 1
+                            path_total_files += 1
+                            
+                            # 检查文件是否存在语法问题
+                            has_syntax_issues, issues = check_python_file_syntax(file_path)
+                            
+                            if has_syntax_issues:
+                                syntax_error_files += 1
+                                path_syntax_error_files += 1
+                                cluster_error_files += 1
+                                
+                                detailed_results.append({
+                                    'file_path': file_path,
+                                    'issues': issues
+                                })
+                                
+                    except Exception as e:
+                        print(f"    访问子文件夹 {sub_folder_path} 时出错: {e}")
+                        
+            except Exception as e:
+                print(f"  访问cluster文件夹 {cluster_path} 时出错: {e}")
+                continue
+            
+            # 如果cluster有语法错误文件，显示统计信息
+            if cluster_error_files > 0:
+                print(f"  {cluster_folder}: {cluster_error_files} 个文件存在语法问题")
+        
+        print(f"\n{base_path} 统计结果:")
+        print(f"  总文件数: {path_total_files}")
+        print(f"  存在语法问题的文件数: {path_syntax_error_files}")
+        if path_total_files > 0:
+            error_rate = (path_syntax_error_files / path_total_files) * 100
+            print(f"  语法错误率: {error_rate:.2f}%")
+    
+    print("\n" + "=" * 80)
+    print("总体统计结果:")
+    print(f"  检查的总文件数: {total_files}")
+    print(f"  存在语法问题的文件数: {syntax_error_files}")
+    if total_files > 0:
+        overall_error_rate = (syntax_error_files / total_files) * 100
+        print(f"  总体语法错误率: {overall_error_rate:.2f}%")
+    
+    # 显示详细的问题分类统计
+    if not detailed_results:
+        return
+
+    print("\n详细问题分类统计:")
+    print("-" * 60)
+
+    issue_categories = {
+        '使用分号': 0,
+        '代码过长': 0,
+        'Python语法错误': 0,
+        '缩进问题': 0,
+        '其他问题': 0
+    }
+
+    for result in detailed_results:
+        for issue in result['issues']:
+            if '分号' in issue:
+                issue_categories['使用分号'] += 1
+            elif '过长' in issue:
+                issue_categories['代码过长'] += 1
+            elif 'Python语法错误' in issue:
+                issue_categories['Python语法错误'] += 1
+            elif '缩进' in issue:
+                issue_categories['缩进问题'] += 1
+            else:
+                issue_categories['其他问题'] += 1
+
+    for category, count in issue_categories.items():
+        if count > 0:
+            print(f"  {category}: {count} 个问题")
+    return {
+        'total_files': total_files,
+        'syntax_error_files': syntax_error_files,
+        'error_rate': (syntax_error_files / total_files) * 100 if total_files > 0 else 0,
+        'detailed_results': detailed_results
+    }
 
 if __name__ == '__main__':
     # print(get_libs_info())
@@ -777,8 +1006,11 @@ if __name__ == '__main__':
 
     # count_api_without_cluster()
     #count_invalid_cluster_seeds('fuzzer/seeds/validated_seeds/ValueEquivalent') # 无效py文件总数: 858 / 16423; 包含无效文件的cluster数量: 297 / 1006
-    count_invalid_cluster_seeds('fuzzer/seeds/validated_seeds/StateEquivalent')
+    #count_invalid_cluster_seeds('fuzzer/seeds/validated_seeds/StateEquivalent') # 无效py文件总数: 2609 / 28825; 包含无效文件的cluster数量: 754 / 1918
     # clean_invalid_clusters()
+    
+    # 统计语法错误的cluster种子文件
+    count_syntax_error_cluster_seeds() # Total: 19187/45248(错误率42.40%) | StateEquivalent: 12398/28825(错误率43.01%) | ValueEquivalent: 6789/16423(错误率41.34%)
 
     # full_api_name = "jax.jit"
     # retrieve_api_issues(full_api_name)

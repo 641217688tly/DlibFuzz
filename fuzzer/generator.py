@@ -345,23 +345,25 @@ Information about the API to be called:
 Task Requirements:
 1. Your task is to generate a code snippet that is likely to reveal potential bugs in jax.jit, by mining and learning from the input parameters and API call combinations shown in the above issue examples.
 2. Output variable naming rules:
-   - If jax.jit returns a single value, you must assign the result to a variable named "output1".
-   - If jax.jit returns multiple values, you must assign them to variables named "output1", "output2", "output3", etc., in order.
-   - If jax.jit does not return a value but performs in-place operations on the input(s), you must assign the processed input to a variable named "output1".
-   - If jax.jit performs in-place operations on multiple inputs, you must assign each processed input to variables named "output1", "output2", "output3", etc., in order.
-3. The code should be complete and executable. You are only allowed to use APIs from the JAX (version 0.4.33) library and common utility libraries such as numpy, random, math, and built-in Python functions. Do not use APIs from any other deep learning frameworks or third-party libraries.
+   - You must assign the result or affected variables from jax.jit to a variable named "output".
+   - If jax.jit returns multiple values, assign them as a tuple to the "output" variable.
+   - If jax.jit performs in-place operations, assign the processed input(s) to the "output" variable.
+3. Code complexity requirements:
+   - Keep the code simple and straightforward. Avoid defining complex functions or classes unless absolutely necessary.
+   - Prefer direct API calls and simple variable assignments over complex control structures.
+   - If functions are needed, keep them short and focused on a single purpose.
+4. The code should be complete and executable. You are only allowed to use APIs from the JAX (version 0.4.33) library and common utility libraries such as numpy, random, math, and built-in Python functions. Do not use APIs from any other deep learning frameworks or third-party libraries.
 """
         context_answer_prompt1 = f"""
 {{
-  "Code": "import jax; import jax.numpy as jnp; from jax import random; import numpy as np; def complex_max_fn(x): return jnp.max(x), jnp.min(x); x = jnp.ones(128, dtype=jnp.complex64); sharding = jax.sharding.PositionalSharding(jax.devices()); x = jax.device_put(x, sharding); output1, output2 = jax.jit(complex_max_fn)(x); print(output1, output2); x_bfloat = jnp.bfloat16(7); output3 = jax.jit(lambda: jnp.exp(x_bfloat))(); print(output3)",
+  "Code": "import jax\\nimport jax.numpy as jnp\\nfrom jax import random\\nimport numpy as np\\n\\n# 创建复数数组并进行分片处理\\nx = jnp.ones(128, dtype=jnp.complex64)\\nsharding = jax.sharding.PositionalSharding(jax.devices())\\nx = jax.device_put(x, sharding)\\n\\n# 测试复数数组的最大值计算\\noutput = jax.jit(jnp.max)(x)\\nprint(output)",
   "APIs": [
     "jax.jit",
-    "jax.numpy.jnp.max",
-    "jax.numpy.jnp.min",
+    "jax.numpy.max",
     "jax.device_put",
     "jax.sharding.PositionalSharding",
-    "jax.numpy.jnp.bfloat16",
-    "jax.numpy.jnp.exp"
+    "jax.numpy.ones",
+    "jax.devices"
   ]
 }}
 """
@@ -399,11 +401,14 @@ Information about the API to be called:
 Task Requirements:
 1. Your task is to generate a code snippet that is likely to reveal potential bugs in {base_api.full_name}, by mining and learning from the input parameters and API call combinations shown in the above issue examples.
 2. Output variable naming rules:
-   - If {base_api.full_name} returns a single value, you must assign the result to a variable named "output1".
-   - If {base_api.full_name} returns multiple values, you must assign them to variables named "output1", "output2", "output3", etc., in order.
-   - If {base_api.full_name} does not return a value but performs in-place operations on the input(s), you must assign the processed input to a variable named "output1".
-   - If {base_api.full_name} performs in-place operations on multiple inputs, you must assign each processed input to variables named "output1", "output2", "output3", etc., in order.
-3. The code should be complete and executable. You are only allowed to use APIs from the {base_api.lib} (version {base_api.version}) library and common utility libraries such as numpy, random, math, and built-in Python functions. Do not use APIs from any other deep learning frameworks or third-party libraries.
+   - You must assign the result or affected variables from {base_api.full_name} to a variable named "output".
+   - If {base_api.full_name} returns multiple values, assign them as a tuple to the "output" variable.
+   - If {base_api.full_name} performs in-place operations, assign the processed input(s) to the "output" variable.
+3. Code complexity requirements:
+   - Keep the code simple and straightforward. Avoid defining complex functions or classes unless absolutely necessary.
+   - Prefer direct API calls and simple variable assignments over complex control structures.
+   - If functions are needed, keep them short and focused on a single purpose.
+4. The code should be complete and executable. You are only allowed to use APIs from the {base_api.lib} (version {base_api.version}) library and common utility libraries such as numpy, random, math, and built-in Python functions. Do not use APIs from any other deep learning frameworks or third-party libraries.
 """
 
         messages = [
@@ -626,13 +631,14 @@ Task Requirements:
    - API return values handling must be consistent
    - Variable names must be preserved
    - Input parameters must remain unchanged
-3. Output Variable Naming Rules: 
-   In the original code, the output variable naming follows these rules:
-   - If {base_api.full_name} returns a single value, the result is assigned to a variable named "output1"
-   - If {base_api.full_name} returns multiple values, they are assigned to variables named "output1", "output2", "output3", etc., in order
-   - If {base_api.full_name} does not return a value but performs in-place operations on the input(s), the processed input is assigned to a variable named "output1"
-   - If {base_api.full_name} performs in-place operations on multiple inputs, each processed input is assigned to variables named "output1", "output2", "output3", etc., in order
-   In the translated code, the equivalent API {'Group' if len(twin_api_group.apis) > 1 else ''} {api_group_brief_info} must follow the same variable naming rules as {base_api.full_name}.
+3. Code complexity requirements:
+   - Keep the translated code simple and straightforward, avoiding complex functions or classes unless they exist in the original code.
+   - Maintain the same level of complexity as the original code - do not add unnecessary complexity.
+   - Prefer direct API calls and simple variable assignments over complex control structures.
+4. Output Variable Naming Rules: 
+   In the original code, the output variable naming follows this rule:
+   - The result or affected variables from {base_api.full_name} are assigned to a variable named "output"
+   In the translated code, the equivalent API {'Group' if len(twin_api_group.apis) > 1 else ''} {api_group_brief_info} must follow the same variable naming rule and assign results to a variable named "output".
 """
         messages = [
             {"role": "system", "content": system_prompt},

@@ -1,5 +1,3 @@
-import utils
-llm_client = utils.get_llm_client()
 system_prompt = """
 (1) Role Definition
 You are an AI assistant specialized in deep learning framework APIs (e.g., PyTorch, JAX, MindSpore and Jittor).
@@ -130,32 +128,37 @@ Task Requirements:
 3. The code should be complete and executable. You are only allowed to use APIs from the JAX (version 0.4.33) library and common utility libraries such as numpy, random, math, and built-in Python functions. Do not use APIs from any other deep learning frameworks or third-party libraries.
 """
 
+# import utils
+
+# llm_client = utils.get_llm_client("gpt4.1-mini-bianxie")
+
 # messages = [
-#     {"role": "system", "content": system_prompt},
-#     {"role": "user", "content": query_prompt},
-#
+#     {"role": "system", "content": ""},
+#     {"role": "user", "content": "Who are you?"},
+
 # ]
 # response = llm_client.chat.completions.create(
-#     model="gpt-4o-mini",  # gpt-4o-mini  gpt-3.5-turbo
-#     response_format={"type": "json_object"},
+#     model="gpt-4.1-mini",  # gpt-4.1-mini gpt-4o-mini  gpt-3.5-turbo
+#     #response_format={"type": "json_object"},
 #     messages=messages,
 #     temperature=0.4,
+
 # )
 # response = response.choices[0].message.content
 # print(response)
 
-str2 = f"""
-{{
-  "Code": "import jax; import jax.numpy as jnp; from jax import random; import numpy as np; def complex_max_fn(x): return jnp.max(x), jnp.min(x); x = jnp.ones(128, dtype=jnp.complex64); sharding = jax.sharding.PositionalSharding(jax.devices()); x = jax.device_put(x, sharding); output1, output2 = jax.jit(complex_max_fn)(x); print(output1, output2); x_bfloat = jnp.bfloat16(7); output3 = jax.jit(lambda: jnp.exp(x_bfloat))(); print(output3)",
-  "APIs": [
-    "jax.jit",
-    "jax.numpy.jnp.max",
-    "jax.numpy.jnp.min",
-    "jax.device_put",
-    "jax.sharding.PositionalSharding",
-    "jax.numpy.jnp.bfloat16",
-    "jax.numpy.jnp.exp"
-  ]
-}}
-"""
-print(str2)
+# str2 = f"""
+# {{
+#   "Code": "import jax; import jax.numpy as jnp; from jax import random; import numpy as np; def complex_max_fn(x): return jnp.max(x), jnp.min(x); x = jnp.ones(128, dtype=jnp.complex64); sharding = jax.sharding.PositionalSharding(jax.devices()); x = jax.device_put(x, sharding); output1, output2 = jax.jit(complex_max_fn)(x); print(output1, output2); x_bfloat = jnp.bfloat16(7); output3 = jax.jit(lambda: jnp.exp(x_bfloat))(); print(output3)",
+#   "APIs": [
+#     "jax.jit",
+#     "jax.numpy.jnp.max",
+#     "jax.numpy.jnp.min",
+#     "jax.device_put",
+#     "jax.sharding.PositionalSharding",
+#     "jax.numpy.jnp.bfloat16",
+#     "jax.numpy.jnp.exp"
+#   ]
+# }}
+# """
+# print(str2)
