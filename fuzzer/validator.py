@@ -22,7 +22,7 @@ Requirements:
 3. Preserve the original indentation, spacing, and formatting as much as possible.
 4. Keep all tabs, spaces, and line breaks intact unless they are part of the error.
 5. Do not reformat the code style unless it's necessary to fix the error.
-    """
+"""
     return prompt
 
 
@@ -44,15 +44,16 @@ class APITestSeedValidator:
         return cleaned_code
 
     def insert_possible_imports(self, raw_code):  # 向seed.code中插入可能需要的的导入语句
-        possible_imports = [
-            "import torch",
-            "import tensorflow",
-            "import jax",
-            "import mindspore",
-            "import numpy"
-        ]
-        updated_code = '\n'.join(possible_imports) + '\n' + raw_code
-        return updated_code
+        # possible_imports = [
+        #     "import torch",
+        #     "import tensorflow",
+        #     "import jax",
+        #     "import mindspore",
+        #     "import numpy"
+        # ]
+        # updated_code = '\n'.join(possible_imports) + '\n' + raw_code
+        # return updated_code
+        return raw_code
 
     def pylint_static_analysis(self, file_path):  # 使用静态分析工具pylint分析Python代码, 如果发现错误, 则返回False和错误信息
         # TODO 该静态分析工具存在误报问题, 暂时放弃使用
@@ -78,8 +79,12 @@ class APITestSeedValidator:
             return False, errors_cleaned
 
     def flake8_static_analysis(self, file_path):  # 使用静态分析工具flake8分析Python代码, 如果发现错误, 则返回False和错误信息
+        # result = subprocess.run(
+        #     ['flake8', file_path, '--extend-ignore=F401', '--select=F,E'],  # TODO flake8中的F和E都包含了一些代码风格建议,这些建议理论上应该被忽略,但需要在配置文件中进一步设置
+        #     capture_output=True, text=True
+        # )
         result = subprocess.run(
-            ['flake8', file_path, '--extend-ignore=F401', '--select=F,E'],  # TODO flake8中的F和E都包含了一些代码风格建议,这些建议理论上应该被忽略,但需要在配置文件中进一步设置
+            ['flake8', file_path],  # 移除手动指定的参数，让flake8使用配置文件
             capture_output=True, text=True
         )
         error_details = result.stdout
@@ -120,18 +125,18 @@ class APITestSeedValidator:
             print(f"Try to fix the code snippet. Current attempt times: {attempt_num + 1}/{max_retry}")
             try:
                 response = self.llm_client.chat.completions.create(
-                    model="gpt-4o-mini",  # gpt-4o-mini  gpt-3.5-turbo
+                    model="gpt-4.1-mini",  # gpt-4o-mini  gpt-3.5-turbo gpt-4.1-mini
                     messages=messages,
                     temperature=0,
                 )
                 validated_code = response.choices[0].message.content
-                messages.append({"role": "system", "content": validated_code})
 
                 # 检查LLM返回的种子是否有效
                 code_without_markdown = self.eliminate_markdown(validated_code)  # 去除code中的markdown语法
                 code_complemented_import = self.insert_possible_imports(code_without_markdown)  # 向code中插入可能的导入语句
                 validated_code = code_complemented_import
-                print(f"Verified Code:\n {validated_code}")
+                messages.append({"role": "system", "content": validated_code})
+                print(f"Verified Code:\n{validated_code}")
 
                 is_valid, error_details = self.static_analysis(validated_code)
                 if is_valid:
@@ -169,17 +174,18 @@ class APITestSeedValidator:
             print(f"Try to fix the code snippet. Current attempt times: {attempt_num + 1}/{max_retry}")
             try:
                 response = self.llm_client.chat.completions.create(
-                    model="gpt-4o-mini",  # gpt-4o-mini  gpt-3.5-turbo
+                    model="gpt-4.1-mini",  # gpt-4o-mini  gpt-3.5-turbo gpt-4.1-mini
                     messages=messages,
                     temperature=0,
                 )
                 validated_code = response.choices[0].message.content
-                messages.append({"role": "system", "content": validated_code})
 
                 # 检查LLM返回的种子是否有效
                 code_without_markdown = self.eliminate_markdown(validated_code)  # 去除code中的markdown语法
                 code_complemented_import = self.insert_possible_imports(code_without_markdown)  # 向code中插入可能的导入语句
                 validated_code = code_complemented_import
+                messages.append({"role": "system", "content": validated_code})
+
                 print(f"Verified Code:\n {validated_code}")
 
                 is_valid, error_details = self.static_analysis(validated_code)
@@ -196,7 +202,6 @@ class APITestSeedValidator:
                 attempt_num = attempt_num + 1
                 self.session.rollback()  # 回滚在异常中的任何数据库更改
                 print(f"An unexpected error occurred: {e}")
-
         print(f"Max attempts reached. Failed to fix the code snippet.")
         return None
 
@@ -269,13 +274,13 @@ def export_valid_cluster_seed(seed: ClusterTestSeed):  # 导出种子中各个�
 
 def validate_and_export_all_seeds():
     session = get_session()
-    openai_client = get_llm_client()
+    llm_client = get_llm_client(llm='gpt4o-mini-bianxie')
     # 查询所有未经验证的ClusterSeed
     unvalidated_cluster_seeds = session.query(ClusterTestSeed).filter(ClusterTestSeed.is_validated == False).all()
     while unvalidated_cluster_seeds:
         print("----------------------------------------------------------------------------------")
         cluster_seed = unvalidated_cluster_seeds[0]
-        cluster_seed_validator = ClusterTestSeedValidator(session, openai_client, cluster_seed)
+        cluster_seed_validator = ClusterTestSeedValidator(session, llm_client, cluster_seed)
         is_success = cluster_seed_validator.validate()
         if is_success:
             export_valid_cluster_seed(cluster_seed)
@@ -373,7 +378,7 @@ def label_invalid_cluster_seeds(clusters_folder_path):
             print(f"cluster {cluster_folder} 在处理期间发生错误")
 
 if __name__ == '__main__':
-    # validate_and_export_all_seeds()
+    validate_and_export_all_seeds()
     #label_invalid_cluster_seeds('seeds/validated_seeds/ValueEquivalent')
-    label_invalid_cluster_seeds('seeds/validated_seeds/StateEquivalent')
+    #label_invalid_cluster_seeds('seeds/validated_seeds/StateEquivalent')
 

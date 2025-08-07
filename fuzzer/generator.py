@@ -971,10 +971,29 @@ def fuzz_state_equivalent_clusters_single_thread(session, llm_client):
     print(f"fuzz_state_equivalent_clusters() Success - All state equivalent clusters fuzzing completed")
 
 
+def clear_all_seeds():
+    """
+    删除数据库中所有ClusterTestSeed和APITestSeed, 并将所有Cluster的is_tested属性设置为False
+    """
+    session = utils.get_session()
+    try:
+        session.query(APITestSeed).delete() # 删除所有APITestSeed
+        session.query(ClusterTestSeed).delete() # 删除所有ClusterTestSeed
+        session.query(Cluster).update({Cluster.is_tested: False}) # 将所有Cluster的is_tested属性设置为False
+        session.commit()
+        print("cleare_all_seeds() Success - 所有种子已删除，集群状态已重置")
+    except Exception as e:
+        # 回滚事务
+        session.rollback()
+        print(f"cleare_all_seeds() Error - 删除种子时出错: {e}")
+        raise e
+
 if __name__ == '__main__':
     session = utils.get_session()
-    llm_client = utils.get_llm_client(llm='gpt4o-mini')
+    # clear_all_seeds()
+    # llm_client = utils.get_llm_client(llm='gpt4o-mini')
+    llm_client = utils.get_llm_client(llm='gpt4o-mini-bianxie')
     #fuzz_value_equivalent_clusters_single_thread(session, llm_client)
     #fuzz_state_equivalent_clusters_single_thread(session, llm_client)
-    fuzz_value_equivalent_clusters(session, llm_client, max_workers=8)
-    #fuzz_state_equivalent_clusters(session, llm_client, max_workers=16)
+    #fuzz_value_equivalent_clusters(session, llm_client, max_workers=8)
+    fuzz_state_equivalent_clusters(session, llm_client, max_workers=16)
