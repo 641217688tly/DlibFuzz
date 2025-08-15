@@ -473,8 +473,8 @@ When the API has only one return value, you must declare a variable named "outpu
             module_name, api_name = full_api_name.rsplit('.', 1)
             module_list = module_name.split('.')
             api_lib = self.handle_module_alias(module_list[0])
-            if map_module2lib(api_lib) == 'Unknown':
-                raise Exception(f"{full_api_name} does not belong to Pytorch, JAX, MindSpore or Jittor.")
+            # if map_module2lib(api_lib) == 'Unknown':
+            #     raise Exception(f"{full_api_name} does not belong to Pytorch, JAX, MindSpore, Jittor or Numpy those deep learning libraries.")
             module = importlib.import_module(api_lib)
             if len(module_list) > 1:
                 # 将module_name_list进行切片, 只保留除第一个元素以外的部分
@@ -488,7 +488,7 @@ When the API has only one return value, you must declare a variable named "outpu
             else:
                 return True
         except Exception as e:
-            self.error_log.append(f"{full_api_name} is not a valid API. Error: {e}")
+            self.error_log.append(f"{full_api_name} is not a valid API belonging to the deep learning libraries. Error: {e}")
             return False
 
     def validate_apis(self, response):
@@ -837,8 +837,8 @@ When the API has only one return value, you must declare a variable named "outpu
 def run_randomly():  # 随机挑选未聚类的API进行聚类
     # 创建数据库连接
     session = get_session()
-    llm_client = get_llm_client('gpt4o-mini')
-    rag_client = get_llm_client('gpt4o-mini-with-rag')
+    llm_client = get_llm_client('openai')
+    rag_client = get_llm_client('openai-with-rag')
 
     # 对未聚类的API进行聚类
     unclustered_apis = session.query(API).filter_by(is_clustered=False).all()
@@ -861,8 +861,8 @@ def run_randomly():  # 随机挑选未聚类的API进行聚类
 def run_randomly_with_weight():  # 根据API的权重随机挑选未聚类的API进行聚类
     # 创建数据库连接
     session = get_session()
-    llm_client = get_llm_client('gpt4o-mini')
-    rag_client = get_llm_client('gpt4o-mini-with-rag')
+    llm_client = get_llm_client('openai')
+    rag_client = get_llm_client('openai-with-rag')
 
     # 对未聚类的API进行聚类
     unclustered_apis = session.query(API).filter_by(is_clustered=False).all()
@@ -908,8 +908,8 @@ def run_randomly_with_weight():  # 根据API的权重随机挑选未聚类的API
 def run_linearly():  # 线性地对未聚类的API进行聚类
     # 创建数据库连接
     session = get_session()
-    llm_client = get_llm_client('gpt4o-mini')
-    rag_client = get_llm_client('gpt4o-mini-with-rag')
+    llm_client = get_llm_client('openai')
+    rag_client = get_llm_client('openai-with-rag')
 
     # 对未聚类的API进行聚类
     unclustered_apis = session.query(API).filter_by(is_clustered=False).all()
@@ -928,8 +928,8 @@ def run_linearly():  # 线性地对未聚类的API进行聚类
 def run_linearly_reversed():  # 线性地对未聚类的API进行聚类
     # 创建数据库连接
     session = get_session()
-    llm_client = get_llm_client('gpt4o-mini')
-    rag_client = get_llm_client('gpt4o-mini-with-rag')
+    llm_client = get_llm_client('openai')
+    rag_client = get_llm_client('openai-with-rag')
 
     # 对未聚类的API进行聚类
     unclustered_apis = session.query(API).filter_by(is_clustered=False).all()

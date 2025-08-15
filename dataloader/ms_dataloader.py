@@ -813,7 +813,7 @@ def add_mindspore_apis_from_doc(folder_path, lib_ver):
             full_api_name = file.replace('.html', '')
             module_name = '.'.join(full_api_name.split('.')[:-1])
             api_name = full_api_name.split('.')[-1]
-            if validate_api_existence(module_name, api_name):  # 如果API能够被正确导入
+            if validate_api_existence(full_api_name):  # 如果API能够被正确导入
                 loader = MindsporeAPILoader(file_path, get_session(), lib_ver=lib_ver)
             print(f"add_mindspore_apis_from_doc(): {i + 1}/{len(html_files)}")
         except Exception as e:

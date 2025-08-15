@@ -103,7 +103,7 @@ def add_jittor_apis_from_doc(root_dir, lib_ver):  # add jittor api from html fol
                     if api_exists:
                         continue
                     # 验证API是否有效
-                    is_valid = utils.validate_api_existence(api_info["module"], api_info["name"])
+                    is_valid = utils.validate_api_existence(f"{api_info['module']}.{api_info['name']}")
                     if not is_valid:
                         continue
                     # 如果api_info内的某个键的值为None，则使用utils.inspect_api_info获取的值

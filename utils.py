@@ -31,29 +31,24 @@ def get_session():
         return session
 
 
-def get_llm_client(llm='gpt4o-mini', proxy_url="http://127.0.0.1:7890"):
+def get_llm_client(llm='openai', proxy_url="http://127.0.0.1:7890"):
     # 设置代理
     proxy = httpx.Client(proxies={
         "http://": proxy_url,
         "https://": proxy_url
     })
     # 根据llm的名称返回对应的客户端
-    if llm == 'gpt4o-mini':
+    if llm == 'openai':
         with open('config.yml', 'r', encoding='utf-8') as file:  # 读取config.yml文件
             config = yaml.safe_load(file)
             openai_client = OpenAI(api_key=config['openai']['api_key'], http_client=proxy)
             return openai_client
-    elif llm == 'gpt4o-mini-with-rag':
+    elif llm == 'openai-with-rag':
         with open('config.yml', 'r', encoding='utf-8') as file:
             config = yaml.safe_load(file)
             rag_client = RagClient(base_url="http://localhost:8000", api_key=config['openai']['api_key'])
             return rag_client
-    elif llm == 'gpt4o-mini-bianxie':
-        with open('config.yml', 'r', encoding='utf-8') as file:  # 读取config.yml文件
-            config = yaml.safe_load(file)
-            openai_client = OpenAI(api_key=config['openai']['bianxie_api_key'], http_client=proxy, base_url="https://api.bianxie.ai/v1")
-            return openai_client
-    elif llm == 'gpt4.1-mini-bianxie':
+    elif llm == 'bianxie':
         with open('config.yml', 'r', encoding='utf-8') as file:  # 读取config.yml文件
             config = yaml.safe_load(file)
             openai_client = OpenAI(api_key=config['openai']['bianxie_api_key'], http_client=proxy, base_url="https://api.bianxie.ai/v1")
@@ -75,38 +70,103 @@ def get_libs_info():  # 该函数将返回数据库中待测试的深度学习�
     finally:
         db_session.close()
 
+def validate_code_imports(code: str):
+    """
+    从代码字符串中提取 import 语句, 校验相应包/模块在当前 Python 环境中是否可导入。
 
-def validate_api_existence(module_name: str, api_name: str):  # 验证API是否存在的函数
-    module_alias_mapper = {
-        "tf": "tensorflow",
-        "ms": "mindspore",
-        "np": "numpy",
-        "pd": "pandas",
-        "jt": "jittor",
-        "pytorch": "torch",
-    }
+    返回:
+        - True: 当所有引用的包/模块均存在
+        - (False, missing_modules: list[str]): 存在缺失的包/模块时
+    """
+    modules_to_check = set()
+    # 首选使用 AST 解析, 能够稳健处理多种 import 形式
     try:
-        module_list = module_name.split('.')
-        # 先检查来源库是否为Pytorch, JAX, MindSpore或Jittor中的任意一个
-        api_lib = module_list[0]
-        if map_module2lib(api_lib) == 'Unknown':
-            return False
-        module = importlib.import_module(module_alias_mapper.get(api_lib, api_lib))
-        if len(module_list) > 1:
-            # 将module_name_list进行切片, 只保留除第一个元素以外的部分
-            for submodule_name in module_list[1:]:
-                module = getattr(module, submodule_name, None)
-                if module is None:
-                    return False
-        api = getattr(module, api_name, None)
-        if api is None:
-            return False
-        else:
-            return True
-    except (ModuleNotFoundError, AttributeError, ImportError, ValueError, Exception) as e:
-        print(f"validate_api_existence({module_name}, {api_name}) Error: {e}")
+        tree = ast.parse(code)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                # 例如: import numpy as np, torch
+                for alias in node.names:
+                    if alias.name:
+                        modules_to_check.add(alias.name)
+            elif isinstance(node, ast.ImportFrom):
+                # 例如: from torch.nn import functional as F
+                # 相对导入(如 from . import x)无法在无包上下文时可靠校验, 跳过
+                if getattr(node, 'level', 0) and not node.module:
+                    continue
+                if node.module:
+                    modules_to_check.add(node.module)
+    except SyntaxError:
+        # 当代码存在语法问题时, 回退到正则做一个"尽力而为"的提取
+        lines = code.splitlines()
+        import_pattern = re.compile(r"^\s*import\s+(.+)$")
+        from_pattern = re.compile(r"^\s*from\s+([\w\.]+|\.+)\s+import\s+.+$")
+        for line in lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+            m_from = from_pattern.match(line)
+            if m_from:
+                module = m_from.group(1)
+                # 跳过相对导入
+                if module and not module.startswith('.'):
+                    modules_to_check.add(module)
+                continue
+            m_import = import_pattern.match(line)
+            if m_import:
+                # 可能包含多个以逗号分隔的导入
+                payload = m_import.group(1)
+                for part in payload.split(','):
+                    token = part.strip().split()[0] if part.strip() else ''
+                    if token:
+                        modules_to_check.add(token)
+
+    # 实际校验: 优先尝试完整模块路径导入, 失败则回退到顶级包
+    missing_modules = set()
+    for full_api_name in modules_to_check:
+        result = validate_api_existence(full_api_name)
+        if result is False:
+            missing_modules.add(full_api_name)
+    if not missing_modules:
+        return True, None
+    return False, list(missing_modules)
+
+def validate_api_existence(full_api_name: str):
+    """
+    接受完整 API 路径(模块/子模块/属性链), 校验其在当前环境中是否存在。
+
+    示例:
+      - 'torch' / 'torch.nn' / 'torch.nn.functional'
+      - 'torch.nn.functional.relu'
+      - 'jittor.numpy'
+    """
+    if not isinstance(full_api_name, str) or not full_api_name.strip():
         return False
 
+    try:
+        # 以torch.nn.functional为例
+        parts = full_api_name.split('.') # ['torch', 'nn', 'functional']
+        # 处理首段别名
+        api_lib = map_alias2module(parts[0]) # 'torch'
+        current_module_obj = importlib.import_module(api_lib) # 导入torch模块
+        # 逐段解析: 优先尝试作为子模块导入, 失败则回退 getattr
+        accumulated = [api_lib] # ['torch']
+        for sub in parts[1:]:
+            candidate_module = '.'.join(accumulated + [sub]) # 'torch.nn'
+            try:
+                current_module_obj = importlib.import_module(candidate_module) # 导入torch.nn模块
+                accumulated.append(sub)
+                continue
+            except Exception:
+                # 非模块, 尝试作为属性
+                attr = getattr(current_module_obj, sub, None) # 获取torch模块的nn属性
+                if attr is None:
+                    return False
+                current_module_obj = attr # 将current_module_obj赋值为torch模块的nn属性
+                accumulated.append(sub)
+        return True
+    except Exception as e:
+        print(f"validate_api_existence({full_api_name}) Error: {e}")
+        return False
 
 def validate_api_availability(function):  # 验证API是否为被弃用的函数
     """Check if the function is deprecated."""
@@ -122,6 +182,28 @@ def validate_api_availability(function):  # 验证API是否为被弃用的函数
             pass
         return any(item.category == DeprecationWarning for item in w)
 
+def map_alias2module(module_name):
+    lib_map = {
+        'Pytorch': 'torch',
+        'pytorch': "torch",
+        'torch': 'torch',
+        'JAX': 'jax',
+        'jax': 'jax',
+        'jaxlib': 'jax',
+        'MindSpore': 'mindspore',
+        'ms': 'mindspore',
+        'mindspore': 'mindspore',
+        'Jittor': 'jittor',
+        'jittor': 'jittor',
+        'jt': 'jittor',
+        'np': 'numpy',
+        'numpy': 'numpy',
+        'pandas': 'pandas',
+        'pd': 'pandas',
+        'tensorflow': 'tensorflow',
+        'tf': 'tensorflow'
+    }
+    return lib_map.get(module_name, module_name)
 
 def map_module2lib(module_name):
     lib_map = {
@@ -138,7 +220,8 @@ def map_module2lib(module_name):
         'jittor': 'Jittor',
         'jt': 'Jittor',
     }
-    return lib_map.get(module_name, 'Unknown')
+    # return lib_map.get(module_name, "Unknown")  # 如果module_name不在lib_map中, 则返回"Unknown")
+    return lib_map.get(module_name, module_name)
 
 
 def inspect_api_info(module_name, api_name):
@@ -156,7 +239,7 @@ def inspect_api_info(module_name, api_name):
     module_list[0] = module_alias_mapper.get(module_list[0], module_list[0])
     module_name = '.'.join(module_list)
     module_list = module_name.split('.') # 防止"jax.numpy"这种情况
-    if validate_api_existence(module_name, api_name) is False:  # 验证API是否存在
+    if validate_api_existence(f"{module_name}.{api_name}") is False:  # 验证API是否存在
         print(f"inspect_api_info({module_name}, {api_name}) Error: API {api_name} does not exist.")
         return None
 
@@ -1010,7 +1093,7 @@ if __name__ == '__main__':
     # clean_invalid_clusters()
     
     # 统计语法错误的cluster种子文件
-    count_syntax_error_cluster_seeds() # Total: 19187/45248(错误率42.40%) | StateEquivalent: 12398/28825(错误率43.01%) | ValueEquivalent: 6789/16423(错误率41.34%)
+    # count_syntax_error_cluster_seeds() # Total: 19187/45248(错误率42.40%) | StateEquivalent: 12398/28825(错误率43.01%) | ValueEquivalent: 6789/16423(错误率41.34%)
 
     # full_api_name = "jax.jit"
     # retrieve_api_issues(full_api_name)
@@ -1030,3 +1113,21 @@ if __name__ == '__main__':
     # session.close()
 
     # retrieve_api_issues('jax.jit')
+
+    print(validate_api_existence('jax'))
+
+    code = """
+import jittor as jt
+import jittor.numpy as jnp
+import jax
+
+# 创建两个不同形状的张量
+tensor_a = jt.array(jnp.array([[1, 2], [3, 4]]), dtype=jt.float32)
+tensor_b = jt.array(jnp.array([1, 2]), dtype=jt.float32)
+
+# 尝试将不同形状的张量相加
+output = tensor_a.add(tensor_b)
+print(output)
+"""
+    result1, result2 = validate_code_imports(code)
+    print(result1, result2)

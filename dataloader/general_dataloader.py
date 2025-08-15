@@ -48,7 +48,7 @@ def add_apis_from_json(db_session, file_path, lib, version):
                 full_api_name = api_info['fullName']
 
                 # 检查数据库中是否已存在该API
-                is_valid = utils.validate_api_existence(module, api_info['name'])
+                is_valid = utils.validate_api_existence(f"{module}.{api_info['name']}")
                 api_exists = db_session.query(API).filter_by(full_name=full_api_name, lib=lib, version=version).first()
                 if api_exists is None and is_valid:  # 如果API不存在且API是有效的:
                     # 创建TensorflowAPI实例并添加到session
@@ -105,7 +105,7 @@ def attach_history_errors(db_session, dir_path, whether_supplement_api=True):
                     print(f"Processing {full_api_name}...")
                     module_name, api_name = full_api_name.rsplit('.', 1)
                     lib = utils.map_module2lib(full_api_name.split('.')[0])
-                    if utils.validate_api_existence(module_name, api_name):  # 验证API在当前Python环境中的当前版本的DL库内是否存在
+                    if utils.validate_api_existence(full_api_name):  # 验证API在当前Python环境中的当前版本的DL库内是否存在
                         api = db_session.query(API).filter_by(lib=lib, full_name=full_api_name).first()
                         if not api and whether_supplement_api:  # 如果API不存在且需要补充API
                             api_info = utils.inspect_api_info(module_name, api_name)

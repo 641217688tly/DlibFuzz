@@ -2,6 +2,7 @@ import os
 import subprocess
 import time
 import threading
+from datetime import datetime
 from utils import *
 
 
@@ -102,18 +103,46 @@ class APITestSeedValidator:
             f.write(raw_code)
         # 使用静态分析工具对代码文件进行分析
         is_valid, error_details = self.flake8_static_analysis(file_path)
+        error_details = "Static Analysis:\n" + error_details if error_details else None
         os.remove(file_path)  # 删除临时文件
         return is_valid, error_details
+
+    def dynamic_import_analysis(self, raw_code):  # 动态分析Python代码, 如果发现错误, 则返回False和错误信息
+        result, invalid_imports = validate_code_imports(raw_code)
+        if result is True:
+            return True, None
+        details_lines = [
+            "Dynamic Import Analysis:",
+            "The following modules cannot be imported in the current environment:",
+        ]
+        for name in invalid_imports:
+            details_lines.append(f" - {name}")
+        details = "\n".join(details_lines)
+        return False, details
+    
+    def mixed_analysis(self, raw_code):
+        is_syntax_valid, syntax_error_details = self.static_analysis(raw_code)
+        is_import_valid, import_error_details = self.dynamic_import_analysis(raw_code)
+        
+        # 处理错误详情为 None 的情况
+        error_parts = []
+        if syntax_error_details:
+            error_parts.append(syntax_error_details)
+        if import_error_details:
+            error_parts.append(import_error_details)
+        
+        combined_error_details = "\n".join(error_parts) if error_parts else ""
+        return is_syntax_valid and is_import_valid, combined_error_details
 
     def validate4code(self, max_retry=5):
         code_without_markdown = self.eliminate_markdown(self.raw_code)
         code_complemented_import = self.insert_possible_imports(code_without_markdown)
-        is_valid, error_details = self.static_analysis(code_complemented_import)
-
+        is_valid, error_details = self.mixed_analysis(code_complemented_import)
+        
         if is_valid:  # 如果代码没有错误, 则结束修复
             return code_complemented_import  # 返回有效的代码
 
-        print(f"\nError Details:\n {error_details}")
+        print(f"\nError Details:\n {error_details}\n")
 
         prompt = construct_prompt(code_complemented_import, error_details)
         messages = [
@@ -138,11 +167,11 @@ class APITestSeedValidator:
                 messages.append({"role": "system", "content": validated_code})
                 print(f"Verified Code:\n{validated_code}")
 
-                is_valid, error_details = self.static_analysis(validated_code)
+                is_valid, error_details = self.mixed_analysis(validated_code)
                 if is_valid:
                     return validated_code  # 返回修复后的有效代码
                 else:
-                    print(f"\nError Details:\n {error_details}")
+                    print(f"\nError Details:\n {error_details}\n")
                     prompt = construct_prompt(validated_code, error_details)
                     messages.append({"role": "user", "content": prompt})
                     attempt_num = attempt_num + 1
@@ -155,14 +184,14 @@ class APITestSeedValidator:
     def validate4seed(self, max_retry=5):  # 修复代码中的错误
         code_without_markdown = self.eliminate_markdown(self.seed.raw_code)  # 去除code中的markdown语法
         code_complemented_import = self.insert_possible_imports(code_without_markdown)  # 向code中插入可能的导入语句
-        is_valid, error_details = self.static_analysis(code_complemented_import)
+        is_valid, error_details = self.mixed_analysis(code_complemented_import)
 
         if is_valid:  # 如果代码没有错误, 则结束修复
             self.seed.valid_code = code_complemented_import
             self.session.flush()
             return code_complemented_import  # 返回有效的代码
 
-        print(f"\nError Details:\n {error_details}")
+        print(f"\nError Details:\n {error_details}\n")
 
         prompt = construct_prompt(code_complemented_import, error_details)
         messages = [
@@ -186,15 +215,15 @@ class APITestSeedValidator:
                 validated_code = code_complemented_import
                 messages.append({"role": "system", "content": validated_code})
 
-                print(f"Verified Code:\n {validated_code}")
+                print(f"Verified Code:\n{validated_code}")
 
-                is_valid, error_details = self.static_analysis(validated_code)
+                is_valid, error_details = self.mixed_analysis(validated_code)
                 if is_valid:
                     self.seed.valid_code = validated_code
                     self.session.flush()
                     return validated_code  # 返回修复后的有效代码
                 else:
-                    print(f"\nError Details:\n {error_details}")
+                    print(f"\nError Details:\n {error_details}\n")
                     prompt = construct_prompt(validated_code, error_details)
                     messages.append({"role": "user", "content": prompt})
                     attempt_num = attempt_num + 1
@@ -274,7 +303,7 @@ def export_valid_cluster_seed(seed: ClusterTestSeed):  # 导出种子中各个�
 
 def validate_and_export_all_seeds():
     session = get_session()
-    llm_client = get_llm_client(llm='gpt4o-mini-bianxie')
+    llm_client = get_llm_client(llm='bianxie')
     # 查询所有未经验证的ClusterSeed
     unvalidated_cluster_seeds = session.query(ClusterTestSeed).filter(ClusterTestSeed.is_validated == False).all()
     while unvalidated_cluster_seeds:

@@ -160,25 +160,31 @@ class Fuzzer:  # 以Cluster为单位生成测试种子
 
     def validate_api(self, full_api_name):
         try:
-            module_name, api_name = full_api_name.rsplit('.', 1)
-            module_list = module_name.split('.')
-            api_lib = self.handle_module_alias(module_list[0])
-            if utils.map_module2lib(api_lib) == 'Unknown':
-                raise Exception(f"{full_api_name} does not belong to Pytorch, JAX, MindSpore or Jittor.")
-            module = importlib.import_module(api_lib)
-            if len(module_list) > 1:
-                # 将module_name_list进行切片, 只保留除第一个元素以外的部分
-                for submodule_name in module_list[1:]:
-                    module = getattr(module, submodule_name, None)
-                    if module is None:
-                        return False
-            api = getattr(module, api_name, None)
-            if api is None:
+            if not isinstance(full_api_name, str) or not full_api_name.strip():
                 return False
-            else:
-                return True
+
+            parts = full_api_name.split('.')
+            # 首段别名映射，与 utils.validate_api_existence 保持一致
+            api_lib = utils.map_alias2module(parts[0])
+            current_module_obj = importlib.import_module(api_lib)
+
+            # 逐段解析: 优先作为模块导入，失败则回退 getattr
+            accumulated = [api_lib]
+            for sub in parts[1:]:
+                candidate_module = '.'.join(accumulated + [sub])
+                try:
+                    current_module_obj = importlib.import_module(candidate_module)
+                    accumulated.append(sub)
+                    continue
+                except Exception:
+                    attr = getattr(current_module_obj, sub, None)
+                    if attr is None:
+                        return False
+                    current_module_obj = attr
+                    accumulated.append(sub)
+            return True
         except Exception as e:
-            self.error_log.append(f"{full_api_name} is not a valid API. Error: {e}")
+            self.error_log.append(f"{full_api_name} is not a valid API belonging to the deep learning libraries. Error: {e}")
             return False
 
     def validate_apis(self, response):
@@ -461,6 +467,7 @@ Task Requirements:
             cluster_seed_id=cluster_seed.id,
             api_group_id=base_api_group.id,
             raw_code=base_seed_code,
+            start_time=datetime.utcnow()
         )
         self.session.add(base_seed)
         self.session.flush()
@@ -470,6 +477,7 @@ Task Requirements:
         if valid_code is None:
             raise Exception("Failed to generate base seed for base API.")
         base_seed.valid_code = valid_code
+        base_seed.end_time = datetime.utcnow()
         self.session.flush()
         print(f"generate_seed4base() Success - Base seed generated and validated for {base_api_group.apis[0].full_name}:\n\n{base_seed.valid_code}")
         return base_seed, api_combination
@@ -676,7 +684,8 @@ Task Requirements:
         twin_seed = APITestSeed(
             cluster_seed_id=cluster_seed.id,
             api_group_id=twin_api_group.id,
-            raw_code=twin_seed_code
+            raw_code=twin_seed_code,
+            start_time=datetime.utcnow()
         )
         self.session.add(twin_seed)
         self.session.flush()
@@ -687,8 +696,9 @@ Task Requirements:
             print(f"generate_seed4twin() Error - Failed to validate twin seed")
             raise Exception("Failed to generate seed for equivalent API.")
         twin_seed.valid_code = valid_code
-        print(f"generate_seed4twin() Success - Twin seed generated and validated for {twin_api_group.apis[0].full_name}:\n\n{twin_seed.valid_code}")
+        twin_seed.end_time = datetime.utcnow()
         self.session.flush()
+        print(f"generate_seed4twin() Success - Twin seed generated and validated for {twin_api_group.apis[0].full_name}:\n\n{twin_seed.valid_code}")
         return twin_seed
 
     def fuzz_equivalent_cluster(self):
@@ -719,7 +729,6 @@ Task Requirements:
                 base_api_group = base_api_groups[0]
                 cluster_seed = ClusterTestSeed(
                     cluster_id=self.cluster.id,
-                    start_test=datetime.utcnow()
                 )
                 self.session.add(cluster_seed)
                 self.session.flush()
@@ -737,7 +746,13 @@ Task Requirements:
                     print("*" * 30 + f"generate_seed4twin() - Twin API Group({count})" + "*" * 30)
                     twin_api_seed = self.generate_seed4twin(twin_api_group, base_api_seed, base_api_combination, cluster_seed)
                     twin_apis_seeds.append(twin_api_seed)
-                cluster_seed.end_test = datetime.utcnow()
+                
+                # 计算并设置ClusterTestSeed的总耗时
+                total_duration = 0.0
+                for api_seed in cluster_seed.api_seeds:
+                    if api_seed.start_time and api_seed.end_time:
+                        total_duration += (api_seed.end_time - api_seed.start_time).total_seconds()
+                cluster_seed.duration_time = total_duration
                 self.session.commit()
                 print(f"fuzz_equivalent_cluster() Success - Completed seed generation for base API: {base_api_group.apis[0].full_name}")
                 base_api_groups.pop(0)
@@ -991,9 +1006,8 @@ def clear_all_seeds():
 if __name__ == '__main__':
     session = utils.get_session()
     # clear_all_seeds()
-    # llm_client = utils.get_llm_client(llm='gpt4o-mini')
-    llm_client = utils.get_llm_client(llm='gpt4o-mini-bianxie')
+    llm_client = utils.get_llm_client(llm='bianxie')
     #fuzz_value_equivalent_clusters_single_thread(session, llm_client)
     #fuzz_state_equivalent_clusters_single_thread(session, llm_client)
-    #fuzz_value_equivalent_clusters(session, llm_client, max_workers=8)
-    fuzz_state_equivalent_clusters(session, llm_client, max_workers=16)
+    fuzz_value_equivalent_clusters(session, llm_client, max_workers=16)
+    #fuzz_state_equivalent_clusters(session, llm_client, max_workers=16)

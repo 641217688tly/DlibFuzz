@@ -1,5 +1,5 @@
 import yaml
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Text, Table, Boolean, Enum, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Text, Table, Boolean, Enum, DateTime, Float
 from sqlalchemy.orm import relationship, declarative_base
 from datetime import datetime
 
@@ -80,8 +80,7 @@ class ClusterTestSeed(Base):
     cluster = relationship('Cluster', back_populates='cluster_seeds')
     api_seeds = relationship('APITestSeed', back_populates='cluster_seed', cascade="all, delete-orphan")
     is_validated = Column(Boolean, default=False)  # 该种子是否已经修复过了
-    start_test = Column(DateTime, default=datetime.utcnow)  # 设置为该种子的创建时间
-    end_test = Column(DateTime, nullable=True)  # 设置为该种子结束测试用例生成的时间
+    duration_time = Column(Float, default=0.0)  # 该ClusterTestSeed下所有APITestSeed的耗时总和(秒)
 
 
 class APITestSeed(Base):
@@ -94,6 +93,8 @@ class APITestSeed(Base):
     raw_code = Column(Text, nullable=True)
     valid_code = Column(Text, nullable=True)
     is_validated = Column(Boolean, default=False)  # 该种子是否已经修复过了
+    start_time = Column(DateTime, default=datetime.utcnow)  # 设置为该种子的创建时间
+    end_time = Column(DateTime, nullable=True)    # 该APITestSeed的结束时间
 
 
 # 创建表
