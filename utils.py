@@ -6,12 +6,14 @@ import jax
 import mindspore
 import jittor
 import numpy as np
+import os
 import torch
 from openai import OpenAI
 from sqlalchemy.orm import sessionmaker
 from orm import *
 from rag.rag_client import RagClient
-
+import ast
+import re
 
 def get_session():
     with open('config.yml', 'r', encoding='utf-8') as file:  # 读取config.yml文件
@@ -29,30 +31,35 @@ def get_session():
         return session
 
 
-def get_llm_client(llm='gpt4o-mini', proxy_url="http://127.0.0.1:7890"):
+def get_llm_client(llm='openai', proxy_url="http://127.0.0.1:7890"):
     # 设置代理
     proxy = httpx.Client(proxies={
         "http://": proxy_url,
         "https://": proxy_url
     })
     # 根据llm的名称返回对应的客户端
-    if llm == 'gpt4o-mini':
+    if llm == 'openai':
         with open('config.yml', 'r', encoding='utf-8') as file:  # 读取config.yml文件
             config = yaml.safe_load(file)
             openai_client = OpenAI(api_key=config['openai']['api_key'], http_client=proxy)
             return openai_client
-    elif llm == 'QianWen':
-        return None
-    elif llm == 'gpt4o-mini-with-rag':
+    elif llm == 'openai-with-rag':
         with open('config.yml', 'r', encoding='utf-8') as file:
             config = yaml.safe_load(file)
             rag_client = RagClient(base_url="http://localhost:8000", api_key=config['openai']['api_key'])
             return rag_client
+    elif llm == 'bianxie':
+        with open('config.yml', 'r', encoding='utf-8') as file:  # 读取config.yml文件
+            config = yaml.safe_load(file)
+            openai_client = OpenAI(api_key=config['openai']['bianxie_api_key'], http_client=proxy, base_url="https://api.bianxie.ai/v1")
+            return openai_client
+    elif llm == 'QianWen':
+        return None
     else:
         return None
 
 
-def get_libs_info():  # 该函数将返回数据库中待测试的深度学习库的名称和版本, 比如[('Pytorch', '1.12'), ('JAX', '0.4.13'), ('MindSpore', '2.4.0')]
+def get_libs_info():  # 该函数将返回数据库中待测试的深度学习库的名称和版本, 比如[('Pytorch', '2.4.1'), ('JAX', '0.4.33'), ('MindSpore', '2.5.0'), ('Jittor', '1.3.9.14')]
     db_session = get_session()
     try:
         results = db_session.query(API.lib, API.version).distinct().all()
@@ -63,30 +70,103 @@ def get_libs_info():  # 该函数将返回数据库中待测试的深度学习�
     finally:
         db_session.close()
 
+def validate_code_imports(code: str):
+    """
+    从代码字符串中提取 import 语句, 校验相应包/模块在当前 Python 环境中是否可导入。
 
-def validate_api_existence(module_name: str, api_name: str):  # 验证API是否存在的函数
+    返回:
+        - True: 当所有引用的包/模块均存在
+        - (False, missing_modules: list[str]): 存在缺失的包/模块时
+    """
+    modules_to_check = set()
+    # 首选使用 AST 解析, 能够稳健处理多种 import 形式
     try:
-        module_list = module_name.split('.')
-        # 先检查来源库是否为Pytorch, JAX, MindSpore或Jittor中的任意一个
-        api_lib = module_list[0]
-        if map_module2lib(api_lib) == 'Unknown':
-            return False
-        module = importlib.import_module(api_lib)
-        if len(module_list) > 1:
-            # 将module_name_list进行切片, 只保留除第一个元素以外的部分
-            for submodule_name in module_list[1:]:
-                module = getattr(module, submodule_name, None)
-                if module is None:
-                    return False
-        api = getattr(module, api_name, None)
-        if api is None:
-            return False
-        else:
-            return True
-    except (ModuleNotFoundError, AttributeError, ImportError, ValueError, Exception) as e:
-        print(f"validate_api_existence({module_name}, {api_name}) Error: {e}")
+        tree = ast.parse(code)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                # 例如: import numpy as np, torch
+                for alias in node.names:
+                    if alias.name:
+                        modules_to_check.add(alias.name)
+            elif isinstance(node, ast.ImportFrom):
+                # 例如: from torch.nn import functional as F
+                # 相对导入(如 from . import x)无法在无包上下文时可靠校验, 跳过
+                if getattr(node, 'level', 0) and not node.module:
+                    continue
+                if node.module:
+                    modules_to_check.add(node.module)
+    except SyntaxError:
+        # 当代码存在语法问题时, 回退到正则做一个"尽力而为"的提取
+        lines = code.splitlines()
+        import_pattern = re.compile(r"^\s*import\s+(.+)$")
+        from_pattern = re.compile(r"^\s*from\s+([\w\.]+|\.+)\s+import\s+.+$")
+        for line in lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+            m_from = from_pattern.match(line)
+            if m_from:
+                module = m_from.group(1)
+                # 跳过相对导入
+                if module and not module.startswith('.'):
+                    modules_to_check.add(module)
+                continue
+            m_import = import_pattern.match(line)
+            if m_import:
+                # 可能包含多个以逗号分隔的导入
+                payload = m_import.group(1)
+                for part in payload.split(','):
+                    token = part.strip().split()[0] if part.strip() else ''
+                    if token:
+                        modules_to_check.add(token)
+
+    # 实际校验: 优先尝试完整模块路径导入, 失败则回退到顶级包
+    missing_modules = set()
+    for full_api_name in modules_to_check:
+        result = validate_api_existence(full_api_name)
+        if result is False:
+            missing_modules.add(full_api_name)
+    if not missing_modules:
+        return True, None
+    return False, list(missing_modules)
+
+def validate_api_existence(full_api_name: str):
+    """
+    接受完整 API 路径(模块/子模块/属性链), 校验其在当前环境中是否存在。
+
+    示例:
+      - 'torch' / 'torch.nn' / 'torch.nn.functional'
+      - 'torch.nn.functional.relu'
+      - 'jittor.numpy'
+    """
+    if not isinstance(full_api_name, str) or not full_api_name.strip():
         return False
 
+    try:
+        # 以torch.nn.functional为例
+        parts = full_api_name.split('.') # ['torch', 'nn', 'functional']
+        # 处理首段别名
+        api_lib = map_alias2module(parts[0]) # 'torch'
+        current_module_obj = importlib.import_module(api_lib) # 导入torch模块
+        # 逐段解析: 优先尝试作为子模块导入, 失败则回退 getattr
+        accumulated = [api_lib] # ['torch']
+        for sub in parts[1:]:
+            candidate_module = '.'.join(accumulated + [sub]) # 'torch.nn'
+            try:
+                current_module_obj = importlib.import_module(candidate_module) # 导入torch.nn模块
+                accumulated.append(sub)
+                continue
+            except Exception:
+                # 非模块, 尝试作为属性
+                attr = getattr(current_module_obj, sub, None) # 获取torch模块的nn属性
+                if attr is None:
+                    return False
+                current_module_obj = attr # 将current_module_obj赋值为torch模块的nn属性
+                accumulated.append(sub)
+        return True
+    except Exception as e:
+        print(f"validate_api_existence({full_api_name}) Error: {e}")
+        return False
 
 def validate_api_availability(function):  # 验证API是否为被弃用的函数
     """Check if the function is deprecated."""
@@ -102,10 +182,33 @@ def validate_api_availability(function):  # 验证API是否为被弃用的函数
             pass
         return any(item.category == DeprecationWarning for item in w)
 
+def map_alias2module(module_name):
+    lib_map = {
+        'Pytorch': 'torch',
+        'pytorch': "torch",
+        'torch': 'torch',
+        'JAX': 'jax',
+        'jax': 'jax',
+        'jaxlib': 'jax',
+        'MindSpore': 'mindspore',
+        'ms': 'mindspore',
+        'mindspore': 'mindspore',
+        'Jittor': 'jittor',
+        'jittor': 'jittor',
+        'jt': 'jittor',
+        'np': 'numpy',
+        'numpy': 'numpy',
+        'pandas': 'pandas',
+        'pd': 'pandas',
+        'tensorflow': 'tensorflow',
+        'tf': 'tensorflow'
+    }
+    return lib_map.get(module_name, module_name)
 
 def map_module2lib(module_name):
     lib_map = {
         'Pytorch': 'Pytorch',
+        'pytorch': "Pytorch",
         'torch': 'Pytorch',
         'JAX': 'JAX',
         'jax': 'JAX',
@@ -115,16 +218,31 @@ def map_module2lib(module_name):
         'mindspore': 'MindSpore',
         'Jittor': 'Jittor',
         'jittor': 'Jittor',
+        'jt': 'Jittor',
     }
-    return lib_map.get(module_name, 'Unknown')
+    # return lib_map.get(module_name, "Unknown")  # 如果module_name不在lib_map中, 则返回"Unknown")
+    return lib_map.get(module_name, module_name)
 
 
 def inspect_api_info(module_name, api_name):
-    if validate_api_existence(module_name, api_name) is False:  # 验证API是否存在
+    module_alias_mapper = {
+        "tf": "tensorflow",
+        "ms": "mindspore",
+        "np": "numpy",
+        "pd": "pandas",
+        "jt": "jittor",
+        "jnp": "jax.numpy",
+        "pytorch": "torch",
+    }
+    # 将module_name中的lib别名转换为实际的库名
+    module_list = module_name.split('.')
+    module_list[0] = module_alias_mapper.get(module_list[0], module_list[0])
+    module_name = '.'.join(module_list)
+    module_list = module_name.split('.') # 防止"jax.numpy"这种情况
+    if validate_api_existence(f"{module_name}.{api_name}") is False:  # 验证API是否存在
         print(f"inspect_api_info({module_name}, {api_name}) Error: API {api_name} does not exist.")
         return None
 
-    module_list = module_name.split('.')
     module = importlib.import_module(module_list[0])
     if len(module_list) > 1:
         for submodule_name in module_list[1:]:
@@ -147,7 +265,7 @@ def inspect_api_info(module_name, api_name):
 
     # 获取API的版本
     version = ""
-    lib_version_list = get_libs_info()  # [('Pytorch', '1.12'), ('JAX', '0.4.13'), ('MindSpore', '2.4.0')]
+    lib_version_list = get_libs_info()  # [('Pytorch', '2.4.1'), ('JAX', '0.4.33'), ('MindSpore', '2.5.0'), ('Jittor', '1.3.9.14')]
     for lib_name, lib_version in lib_version_list:
         if lib_name.lower() == lib.lower():
             version = lib_version
@@ -297,7 +415,7 @@ def cosine_similarity(x, y):
     return np.dot(x.flatten(), y.flatten()) / (np.linalg.norm(x.flatten()) * np.linalg.norm(y.flatten()))
 
 
-def count_api_nums_with_history_errors(lib):
+def count_api_nums_with_history_errors(lib): # 计算指定库中有多少API存在历史错误
     session = get_session()
     try:
         apis = session.query(API).filter_by(lib=lib).all()
@@ -333,32 +451,683 @@ def retrieve_api_issues(full_api_name):
     finally:
         session.close()
 
+def get_api_info(full_api_name='torch.nn.functional.cross_entropy'):
+    # 从数据库中获取API信息
+    session = get_session()
+    api = session.query(API).filter_by(full_name=full_api_name).first()
+    if api:
+        print(f"id: {api.id}\n\n"
+              f"name: {api.name}\n\n"
+              f"lib: {api.lib}\n\n"
+              f"version: {api.version}\n\n"
+              f"module: {api.module}\n\n"
+              f"full_name: {api.full_name}\n\n"
+              f"signature: {api.signature}\n\n"
+              f"parameters: {api.parameters}\n\n"
+              f"attributes: {api.attributes}\n\n"
+              f"output: {api.output}\n\n"
+              f"description: {api.description}\n\n"
+              f"example: {api.example}\n\n")
+
+def list_clusters(cluster_type='ValueEquivalent'):
+    """
+    列出指定类型的所有cluster及其包含的API
+    
+    Args:
+        cluster_type (str): 聚类类型，可以是 'ValueEquivalent' 或 'StateEquivalent'
+    """
+    if cluster_type not in ['ValueEquivalent', 'StateEquivalent']:
+        print(f"Error: Invalid cluster_type '{cluster_type}'. Must be 'ValueEquivalent' or 'StateEquivalent'.")
+        return
+    
+    session = get_session()
+    try:
+        # 查询指定类型的所有cluster
+        clusters = session.query(Cluster).filter_by(type=cluster_type).all()
+        
+        if not clusters:
+            print(f"No {cluster_type} clusters found.")
+            return
+        
+        print(f"=== {cluster_type} Clusters ===")
+        print(f"Total {cluster_type} clusters: {len(clusters)}")
+        print("=" * 80)
+        
+        for i, cluster in enumerate(clusters, 1):
+            print(f"\nCluster #{i} (ID: {cluster.id})")
+            print("-" * 40)
+            
+            # 获取该cluster下的所有API组
+            api_groups = cluster.api_groups
+            if not api_groups:
+                print("  No API groups found in this cluster.")
+                continue
+            
+            for j, api_group in enumerate(api_groups, 1):
+                if len(api_group.apis) == 1:
+                    print(f"  Group {j}: Single API")
+                else:
+                    print(f"  Group {j}: API Group ({len(api_group.apis)} APIs)")
+                
+                # 打印该组中的所有API
+                for api in api_group.apis:
+                    print(f"    - {api.full_name} (ID: {api.id}, Lib: {api.lib})")
+            
+            print(f"  Total API groups in this cluster: {len(api_groups)}")
+            total_apis = sum(len(group.apis) for group in api_groups)
+            print(f"  Total APIs in this cluster: {total_apis}")
+        
+        # 统计信息
+        total_api_groups = sum(len(cluster.api_groups) for cluster in clusters)
+        total_apis = sum(sum(len(group.apis) for group in cluster.api_groups) for cluster in clusters)
+        
+        print("=" * 80)
+        print(f"Summary for {cluster_type} clusters:")
+        print(f"  Total clusters: {len(clusters)}")
+        print(f"  Total API groups: {total_api_groups}")
+        print(f"  Total APIs: {total_apis}")
+        
+    except Exception as e:
+        print(f"An error occurred while listing clusters: {str(e)}")
+    finally:
+        session.close()
+
+
+def clean_invalid_clusters():
+    """
+    清理无效的cluster
+    无效cluster包括：
+    1. 只包含一个API组的cluster
+    2. 包含重复APIGroup的cluster（APIGroup下的API集合完全相同）
+    """
+    session = get_session()
+    try:
+        invalid_clusters = []
+        # 查询所有cluster
+        clusters = session.query(Cluster).all()
+        for cluster in clusters:
+            is_invalid = False
+            invalid_reason = ""
+            
+            # 检查条件1：只有一个或没有API组
+            if len(cluster.api_groups) <= 1:
+                is_invalid = True
+                invalid_reason = f"Only {len(cluster.api_groups)} API group(s)"
+            
+            # 检查条件2：存在重复的APIGroup（API集合相同）
+            elif len(cluster.api_groups) > 1:
+                api_group_signatures = []
+                for api_group in cluster.api_groups:
+                    # 为每个APIGroup创建签名：按API的full_name排序后组成的元组
+                    api_names = sorted([api.full_name for api in api_group.apis])
+                    signature = tuple(api_names)
+                    api_group_signatures.append(signature)
+                
+                # 检查是否所有APIGroup都是重复的（即只有一种唯一的API集合）
+                unique_signatures = set(api_group_signatures)
+                if len(unique_signatures) == 1:
+                    is_invalid = True
+                    invalid_reason = f"All API groups are identical (API set: {list(unique_signatures)[0]})"
+            
+            if is_invalid:
+                invalid_clusters.append((cluster, invalid_reason))
+        
+        if not invalid_clusters:
+            print("No invalid clusters found.")
+            return
+        
+        print(f"Found {len(invalid_clusters)} invalid clusters:")
+        for cluster, reason in invalid_clusters:
+            print(f"  Cluster ID: {cluster.id}, Type: {cluster.type}, Reason: {reason}")
+            print(f"    API groups: {len(cluster.api_groups)}")
+            if cluster.api_groups:
+                for i, api_group in enumerate(cluster.api_groups, 1):
+                    api_names = [api.full_name for api in api_group.apis]
+                    print(f"      Group {i}: {api_names}")
+        
+        # 询问是否删除
+        response = input(f"\nDo you want to delete these {len(invalid_clusters)} invalid clusters? (y/N): ")
+        if response.lower() in ['y', 'yes']:
+            for cluster, reason in invalid_clusters:
+                print(f"Deleting cluster {cluster.id} (Reason: {reason})...")
+                
+                # 1. 重置相关API的is_clustered状态
+                for api_group in cluster.api_groups:
+                    for api in api_group.apis:
+                        api.is_clustered = False
+                        print(f"  Reset API {api.full_name} is_clustered to False")
+                
+                # 2. 显式删除相关的APITestSeed
+                for api_group in cluster.api_groups:
+                    api_seeds = api_group.api_seeds
+                    for api_seed in api_seeds:
+                        print(f"  Deleting APITestSeed {api_seed.id}")
+                        session.delete(api_seed)
+                
+                # 3. 显式删除相关的ClusterTestSeed
+                cluster_seeds = cluster.cluster_seeds
+                for cluster_seed in cluster_seeds:
+                    print(f"  Deleting ClusterTestSeed {cluster_seed.id}")
+                    # 先删除cluster_seed下的所有api_seeds
+                    for api_seed in cluster_seed.api_seeds:
+                        print(f"    Deleting APITestSeed {api_seed.id} from ClusterTestSeed")
+                        session.delete(api_seed)
+                    session.delete(cluster_seed)
+                
+                # 4. 显式删除相关的APIGroup
+                api_groups = list(cluster.api_groups)  # 创建副本避免迭代时修改
+                for api_group in api_groups:
+                    print(f"  Deleting APIGroup {api_group.id}")
+                    session.delete(api_group)
+                
+                # 5. 最后删除cluster
+                print(f"  Deleting Cluster {cluster.id}")
+                session.delete(cluster)
+            
+            session.commit()
+            print(f"Successfully deleted {len(invalid_clusters)} invalid clusters with cascade deletion.\n\n")
+        else:
+            print("No clusters were deleted.\n\n")
+            
+    except Exception as e:
+        session.rollback()
+        print(f"An error occurred while cleaning invalid clusters: {str(e)}\n\n")
+    finally:
+        session.close()
+        
+def count_api_without_cluster():
+    """
+    统计API的聚类状态:
+    1. 已完成聚类但没有匹配到任何等价API的API数量 (is_clustered=True 但不属于任何APIGroup)
+    2. 未完成聚类的API数量 (is_clustered=False)
+    """
+    session = get_session()
+    try:
+        # 查询所有已聚类的API
+        clustered_apis = session.query(API).filter(API.is_clustered == True).all()
+        
+        # 查询所有未聚类的API
+        unclustered_apis = session.query(API).filter(API.is_clustered == False).all()
+        
+        # 查询所有在APIGroup中的API ID
+        apis_in_groups = session.query(api_group_association.c.api_id).all()
+        apis_in_groups_ids = {api_id[0] for api_id in apis_in_groups}
+        
+        # 统计已聚类但不在任何APIGroup中的API
+        apis_without_cluster = []
+        for api in clustered_apis:
+            if api.id not in apis_in_groups_ids:
+                apis_without_cluster.append(api)
+        
+        # 按库分类统计已聚类但没有匹配的API
+        lib_counts_without_cluster = {}
+        for api in apis_without_cluster:
+            lib_counts_without_cluster[api.lib] = lib_counts_without_cluster.get(api.lib, 0) + 1
+        
+        # 按库分类统计未聚类的API
+        lib_counts_unclustered = {}
+        for api in unclustered_apis:
+            lib_counts_unclustered[api.lib] = lib_counts_unclustered.get(api.lib, 0) + 1
+        
+        # 打印已聚类但没有匹配的API统计
+        print(f"已完成聚类但没有匹配到任何等价API的API统计:")
+        print("-" * 60)
+        total_without_cluster = len(apis_without_cluster)
+        for lib, count in lib_counts_without_cluster.items():
+            print(f"{lib}: {count} APIs")
+        print("-" * 60)
+        print(f"总计: {total_without_cluster} APIs")
+        
+        # 打印未聚类的API统计
+        print(f"\n未完成聚类的API统计:")
+        print("-" * 60)
+        total_unclustered = len(unclustered_apis)
+        for lib, count in lib_counts_unclustered.items():
+            print(f"{lib}: {count} APIs")
+        print("-" * 60)
+        print(f"总计: {total_unclustered} APIs")
+        
+        # 打印总体统计
+        print(f"\n总体统计:")
+        print("-" * 60)
+        print(f"已完成聚类但没有匹配的API: {total_without_cluster}")
+        print(f"未完成聚类的API: {total_unclustered}")
+        print(f"需要处理的API总数: {total_without_cluster + total_unclustered}")
+        
+        print("\n已聚类但没有匹配的API详细列表:")
+        for api in apis_without_cluster:
+            print(f"  {api.full_name} (ID: {api.id}, Lib: {api.lib})")
+        
+        print("\n未聚类的API详细列表:")
+        for api in unclustered_apis:
+            print(f"  {api.full_name} (ID: {api.id}, Lib: {api.lib})")
+        
+        return {
+            'without_cluster': total_without_cluster,
+            'unclustered': total_unclustered,
+            'total_need_processing': total_without_cluster + total_unclustered
+        }
+        
+    except Exception as e:
+        print(f"统计API聚类状态时发生错误: {str(e)}")
+        return {
+            'without_cluster': 0,
+            'unclustered': 0,
+            'total_need_processing': 0
+        }
+    finally:
+        session.close()
+
+
+def count_cluster_test_status(cluster_type='ValueEquivalent'):
+    """
+    统计指定类型的Cluster的测试完成情况
+    
+    Args:
+        cluster_type (str): 聚类类型，可以是 'ValueEquivalent' 或 'StateEquivalent'
+    """
+    if cluster_type not in ['ValueEquivalent', 'StateEquivalent']:
+        print(f"错误: 无效的cluster_type '{cluster_type}'. 必须是 'ValueEquivalent' 或 'StateEquivalent'.")
+        return None
+    
+    session = get_session()
+    try:
+        # 查询指定类型的所有cluster
+        clusters = session.query(Cluster).filter_by(type=cluster_type).all()
+        
+        if not clusters:
+            print(f"未找到 {cluster_type} 类型的cluster.")
+            return {'tested': 0, 'untested': 0, 'total': 0}
+        
+        # 统计已测试和未测试的cluster数量
+        tested_clusters = []
+        untested_clusters = []
+        
+        for cluster in clusters:
+            if cluster.is_tested:
+                tested_clusters.append(cluster)
+            else:
+                untested_clusters.append(cluster)
+        
+        tested_count = len(tested_clusters)
+        untested_count = len(untested_clusters)
+        total_count = len(clusters)
+        
+        print(f"=== {cluster_type} Cluster 测试状态统计 ===")
+        print(f"已完成测试的cluster数量: {tested_count}")
+        print(f"未完成测试的cluster数量: {untested_count}")
+        print(f"总cluster数量: {total_count}")
+        
+        if total_count > 0:
+            completion_rate = (tested_count / total_count) * 100
+            print(f"测试完成率: {completion_rate:.2f}%")
+        return {
+            'tested': tested_count,
+            'untested': untested_count,
+            'total': total_count,
+            'completion_rate': (tested_count / total_count) * 100 if total_count > 0 else 0
+        }
+    except Exception as e:
+        print(f"统计cluster测试状态时发生错误: {str(e)}")
+        return None
+    finally:
+        session.close()
+
+def count_invalid_cluster_seeds(clusters_folder_path):
+    """
+    统计指定路径下无效的cluster种子数量
+    
+    Args:
+        clusters_folder_path: cluster文件夹的路径
+        
+    Returns:
+        dict: 包含统计信息的字典
+    """
+    if not os.path.exists(clusters_folder_path):
+        print(f"错误: 路径 {clusters_folder_path} 不存在")
+        return {'invalid_files_count': 0, 'clusters_with_invalid_files': 0}
+    
+    invalid_files_num = 0  # 统计所有无效py文件总数
+    total_files_num = 0  # 统计所有py文件总数
+    clusters_with_invalid_files_num = 0  # 统计包含无效文件的cluster数量
+    
+    # 获取所有cluster文件夹（包括带valid前缀的）
+    all_folders = [f for f in os.listdir(clusters_folder_path) if os.path.isdir(os.path.join(clusters_folder_path, f))]
+    
+    # 筛选出cluster文件夹（Cluster_开头或valid_Cluster_开头）
+    cluster_folders = []
+    for folder in all_folders:
+        if folder.startswith('Cluster_') or folder.startswith('valid_Cluster_'):
+            cluster_folders.append(folder)
+    
+    print(f"在{clusters_folder_path}路径下找到 {len(cluster_folders)} 个cluster文件夹")
+    print("-" * 60)
+    
+    for cluster_folder in cluster_folders:
+        cluster_path = os.path.join(clusters_folder_path, cluster_folder)
+        cluster_invalid_count = 0  # 当前cluster中的无效文件数量
+        
+        # 获取该cluster下的所有子文件夹（seed文件夹）
+        try:
+            sub_folders = [f for f in os.listdir(cluster_path) if os.path.isdir(os.path.join(cluster_path, f))]
+        except Exception as e:
+            print(f"访问 {cluster_path} 时出错: {e}")
+            continue
+        
+        for sub_folder in sub_folders:
+            sub_folder_path = os.path.join(cluster_path, sub_folder)
+            
+            # 获取该子文件夹下的所有文件
+            try:
+                files = [f for f in os.listdir(sub_folder_path) if os.path.isfile(os.path.join(sub_folder_path, f))]
+            except Exception as e:
+                print(f"访问 {sub_folder_path} 时出错: {e}")
+                continue
+            
+            # 统计py文件
+            for file in files:
+                if file.endswith('.py'):
+                    total_files_num += 1  # 统计所有py文件
+                    if file.startswith('invalid.'):
+                        cluster_invalid_count += 1
+                        invalid_files_num += 1
+                        print(f"  找到无效文件: {cluster_folder}/{sub_folder}/{file}")
+        
+        # 如果当前cluster有无效文件，则增加cluster计数
+        if cluster_invalid_count > 0:
+            clusters_with_invalid_files_num += 1
+            print(f"{cluster_folder}文件夹下有 {cluster_invalid_count} 个无效文件")
+        else:
+            print(f"{cluster_folder}文件夹下没有无效文件")
+    
+    print("-" * 60)
+    print(f"统计结果:")
+    print(f"  无效py文件总数: {invalid_files_num} / {total_files_num}")
+    print(f"  包含无效文件的cluster数量: {clusters_with_invalid_files_num} / {len(cluster_folders)}")
+    
+    return {
+        'invalid_files_count': invalid_files_num,
+        'clusters_with_invalid_files': clusters_with_invalid_files_num,
+    }
+
+def count_syntax_error_cluster_seeds():
+    """
+    统计fuzzer/seeds/validated_seeds/下的py文件中存在语法问题的文件数量
+    
+    检查的语法问题包括：
+    1. 使用分号(;)连接代码行而不是换行符
+    2. 缺少适当的换行符和缩进
+    3. 一行代码过长（超过合理长度）
+    
+    Returns:
+        dict: 包含统计信息的字典
+    """
+
+    def check_python_file_syntax(file_path):
+        """
+        检查单个Python文件是否存在语法问题
+
+        Args:
+            file_path: Python文件路径
+
+        Returns:
+            tuple: (是否存在语法问题, 问题列表)
+        """
+        issues = []
+
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # 检查1: 是否使用分号连接代码而不是换行符
+            if ';' in content:
+                # 排除字符串中的分号和注释中的分号
+                lines = content.split('\n')
+                for i, line in enumerate(lines, 1):
+                    stripped_line = line.strip()
+                    if not stripped_line or stripped_line.startswith('#'):
+                        continue
+
+                    # 简单检查：如果一行中有多个分号且不在字符串中
+                    semicolon_count = line.count(';')
+                    if semicolon_count > 0:
+                        # 检查是否在字符串中
+                        in_string = False
+                        quote_char = None
+                        actual_semicolons = 0
+
+                        for j, char in enumerate(line):
+                            if char in ['"', "'"] and (j == 0 or line[j - 1] != '\\'):
+                                if not in_string:
+                                    in_string = True
+                                    quote_char = char
+                                elif char == quote_char:
+                                    in_string = False
+                                    quote_char = None
+                            elif char == ';' and not in_string:
+                                actual_semicolons += 1
+
+                        if actual_semicolons > 0:
+                            issues.append(f"第{i}行使用分号连接代码: {actual_semicolons}个分号")
+
+            # 检查2: 检查是否存在过长的单行代码（可能是缺少换行符的标志）
+            lines = content.split('\n')
+            for i, line in enumerate(lines, 1):
+                if len(line.strip()) > 200:  # 超过200字符认为过长
+                    issues.append(f"第{i}行代码过长({len(line)}字符)，可能缺少换行符")
+
+            # 检查3: 尝试用AST解析，检查语法是否正确
+            try:
+                ast.parse(content)
+            except SyntaxError as e:
+                issues.append(f"Python语法错误: {e.msg} (行 {e.lineno})")
+
+            # 检查4: 检查缩进问题 - 寻找明显的缩进错误模式
+            # 例如类或函数定义后没有正确缩进
+            for i, line in enumerate(lines, 1):
+                stripped = line.strip()
+                if stripped.endswith(':') and (
+                        'def ' in stripped or 'class ' in stripped or 'if ' in stripped or 'for ' in stripped or 'while ' in stripped):
+                    # 检查下一行是否正确缩进
+                    if i < len(lines):
+                        next_line = lines[i]
+                        if next_line.strip() and not next_line.startswith('    ') and not next_line.startswith('\t'):
+                            # 但是要排除空行和注释行
+                            if not next_line.strip().startswith('#'):
+                                issues.append(f"第{i + 1}行可能缺少正确的缩进")
+
+            return len(issues) > 0, issues
+
+        except Exception as e:
+            return True, [f"读取文件时出错: {e}"]
+    
+    # 定义要检查的路径
+    paths_to_check = [
+        'fuzzer/seeds/validated_seeds/StateEquivalent',
+        'fuzzer/seeds/validated_seeds/ValueEquivalent'
+    ]
+    
+    total_files = 0
+    syntax_error_files = 0
+    detailed_results = []
+    
+    print("=== 检查 Python 文件语法问题 ===")
+    print("-" * 80)
+    
+    for base_path in paths_to_check:
+        if not os.path.exists(base_path):
+            print(f"路径不存在: {base_path}")
+            continue
+            
+        print(f"\n检查路径: {base_path}")
+        print("-" * 60)
+        
+        path_total_files = 0
+        path_syntax_error_files = 0
+        
+        # 遍历所有cluster文件夹
+        cluster_folders = [f for f in os.listdir(base_path) 
+                          if os.path.isdir(os.path.join(base_path, f)) and 
+                          (f.startswith('Cluster_') or f.startswith('valid_Cluster_'))]
+        
+        for cluster_folder in cluster_folders:
+            cluster_path = os.path.join(base_path, cluster_folder)
+            cluster_error_files = 0
+            
+            try:
+                # 遍历cluster下的所有子文件夹
+                sub_folders = [f for f in os.listdir(cluster_path) 
+                              if os.path.isdir(os.path.join(cluster_path, f))]
+                
+                for sub_folder in sub_folders:
+                    sub_folder_path = os.path.join(cluster_path, sub_folder)
+                    
+                    try:
+                        # 检查所有Python文件
+                        files = [f for f in os.listdir(sub_folder_path) 
+                                if f.endswith('.py') and os.path.isfile(os.path.join(sub_folder_path, f))]
+                        
+                        for file in files:
+                            file_path = os.path.join(sub_folder_path, file)
+                            total_files += 1
+                            path_total_files += 1
+                            
+                            # 检查文件是否存在语法问题
+                            has_syntax_issues, issues = check_python_file_syntax(file_path)
+                            
+                            if has_syntax_issues:
+                                syntax_error_files += 1
+                                path_syntax_error_files += 1
+                                cluster_error_files += 1
+                                
+                                detailed_results.append({
+                                    'file_path': file_path,
+                                    'issues': issues
+                                })
+                                
+                    except Exception as e:
+                        print(f"    访问子文件夹 {sub_folder_path} 时出错: {e}")
+                        
+            except Exception as e:
+                print(f"  访问cluster文件夹 {cluster_path} 时出错: {e}")
+                continue
+            
+            # 如果cluster有语法错误文件，显示统计信息
+            if cluster_error_files > 0:
+                print(f"  {cluster_folder}: {cluster_error_files} 个文件存在语法问题")
+        
+        print(f"\n{base_path} 统计结果:")
+        print(f"  总文件数: {path_total_files}")
+        print(f"  存在语法问题的文件数: {path_syntax_error_files}")
+        if path_total_files > 0:
+            error_rate = (path_syntax_error_files / path_total_files) * 100
+            print(f"  语法错误率: {error_rate:.2f}%")
+    
+    print("\n" + "=" * 80)
+    print("总体统计结果:")
+    print(f"  检查的总文件数: {total_files}")
+    print(f"  存在语法问题的文件数: {syntax_error_files}")
+    if total_files > 0:
+        overall_error_rate = (syntax_error_files / total_files) * 100
+        print(f"  总体语法错误率: {overall_error_rate:.2f}%")
+    
+    # 显示详细的问题分类统计
+    if not detailed_results:
+        return
+
+    print("\n详细问题分类统计:")
+    print("-" * 60)
+
+    issue_categories = {
+        '使用分号': 0,
+        '代码过长': 0,
+        'Python语法错误': 0,
+        '缩进问题': 0,
+        '其他问题': 0
+    }
+
+    for result in detailed_results:
+        for issue in result['issues']:
+            if '分号' in issue:
+                issue_categories['使用分号'] += 1
+            elif '过长' in issue:
+                issue_categories['代码过长'] += 1
+            elif 'Python语法错误' in issue:
+                issue_categories['Python语法错误'] += 1
+            elif '缩进' in issue:
+                issue_categories['缩进问题'] += 1
+            else:
+                issue_categories['其他问题'] += 1
+
+    for category, count in issue_categories.items():
+        if count > 0:
+            print(f"  {category}: {count} 个问题")
+    return {
+        'total_files': total_files,
+        'syntax_error_files': syntax_error_files,
+        'error_rate': (syntax_error_files / total_files) * 100 if total_files > 0 else 0,
+        'detailed_results': detailed_results
+    }
 
 if __name__ == '__main__':
-    # list = [
-    #    'torch.nn.functional.relu',
-    #    'torch.nn.ReLU',
-    #    'mindspore.ops.relu',
-    #    'mindspore.nn.ReLU',
-    #    'jax.nn.relu',
-    #    'jittor.init.calculate_gain',
-    # ]
-    # list = [
-    #     'torch.nn.functional.cross_entropy',
-    #     'torch.nn.CrossEntropyLoss',
-    #     'mindspore.nn.CrossEntropyLoss',
-    #     "mindspore.ops.cross_entropy",
-    # ]
-    # for api in list:
-    #     module_name, api_name = api.rsplit('.', 1)
-    #     print(validate_api_existence(module_name, api_name))
+    # print(get_libs_info())
+    # count_api_nums_with_history_errors('Pytorch')
+    # count_api_nums_with_history_errors('MindSpore')
+    # count_api_nums_with_history_errors('JAX')
+    # count_api_nums_with_history_errors('Jittor')
 
-    # count_api_nums_with_history_errors('Pytorch') # 85/890(旧); 461/1201(旧); 597/1335(新)
-    # count_api_nums_with_history_errors('JAX') # 269/961(旧); 306/974(旧); 463/1015(新)
-    # count_api_nums_with_history_errors('MindSpore') # 248/2378(新)
+    # list_clusters('ValueEquivalent')
+    # print("\n")
+    # list_clusters('StateEquivalent')
+    # print("\n")
+
+    # 统计cluster测试状态
+    # count_cluster_test_status('ValueEquivalent')
+    # print("\n")
+    # count_cluster_test_status('StateEquivalent')
+    # print("\n")
+
+    # count_api_without_cluster()
+    #count_invalid_cluster_seeds('fuzzer/seeds/validated_seeds/ValueEquivalent') # 无效py文件总数: 858 / 16423; 包含无效文件的cluster数量: 297 / 1006
+    #count_invalid_cluster_seeds('fuzzer/seeds/validated_seeds/StateEquivalent') # 无效py文件总数: 2609 / 28825; 包含无效文件的cluster数量: 754 / 1918
+    # clean_invalid_clusters()
+    
+    # 统计语法错误的cluster种子文件
+    # count_syntax_error_cluster_seeds() # Total: 19187/45248(错误率42.40%) | StateEquivalent: 12398/28825(错误率43.01%) | ValueEquivalent: 6789/16423(错误率41.34%)
+
+    # full_api_name = "jax.jit"
+    # retrieve_api_issues(full_api_name)
+    # print("="*60)
+    # get_api_info(full_api_name)
+
     # session = get_session()
-    ## 从数据库中获取API中version为""的api
-    # apis = session.query(API).filter_by(version="").all()
+    # # 检查哪个API的history_errors最多
+    # apis = session.query(API).all()
+    # max_history_errors = 0
+    # max_history_errors_api = None
     # for api in apis:
-    #    print(api.full_name)
-    retrieve_api_issues('torch.nn.functional.cross_entropy')
+    #     if len(api.history_errors) > max_history_errors:
+    #         max_history_errors = len(api.history_errors)
+    #         max_history_errors_api = api
+    # print(f"API with the most history errors: {max_history_errors_api.full_name} ({max_history_errors})")
+    # session.close()
+
+    # retrieve_api_issues('jax.jit')
+
+    print(validate_api_existence('jax'))
+
+    code = """
+import jittor as jt
+import jittor.numpy as jnp
+import jax
+
+# 创建两个不同形状的张量
+tensor_a = jt.array(jnp.array([[1, 2], [3, 4]]), dtype=jt.float32)
+tensor_b = jt.array(jnp.array([1, 2]), dtype=jt.float32)
+
+# 尝试将不同形状的张量相加
+output = tensor_a.add(tensor_b)
+print(output)
+"""
+    result1, result2 = validate_code_imports(code)
+    print(result1, result2)

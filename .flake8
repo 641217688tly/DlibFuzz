@@ -1,4 +1,43 @@
 [flake8]
-ignore = F811,F841,F401
-select = F
+extend-ignore =
+    E101,
+    E114,
+    E115,
+    E116,
+    E121,
+    E221,
+    E222,
+    E225,
+    E226,
+    E227,
+    E228,
+    E251,
+    E261,
+    E262,
+    E265,
+    E266,
+    E301,
+    E302,
+    E303,
+    E305,
+    E306,
+    E401,
+    E711,
+    E712,
+    E722,
+    E741,
+    E742,
+    E743,
+    E902,
+    W291,
+    W292,
+    W293,
+    W391,
+    W503,
+    W504,
+    F401,
+    F403,
+    F405
+exclude = .git,__pycache__,docs/source/conf.py,old,build,dist
+select = E,F
 max-line-length = 1200

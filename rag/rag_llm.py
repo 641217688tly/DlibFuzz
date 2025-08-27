@@ -1,15 +1,15 @@
 import datetime
 import os
 import time
+from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain.schema import Document
 from langchain_core.prompts import ChatPromptTemplate
-from llm import OpenAILLM
-# from transformers_llm import TransformersLLM
-from embeddings import OllamaEmbeddings
+from embeddings import OllamaEmbeddings, OpenAIEmbeddings
 from langchain.chains import RetrievalQA
+from typing import List, Dict, Union
 
 
 def load_files(directory: str, kind: str):
@@ -17,96 +17,130 @@ def load_files(directory: str, kind: str):
     
     for root, _, files in os.walk(directory):
         for filename in files:
-            if filename.endswith(('.html', '.htm', '.md')):
-                filepath = os.path.join(root, filename)
-                try:
-                    if filename.endswith(('.html', '.htm')):
-                        with open(filepath, 'r', encoding='utf-8') as file:
-                            soup = BeautifulSoup(file, 'html.parser')
-                            if kind == 'pytorch' or 'jax':
-                                sections = soup.find_all('div', class_='section')
-                                if sections:
-                                    text = "\n".join(section.get_text(separator='') for section in sections)
-                                else:
-                                    # If no sections found, get all text
-                                    text = soup.get_text(separator='\n')
-                            elif kind == 'mindspore' or kind == 'jittor':
-                                sections = soup.find_all('div', class_='section')
-                                if sections:
-                                    text = "\n".join(section.get_text(separator=' ') for section in sections)
-                                else:
-                                    # If no sections found, get all text
-                                    text = soup.get_text(separator='')
+            if not filename.endswith(('.html', '.htm', '.md', '.txt')):
+                continue
+            filepath = os.path.join(root, filename)
+            try:
+                if filename.endswith(('.html', '.htm')):
+                    with open(filepath, 'r', encoding='utf-8') as file:
+                        soup = BeautifulSoup(file, 'html.parser')
+                        if kind == 'pytorch' or 'jax':
+                            sections = soup.find_all('div', class_='section')
+                            if sections:
+                                text = "\n".join(section.get_text(separator='') for section in sections)
                             else:
+                                # If no sections found, get all text
                                 text = soup.get_text(separator='\n')
-                            documents.append(text)
-                    else:  # .md files
-                        with open(filepath, 'r', encoding='utf-8') as file:
-                            text = file.read()
-                            documents.append(text)
-                except Exception as e:
-                    print(f"Error processing file {filepath}: {str(e)}")
-                    continue
-        
+                        elif kind == 'mindspore' or kind == 'jittor':
+                            sections = soup.find_all('div', class_='section')
+                            if sections:
+                                text = "\n".join(section.get_text(separator=' ') for section in sections)
+                            else:
+                                # If no sections found, get all text
+                                text = soup.get_text(separator='')
+                        else:
+                            text = soup.get_text(separator='\n')
+                        documents.append(text)
+                elif filename.endswith(('.md', '.txt')):
+                    with open(filepath, 'r', encoding='utf-8') as file:
+                        text = file.read()
+                        documents.append(text)
+            except Exception as e:
+                print(f"Error processing file {filepath}: {str(e)}")
+                continue
+    
     return documents
 
 def create_vector_store_batched(documents, embeddings, batch_size=100):
     """Batch process documents to create vector store"""
     text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
     vector_store = None
-    
+
     try:
         for i in range(0, len(documents), batch_size):
             batch = documents[i:i + batch_size]
             split_docs = text_splitter.split_documents(
                 [Document(page_content=doc) for doc in batch]
             )
-            
+
             if vector_store is None:
                 vector_store = FAISS.from_documents(split_docs, embeddings)
             else:
                 vector_store.add_documents(split_docs)
                 
             print(f'Processed batch {i//batch_size + 1}/{len(documents)//batch_size + 1}')
-        
+
         return vector_store
     except Exception as e:
         print(f"Error in create_vector_store_batched: {str(e)}")
         return None
 
 
-def build_embeddings(documents_dir: list):
-    embeddings = OllamaEmbeddings(model='bge-m3')
+def build_embeddings(documents_dir: list,
+                     use_third_party_hosted: bool = False,
+                     openai_api_key: str = ''):
+    if use_third_party_hosted:
+        try:
+            print('Using model from OpenAI for text embedding.')
+            embeddings = OpenAIEmbeddings(api_key=openai_api_key)
+        except Exception as e:
+            print(f"Error happend: {e}")
+    else:
+        print('Using self-hosted model for text embedding')
+        embeddings = OllamaEmbeddings(model='nomic-embed-text')
+
     if os.path.exists('vector_store.faiss'):
         print('Vector store already existed.')
         return
 
     print('--------------Creating vector store--------------')
 
-    docs = []
-    for directory in documents_dir:
-        docs += load_files(directory, kind=directory.strip('docs/'))
-    print('Documents Loaded')
+    try:
+        docs = []
+        for directory in documents_dir:
+            print(f"Loading from {directory}")
+            kind = directory.split('/')[-1] if '/' in directory else directory
+            loaded_docs = load_files(directory, kind=kind)
+            print(f"Loaded {len(loaded_docs)} from {directory}...")
+            docs += loaded_docs
 
-    # Create a FAISS vector store from the documents and their embeddings
-    # vector_store = FAISS.from_documents(split_docs, embeddings)
-    vector_store = create_vector_store_batched(docs, embeddings)
-    print('Vector store created.')
+        print(f'{len(docs)} documents loaded.')
 
-    vector_store.save_local('vector_store.faiss')
-    print('Vector store saved.')
+        # 创建FAISS向量存储
+        vector_store = create_vector_store_batched(docs, embeddings)
 
-    return vector_store
+        # 添加错误检查
+        if vector_store is None:
+            print("Error: Cannot build vectortore.")
+            return None
+
+        print('Vectorstore built as expected.')
+
+        # 保存向量存储
+        try:
+            vector_store.save_local('vector_store.faiss')
+            print('Vectorstore has been saved locally.')
+        except Exception as e:
+            print(f"Error when saving vectorstore: {str(e)}")
+            return None
+
+        return vector_store
+    except Exception as e:
+        print(f"Error when building embeddings: {str(e)}")
+        return None
 
 
 def initialize_rag_system(is_local: bool,
-                          openai_model: str = "gpt-4o-mini", 
+                          openai_model: str = 'gpt-4o-mini', 
                           openai_api_key: str = '',
+                          ollama_model: str = 'qwen3:14b',
+                          ollama_api_url: str = 'http://localhost:11434',
+                          ollama_embedding_model: str = 'nomic-embed-text',
                           instructions_template: str = None
                           ):
     
     # Initialize embeddings
-    embeddings = OllamaEmbeddings(model='bge-m3')
+    embeddings = OllamaEmbeddings(model=ollama_embedding_model)
     print('Embeddings initialized.')
 
     if os.path.exists('vector_store.faiss'):
@@ -115,29 +149,19 @@ def initialize_rag_system(is_local: bool,
                                         allow_dangerous_deserialization=True)
         print('Vector store loaded.')
     else:
-        # print('Vector store not found. Creating new vector store...')
-        # vector_store = build_embeddings(documents_dir=documents_dir,
-        #                                 embeddings=embeddings)
         raise Exception('Vector store not found. Please invoke build_embeddings to build the vector store.')
     
-    
-    # Step 4: Initialize LLM
-    # llm = CodeQwenLLM()
+    # Initialize LLM
     if is_local:
-        print("Local LLM not implemented yet.")
-        # llm = TransformersLLM(
-        #     model_id="Qwen/Qwen2.5-Coder-14B-Instruct",
-        #     device="auto",          # 自动选择设备
-        #     load_in_4bit=False,      # 4-bit量化
-        #     # load_in_8bit=True,      # 8-bit量化
-        #     torch_dtype="bfloat16"  # 使用 bfloat16 精度
-        # )
+        from llm import OllamaLLM
+        llm = OllamaLLM(model_name=ollama_model, api_url=ollama_api_url)
+        print(f"Local LLM initialized with model: {ollama_model}")
     else:
-        llm = OpenAILLM(openai_model, openai_api_key)
-    print('LLM initialized.')
+        from llm import OpenAILLM
+        llm = OpenAILLM(model_name=openai_model, api_key=openai_api_key)
+        print(f"OpenAI LLM initialized with model: {openai_model}")
     
-    # Step 5: Establish RAG pipeline
-
+    # Establish RAG pipeline
     if instructions_template is None:
         prompt_template = """
         Instructions:
@@ -152,7 +176,7 @@ def initialize_rag_system(is_local: bool,
 
         """
     else:
-        prompt_template = "Instrustions:\n" + instructions_template + """
+        prompt_template = "Instructions:\n" + instructions_template + """
 
         Retrieved Documents:
         {context}
@@ -162,7 +186,7 @@ def initialize_rag_system(is_local: bool,
 
         """
 
-    prompt = ChatPromptTemplate.from_template(prompt_template) # PROMPT?
+    prompt = ChatPromptTemplate.from_template(prompt_template)
 
     qa_chain = RetrievalQA.from_chain_type(
         llm=llm, 
@@ -171,41 +195,116 @@ def initialize_rag_system(is_local: bool,
         chain_type_kwargs={"prompt": prompt}
     )
 
-    
-    # prompt = ChatPromptTemplate.from_template(prompt_template)
-    
-    def format_docs(docs):
-        return "\n\n".join(doc.page_content for doc in docs)
-    
-    # # Create a stuff chain with the custom prompt
-    # combine_documents_chain = create_stuff_documents_chain(
-    #     llm=llm,
-    #     prompt=prompt,
-    # )
-    
-    # qa_chain = (
-    #     {
-    #         "context": vector_store.as_retriever() | format_docs,
-    #         "question": RunnablePassthrough(),
-    #     } 
-    #     | prompt 
-    #     | llm 
-    #     # | StrOutputParser()
-    # )
-    
     return qa_chain, vector_store
 
 
-def rag_generate(query: str, qa_chain):
+def extract_query_and_context_from_messages(messages: List[Dict[str, str]]) -> Dict[str, str]:
+    """
+    Extract the query and relevant context from a list of messages.
+
+    Args:
+        messages: A list of message dictionaries with 'role' and 'content'
+
+    Returns:
+        A dictionary with 'query' and 'context' keys
+    """
+    if not messages:
+        return {"query": "", "context": ""}
+
+    # Extract system message if present
+    system_content = ""
+    system_messages = [msg["content"] for msg in messages if msg["role"] == "system"]
+    if system_messages:
+        system_content = system_messages[0]
+
+    # Find all user messages
+    user_message_indices = [i for i, msg in enumerate(messages) if msg["role"] == "user"]
+    if not user_message_indices:
+        return {"query": "", "context": system_content}
+
+    # Get the last user message as the query
+    last_user_idx = user_message_indices[-1]
+    query = messages[last_user_idx]["content"]
+
+    # Build context from conversation history
+    context_parts = []
+    if system_content:
+        context_parts.append(f"System: {system_content}")
+
+    # Get conversation history (limit to a few turns before the query)
+    if last_user_idx > 0:
+        # Get up to 3 conversation turns before the latest query
+        start_idx = max(0, last_user_idx - 6)  # Get up to 3 turns (6 messages)
+        for i in range(start_idx, last_user_idx):
+            msg = messages[i]
+            prefix = "User: " if msg["role"] == "user" else "Assistant: "
+            context_parts.append(f"{prefix}{msg['content']}")
+
+    context = "\n\n".join(context_parts) if context_parts else ""
+
+    return {"query": query, "context": context}
+
+
+def rag_generate(query_or_messages: Union[str, List[Dict[str, str]]], qa_chain):
+    """
+    Generate a response using the RAG system.
+
+    Args:
+        query_or_messages: Either a query string or a list of message dictionaries
+        qa_chain: The retrieval QA chain to use
+
+    Returns:
+        The generated response
+    """
+    # Check if input is messages or a direct query
+    if isinstance(query_or_messages, list):
+        # Extract query and context from messages
+        extracted = extract_query_and_context_from_messages(query_or_messages)
+        query = extracted["query"]
+
+        # If there's significant context, we could modify the query to include it
+        # For now, we'll keep it simple and just use the extracted query
+    else:
+        query = query_or_messages
+
+    # Generate the response using the retrieval QA chain
     answer = qa_chain.run(query)
     return answer
 
-def bare_llm_generate(query: str, llm):
-    answer = llm.run(query)
+
+def bare_llm_generate(query_or_messages: Union[str, List[Dict[str, str]]], llm):
+    """
+    Generate a response without using retrieval.
+
+    Args:
+        query_or_messages: Either a query string or a list of message dictionaries
+        llm: The language model to use
+
+    Returns:
+        The generated response
+    """
+    # Check if input is messages or a direct query
+    if isinstance(query_or_messages, list):
+        # Process messages format
+        answer = llm._call(query_or_messages)
+    else:
+        # Process direct query
+        answer = llm.run(query_or_messages)
+
     return answer
 
 
 def retrieve_documents(query: str, vector_store):
+    """
+    Retrieve relevant documents for a query.
+
+    Args:
+        query: The query to retrieve documents for
+        vector_store: The vector store to retrieve from
+
+    Returns:
+        A list of retrieved documents
+    """
     retrieved_docs = vector_store.as_retriever().invoke(query)
     return retrieved_docs
 
@@ -214,14 +313,17 @@ if __name__ == "__main__":
     print("RAG Module Activated.\n")
     print("Type 'exit' or 'quit' to terminate the program.\n")
 
-    directories = ['docs/pytorch', 'docs/jax', 'docs/mindspore', 'docs/jittor'] # 目前一共有3551个文档
-    # directories = ['demo_docs']
+    directories = ['docs/pytorch', 'docs/jax', 'docs/mindspore', 'docs/jittor']
 
-    build_embeddings(directories)
-    qa_chain, vector_store = initialize_rag_system(is_local=True)
+    load_dotenv()
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+    print(f'The API Key is {OPENAI_API_KEY}')
+    build_embeddings(documents_dir=directories, use_third_party_hosted=False, openai_api_key=OPENAI_API_KEY)
+    # qa_chain, vector_store = initialize_rag_system(openai_api_key=OPENAI_API_KEY, is_local=False)
+    qa_chain, vector_store = initialize_rag_system(is_local=True, ollama_model='qwen3:14b')
 
     while True:
-        query = input("Enter your code-related query: ")
+        query = input("Enter your code-related query (or type 'exit'/'quit' to end): ")
         if query.lower() in ['exit', 'quit']:
             print("Goodbye!")
             break
@@ -260,11 +362,3 @@ if __name__ == "__main__":
             print(f"An error occurred: {e}")
             print("\n" + "=" * 50 + "\n")
 
-    # directories = ['docs/pytorch', 'docs/jax', 'docs/mindspore', 'docs/jittor']
-    # with open('documents3.txt', 'w') as f:
-    #     docs = []
-    #     for directory in directories:
-    #         docs += load_files(directory, kind=directory.strip('docs/'))
-    #     for doc in docs:
-    #         f.write(doc)
-    #         f.write('\n\n')

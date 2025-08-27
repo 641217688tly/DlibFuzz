@@ -2,6 +2,8 @@ import logging
 import os
 import re
 from bs4 import BeautifulSoup
+
+import utils
 from utils import get_session
 from orm import API
 
@@ -79,7 +81,7 @@ def parse_jax_api(html_content, module_name):
     }
 
 
-def process_jax_api(root_dir):  # add jax api from html folder
+def add_jax_apis_from_doc(root_dir, lib_ver):  # add jax api from html folder
     """
     遍历目录下所有 API 详细的 HTML 文件，解析并将信息插入数据库
     """
@@ -103,16 +105,23 @@ def process_jax_api(root_dir):  # add jax api from html folder
                 if not api_info:
                     print(f"Failed to parse API details from {file_path}")
                     continue
-
+                # 验证API是否已经存在
                 api_exists = session.query(API).filter_by(full_name=api_info['full_name'], lib='JAX', version=api_info["version"]).first()
                 if api_exists:
                     continue
-
-                # 创建数据库记录
+                # 验证API是否有效
+                is_valid = utils.validate_api_existence(f"{api_info['module']}.{api_info['name']}") 
+                if not is_valid:
+                    continue
+                # 如果api_info内的某个键的值为None，则使用utils.inspect_api_info获取的值
+                additional_api_info = utils.inspect_api_info(api_info["module"], api_info["name"])
+                for key, value in api_info.items():
+                    if value is None or value == "":
+                        api_info[key] = additional_api_info.get(key, "")
                 api_entry = API(
                     name=api_info["name"],
                     lib=api_info["lib"],
-                    version=api_info["version"],
+                    version=lib_ver,
                     module=api_info["module"],
                     full_name=api_info["full_name"],
                     signature=api_info["signature"],
@@ -129,4 +138,4 @@ def process_jax_api(root_dir):  # add jax api from html folder
 
 if __name__ == "__main__":
     jax_docs_folder_path = "./../data/docs/jax/0.4.13/handled"
-    process_jax_api(jax_docs_folder_path)
+    add_jax_apis_from_doc(jax_docs_folder_path, "0.4.13")

@@ -1,6 +1,8 @@
 import logging
 import os
 import re
+
+import utils
 from orm import API
 from bs4 import BeautifulSoup
 from utils import get_session
@@ -76,7 +78,7 @@ def parse_jittor_api(html_content, module_name):
     return api_list
 
 
-def process_jittor_api(root_dir):  # add jittor api from html folder
+def add_jittor_apis_from_doc(root_dir, lib_ver):  # add jittor api from html folder
     """
     遍历指定目录下所有 Jittor HTML 文件（每个文件代表一个模块）
     """
@@ -94,11 +96,25 @@ def process_jittor_api(root_dir):  # add jittor api from html folder
                 if not api_list:
                     print(f"Failed to parse API details from {file_path}")
                     continue
+
                 for api_info in api_list:
+                    # 验证API是否已经存在
+                    api_exists = session.query(API).filter_by(full_name=api_info['full_name'], lib='JAX', version=api_info["version"]).first()
+                    if api_exists:
+                        continue
+                    # 验证API是否有效
+                    is_valid = utils.validate_api_existence(f"{api_info['module']}.{api_info['name']}")
+                    if not is_valid:
+                        continue
+                    # 如果api_info内的某个键的值为None，则使用utils.inspect_api_info获取的值
+                    additional_api_info = utils.inspect_api_info(api_info["module"], api_info["name"])
+                    for key, value in api_info.items():
+                        if value is None or value == "":
+                            api_info[key] = additional_api_info.get(key, "")
                     api_entry = API(
                         name=api_info["name"],
                         lib=api_info["lib"],
-                        version=api_info["version"],
+                        version=lib_ver,
                         module=api_info["module"],
                         full_name=api_info["full_name"],
                         signature=api_info["signature"],
@@ -114,5 +130,4 @@ def process_jittor_api(root_dir):  # add jittor api from html folder
 
 if __name__ == "__main__":
     jittor_docs_folder_path = "./../data/docs/jittor/1.3.9.2/handled"
-    rag_docs_folder_path = "./../rag/docs/jittor/1.3.9.2/"
-    process_jittor_api(jittor_docs_folder_path)
+    add_jittor_apis_from_doc(jittor_docs_folder_path, "1.3.9.14")
