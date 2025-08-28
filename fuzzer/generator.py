@@ -2,6 +2,15 @@ import importlib
 import json
 from json import JSONDecodeError
 from sqlalchemy import func
+import sys
+import os
+
+# 添加项目根目录到Python路径
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 import utils
 from fuzzer.validator import APITestSeedValidator
 from orm import *
@@ -9,9 +18,7 @@ import random
 from collections import defaultdict
 import threading
 import concurrent.futures
-import os
 from typing import List
-import argparse
 from datetime import datetime
 
 
@@ -1009,5 +1016,5 @@ if __name__ == '__main__':
     llm_client = utils.get_llm_client(llm='bianxie')
     #fuzz_value_equivalent_clusters_single_thread(session, llm_client)
     #fuzz_state_equivalent_clusters_single_thread(session, llm_client)
-    fuzz_value_equivalent_clusters(session, llm_client, max_workers=16)
-    #fuzz_state_equivalent_clusters(session, llm_client, max_workers=16)
+    #fuzz_value_equivalent_clusters(session, llm_client, max_workers=4)
+    fuzz_state_equivalent_clusters(session, llm_client, max_workers=8)

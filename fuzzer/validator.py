@@ -98,7 +98,15 @@ class APITestSeedValidator:
         # 创建一个临时的Python文件:
         timestamp = int(time.time())
         thread_id = threading.get_ident()
-        file_path = f'../data/tmp/{timestamp}_{thread_id}.py'
+        
+        # 获取项目根目录的绝对路径
+        current_dir = os.path.dirname(os.path.abspath(__file__))  # fuzzer目录
+        project_root = os.path.dirname(current_dir)  # 项目根目录
+        tmp_dir = os.path.join(project_root, 'data', 'tmp')
+        # 确保tmp目录存在
+        os.makedirs(tmp_dir, exist_ok=True)
+        file_path = os.path.join(tmp_dir, f'{timestamp}_{thread_id}.py')
+        
         with open(file_path, 'w') as f:
             f.write(raw_code)
         # 使用静态分析工具对代码文件进行分析
@@ -142,7 +150,7 @@ class APITestSeedValidator:
         if is_valid:  # 如果代码没有错误, 则结束修复
             return code_complemented_import  # 返回有效的代码
 
-        print(f"\nError Details:\n {error_details}\n")
+        print(f"\nError Details:\n{error_details}\n")
 
         prompt = construct_prompt(code_complemented_import, error_details)
         messages = [
@@ -171,7 +179,7 @@ class APITestSeedValidator:
                 if is_valid:
                     return validated_code  # 返回修复后的有效代码
                 else:
-                    print(f"\nError Details:\n {error_details}\n")
+                    print(f"\nError Details:\n{error_details}\n")
                     prompt = construct_prompt(validated_code, error_details)
                     messages.append({"role": "user", "content": prompt})
                     attempt_num = attempt_num + 1
@@ -191,7 +199,7 @@ class APITestSeedValidator:
             self.session.flush()
             return code_complemented_import  # 返回有效的代码
 
-        print(f"\nError Details:\n {error_details}\n")
+        print(f"\nError Details:\n{error_details}\n")
 
         prompt = construct_prompt(code_complemented_import, error_details)
         messages = [
@@ -223,7 +231,7 @@ class APITestSeedValidator:
                     self.session.flush()
                     return validated_code  # 返回修复后的有效代码
                 else:
-                    print(f"\nError Details:\n {error_details}\n")
+                    print(f"\nError Details:\n{error_details}\n")
                     prompt = construct_prompt(validated_code, error_details)
                     messages.append({"role": "user", "content": prompt})
                     attempt_num = attempt_num + 1
@@ -263,7 +271,10 @@ class ClusterTestSeedValidator:
 
 def export_valid_cluster_seed(seed: ClusterTestSeed):  # 导出种子中各个库的测试用例为py文件
     if seed.is_validated:
-        cluster_folder_path = 'seeds/validated_seeds/'
+        # 获取项目根目录的绝对路径
+        current_dir = os.path.dirname(os.path.abspath(__file__))  # fuzzer目录
+        project_root = os.path.dirname(current_dir)  # 项目根目录
+        cluster_folder_path = os.path.join(project_root, 'fuzzer', 'seeds', 'validated_seeds')
         # 首先区分是否利用了历史错误
         # if seed.type == 'WithHistoryError':  # 利用了历史错误
         #    cluster_folder_path = cluster_folder_path + 'WithHistoryError/'
@@ -280,15 +291,15 @@ def export_valid_cluster_seed(seed: ClusterTestSeed):  # 导出种子中各个�
         #    else:  # 状态等价
         #        cluster_folder_path = cluster_folder_path + 'StateEquivalent/'
         if seed.cluster.type == 'ValueEquivalent':
-            cluster_folder_path = cluster_folder_path + 'ValueEquivalent/'
+            cluster_folder_path = os.path.join(cluster_folder_path, 'ValueEquivalent')
         else:  # 状态等价
-            cluster_folder_path = cluster_folder_path + 'StateEquivalent/'
-        cluster_folder_path = cluster_folder_path + f'Cluster_{seed.cluster_id}/'
+            cluster_folder_path = os.path.join(cluster_folder_path, 'StateEquivalent')
+        cluster_folder_path = os.path.join(cluster_folder_path, f'Cluster_{seed.cluster_id}')
         if not os.path.exists(cluster_folder_path):
             os.makedirs(cluster_folder_path, exist_ok=True)
 
         # 查看cluster_folder_path下已经存在了多少个seed文件夹
-        cluster_seed_folder_path = cluster_folder_path + f'seed_{len(os.listdir(cluster_folder_path)) + 1}/'
+        cluster_seed_folder_path = os.path.join(cluster_folder_path, f'seed_{len(os.listdir(cluster_folder_path)) + 1}')
         if not os.path.exists(cluster_seed_folder_path):
             os.makedirs(cluster_seed_folder_path, exist_ok=True)
         for api_seed in seed.api_seeds:
@@ -296,7 +307,7 @@ def export_valid_cluster_seed(seed: ClusterTestSeed):  # 导出种子中各个�
             # 将api_group内各个API的full_name用"+"拼接在一起
             api_seed_file_name = '+'.join([api.full_name for api in api_group.apis])
             # 使用api_seed中api_group内各个API的名称作为seed文件夹的名称
-            api_seed_file_path = cluster_seed_folder_path + api_seed_file_name + '.py'
+            api_seed_file_path = os.path.join(cluster_seed_folder_path, api_seed_file_name + '.py')
             with open(api_seed_file_path, 'w') as f:
                 f.write(api_seed.valid_code)
 
@@ -408,6 +419,10 @@ def label_invalid_cluster_seeds(clusters_folder_path):
 
 if __name__ == '__main__':
     validate_and_export_all_seeds()
-    #label_invalid_cluster_seeds('seeds/validated_seeds/ValueEquivalent')
-    #label_invalid_cluster_seeds('seeds/validated_seeds/StateEquivalent')
+    # 获取项目根目录的绝对路径
+    current_dir = os.path.dirname(os.path.abspath(__file__))  # fuzzer目录
+    project_root = os.path.dirname(current_dir)  # 项目根目录
+    seeds_base_path = os.path.join(project_root, 'fuzzer', 'seeds', 'validated_seeds')
+    label_invalid_cluster_seeds(os.path.join(seeds_base_path, 'ValueEquivalent'))
+    #label_invalid_cluster_seeds(os.path.join(seeds_base_path, 'StateEquivalent'))
 

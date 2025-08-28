@@ -48,6 +48,11 @@ def get_llm_client(llm='openai', proxy_url="http://127.0.0.1:7890"):
             config = yaml.safe_load(file)
             rag_client = RagClient(base_url="http://localhost:8000", api_key=config['openai']['api_key'])
             return rag_client
+    elif llm == 'bianxie-no-proxy':
+        with open('config.yml', 'r', encoding='utf-8') as file:  # 读取config.yml文件
+            config = yaml.safe_load(file)
+            openai_client = OpenAI(api_key=config['openai']['bianxie_api_key'], base_url="https://api.bianxie.ai/v1")
+            return openai_client
     elif llm == 'bianxie':
         with open('config.yml', 'r', encoding='utf-8') as file:  # 读取config.yml文件
             config = yaml.safe_load(file)
@@ -1070,16 +1075,18 @@ def count_syntax_error_cluster_seeds():
     }
 
 if __name__ == '__main__':
+    '''
+    旧版本:
+    count_invalid_cluster_seeds('fuzzer/seeds/validated_seeds/StateEquivalent') # 无效py文件总数: 2609 / 28825; 包含无效文件的cluster数量: 754 / 1918
+    count_invalid_cluster_seeds('fuzzer/seeds/validated_seeds/ValueEquivalent') # 无效py文件总数: 858 / 16423; 包含无效文件的cluster数量: 297 / 1006
+    count_syntax_error_cluster_seeds() # Total: 19187/45248(错误率42.40%) | StateEquivalent: 12398/28825(错误率43.01%) | ValueEquivalent: 6789/16423(错误率41.34%)
+    
+    新版本:
+    count_invalid_cluster_seeds('fuzzer/seeds/validated_seeds/StateEquivalent')
+    count_invalid_cluster_seeds('fuzzer/seeds/validated_seeds/ValueEquivalent') # 无效py文件总数: 694 / 17032; 包含无效文件的cluster数量: 258 / 1005
+    count_syntax_error_cluster_seeds() # StateEquivalent: 5/17032(错误率0.03%, 使用分号2个问题, 代码过长3个问题)
+    '''
     # print(get_libs_info())
-    # count_api_nums_with_history_errors('Pytorch')
-    # count_api_nums_with_history_errors('MindSpore')
-    # count_api_nums_with_history_errors('JAX')
-    # count_api_nums_with_history_errors('Jittor')
-
-    # list_clusters('ValueEquivalent')
-    # print("\n")
-    # list_clusters('StateEquivalent')
-    # print("\n")
 
     # 统计cluster测试状态
     # count_cluster_test_status('ValueEquivalent')
@@ -1087,47 +1094,9 @@ if __name__ == '__main__':
     # count_cluster_test_status('StateEquivalent')
     # print("\n")
 
-    # count_api_without_cluster()
-    #count_invalid_cluster_seeds('fuzzer/seeds/validated_seeds/ValueEquivalent') # 无效py文件总数: 858 / 16423; 包含无效文件的cluster数量: 297 / 1006
-    #count_invalid_cluster_seeds('fuzzer/seeds/validated_seeds/StateEquivalent') # 无效py文件总数: 2609 / 28825; 包含无效文件的cluster数量: 754 / 1918
-    # clean_invalid_clusters()
-    
+    # 统计没有有效调用指定API的cluster种子文件
+    # count_invalid_cluster_seeds('fuzzer/seeds/validated_seeds/ValueEquivalent')
+    # count_invalid_cluster_seeds('fuzzer/seeds/validated_seeds/StateEquivalent')
+
     # 统计语法错误的cluster种子文件
-    # count_syntax_error_cluster_seeds() # Total: 19187/45248(错误率42.40%) | StateEquivalent: 12398/28825(错误率43.01%) | ValueEquivalent: 6789/16423(错误率41.34%)
-
-    # full_api_name = "jax.jit"
-    # retrieve_api_issues(full_api_name)
-    # print("="*60)
-    # get_api_info(full_api_name)
-
-    # session = get_session()
-    # # 检查哪个API的history_errors最多
-    # apis = session.query(API).all()
-    # max_history_errors = 0
-    # max_history_errors_api = None
-    # for api in apis:
-    #     if len(api.history_errors) > max_history_errors:
-    #         max_history_errors = len(api.history_errors)
-    #         max_history_errors_api = api
-    # print(f"API with the most history errors: {max_history_errors_api.full_name} ({max_history_errors})")
-    # session.close()
-
-    # retrieve_api_issues('jax.jit')
-
-    print(validate_api_existence('jax'))
-
-    code = """
-import jittor as jt
-import jittor.numpy as jnp
-import jax
-
-# 创建两个不同形状的张量
-tensor_a = jt.array(jnp.array([[1, 2], [3, 4]]), dtype=jt.float32)
-tensor_b = jt.array(jnp.array([1, 2]), dtype=jt.float32)
-
-# 尝试将不同形状的张量相加
-output = tensor_a.add(tensor_b)
-print(output)
-"""
-    result1, result2 = validate_code_imports(code)
-    print(result1, result2)
+    count_syntax_error_cluster_seeds()
